@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">C:\Program Files\Microsoft Visual Studio\18\Enterprise</VsInstallRoot>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>
