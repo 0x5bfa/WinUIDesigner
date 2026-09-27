@@ -58,6 +58,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <SuppressFromVsix Include="WinUIDesigner.Platform.pdb" />
+    <SuppressFromVsix Include="WinUIDesigner.DesignerHost.pdb" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="source.extension.vsixmanifest" />
   </ItemGroup>
 
