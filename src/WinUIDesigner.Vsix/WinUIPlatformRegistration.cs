@@ -15,6 +15,10 @@ namespace WinUIDesigner.Vsix;
 
 internal static class WinUIPlatformRegistration
 {
+#if DEBUG
+    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
+#endif
+
     private const string DesktopWinUISpecificationPrefix =
         "TargetPlatformIdentifier=Windows;TargetPlatformVersion=10.0-..;TargetRuntime=Managed,Native;" +
         "TargetFrameworkIdentifier=.NETCoreApp;TargetFrameworkVersion=5.0-..;XamlRuntime=WinUI";
@@ -90,18 +94,36 @@ internal static class WinUIPlatformRegistration
 #if DEBUG
         Trace.WriteLine($"[WinUIDesigner] {message}");
 
-        string? tracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_TRACE_PATH");
-        if (!string.IsNullOrWhiteSpace(tracePath))
+        try
         {
-            try
-            {
-                File.AppendAllText(tracePath, $"{DateTime.UtcNow:O} VSIX: {message}\r\n");
-            }
-            catch (IOException)
-            {
-                // The platform and surface can write the same trace concurrently.
-            }
+            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
+            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} VSIX: {message}\r\n");
+        }
+        catch (IOException)
+        {
+            // Multiple designer processes write to diagnostic traces.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Diagnostic logging must not interrupt designer activation.
         }
 #endif
     }
+
+#if DEBUG
+    private static string CreateDiagnosticTracePath()
+    {
+        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(basePath))
+        {
+            basePath = Path.GetTempPath();
+        }
+
+        return Path.Combine(
+            basePath,
+            "WinUIDesigner",
+            "Logs",
+            $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
+    }
+#endif
 }

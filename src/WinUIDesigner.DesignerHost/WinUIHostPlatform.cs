@@ -12,6 +12,10 @@ namespace WinUIDesigner.DesignerHost;
 
 public sealed class WinUIHostPlatform : WpfHostPlatform
 {
+#if DEBUG
+    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
+#endif
+
     protected override IShadowCopyWorkerFactory ShadowCopyWorkerFactory { get; } = new WinUIShadowCopyWorkerFactory();
 
     public WinUIHostPlatform(IServiceProvider serviceProvider, PlatformIdentifier platformIdentifier)
@@ -59,14 +63,6 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             },
             EnableRaisingEvents = true,
         };
-
-#if DEBUG
-        string? tracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_TRACE_PATH");
-        if (!string.IsNullOrWhiteSpace(tracePath))
-        {
-            process.StartInfo.EnvironmentVariables["WINUIDESIGNER_SURFACE_TRACE_PATH"] = tracePath + ".child.log";
-        }
-#endif
 
         string? visualStudioInstallRoot = GetVisualStudioInstallRoot();
         if (!string.IsNullOrWhiteSpace(visualStudioInstallRoot))
@@ -121,18 +117,36 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
 #if DEBUG
         Trace.WriteLine($"[WinUIDesigner] {message}");
 
-        string? tracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_TRACE_PATH");
-        if (!string.IsNullOrWhiteSpace(tracePath))
+        try
         {
-            try
-            {
-                File.AppendAllText(tracePath, $"{DateTime.UtcNow:O} Host: {message}\r\n");
-            }
-            catch (IOException)
-            {
-                // Cross-process trace writes can race during surface activation.
-            }
+            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
+            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} Host: {message}\r\n");
+        }
+        catch (IOException)
+        {
+            // Multiple designer processes write to diagnostic traces.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Diagnostic logging must not interrupt designer activation.
         }
 #endif
     }
+
+#if DEBUG
+    private static string CreateDiagnosticTracePath()
+    {
+        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(basePath))
+        {
+            basePath = Path.GetTempPath();
+        }
+
+        return Path.Combine(
+            basePath,
+            "WinUIDesigner",
+            "Logs",
+            $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
+    }
+#endif
 }

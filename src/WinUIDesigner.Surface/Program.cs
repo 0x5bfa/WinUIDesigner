@@ -13,6 +13,10 @@ namespace WinUIDesigner.Surface;
 
 internal static class Program
 {
+#if DEBUG
+    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
+#endif
+
     [STAThread]
     private static int Main(string[] args)
     {
@@ -95,42 +99,36 @@ internal static class Program
 #if DEBUG
         Trace.WriteLine($"[WinUIDesigner] {message}");
 
-        string? tracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_TRACE_PATH");
-        if (!string.IsNullOrWhiteSpace(tracePath))
+        try
         {
-            try
-            {
-                File.AppendAllText(tracePath, $"{DateTime.UtcNow:O} Surface: {message}\r\n");
-            }
-            catch (IOException)
-            {
-                // The Visual Studio host writes to the same diagnostic trace file.
-                // Logging must not terminate the surface process when the two writes race.
-            }
-
-            try
-            {
-                string processTracePath = tracePath + $".surface-{Environment.ProcessId}.log";
-                File.AppendAllText(processTracePath, $"{DateTime.UtcNow:O} {message}\r\n");
-            }
-            catch (IOException)
-            {
-                // Per-process logging is diagnostic-only and must never terminate the surface.
-            }
+            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
+            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} Surface: {message}\r\n");
         }
-
-        string? surfaceTracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_SURFACE_TRACE_PATH");
-        if (!string.IsNullOrWhiteSpace(surfaceTracePath))
+        catch (IOException)
         {
-            try
-            {
-                File.AppendAllText(surfaceTracePath, $"{DateTime.UtcNow:O} {message}\r\n");
-            }
-            catch (IOException)
-            {
-                // Explicit child logging is diagnostic-only and must never terminate the surface.
-            }
+            // Diagnostic logging must not terminate the surface.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Diagnostic logging must not terminate the surface.
         }
 #endif
     }
+
+#if DEBUG
+    private static string CreateDiagnosticTracePath()
+    {
+        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(basePath))
+        {
+            basePath = Path.GetTempPath();
+        }
+
+        return Path.Combine(
+            basePath,
+            "WinUIDesigner",
+            "Logs",
+            $"WinUIDesigner-{Environment.ProcessId}.log");
+    }
+#endif
 }

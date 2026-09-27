@@ -23,6 +23,9 @@ namespace WinUIDesigner.Platform;
 
 public sealed class WinUIPlatform : XamlPlatform
 {
+#if DEBUG
+    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
+#endif
     private UwpDisplaySettingsProvider? displaySettingsProvider;
     private PlatformPaneModel? platformPaneModel;
 
@@ -153,18 +156,36 @@ public sealed class WinUIPlatform : XamlPlatform
 #if DEBUG
         Trace.WriteLine($"[WinUIDesigner] {message}");
 
-        string? tracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_TRACE_PATH");
-        if (!string.IsNullOrWhiteSpace(tracePath))
+        try
         {
-            try
-            {
-                File.AppendAllText(tracePath, $"{DateTime.UtcNow:O} Platform: {message}\r\n");
-            }
-            catch (IOException)
-            {
-                // Multiple designer processes write to the diagnostic trace.
-            }
+            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
+            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} Platform: {message}\r\n");
+        }
+        catch (IOException)
+        {
+            // Multiple designer processes write to diagnostic traces.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Diagnostic logging must not interrupt designer activation.
         }
 #endif
     }
+
+#if DEBUG
+    private static string CreateDiagnosticTracePath()
+    {
+        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(basePath))
+        {
+            basePath = Path.GetTempPath();
+        }
+
+        return Path.Combine(
+            basePath,
+            "WinUIDesigner",
+            "Logs",
+            $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
+    }
+#endif
 }
