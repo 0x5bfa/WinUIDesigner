@@ -2,7 +2,7 @@
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
-    <AssemblyName>WinUIDesigner.Vsix</AssemblyName>
+    <AssemblyName>WinUIDesigner</AssemblyName>
     <RootNamespace>WinUIDesigner.Vsix</RootNamespace>
     <GeneratePkgDefFile>true</GeneratePkgDefFile>
     <UseCodebase>true</UseCodebase>
