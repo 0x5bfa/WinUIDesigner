@@ -1,0 +1,170 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using Microsoft.VisualStudio.DesignTools.Extensibility.Metadata;
+using Microsoft.VisualStudio.DesignTools.Markup.Metadata;
+using Microsoft.VisualStudio.DesignTools.RuntimeHost.Pipeline;
+using Microsoft.VisualStudio.DesignTools.SurfaceDesigner;
+using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents;
+using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.Project;
+using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
+using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Metadata;
+using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.UI.PlatformPane;
+using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Utility;
+using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views;
+using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents;
+using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.SurfaceIsolation;
+using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.UI.PlatformPane;
+using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views;
+using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner;
+using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views.NodeObjectConverters;
+
+namespace WinUIDesigner.Platform;
+
+public sealed class WinUIPlatform : XamlPlatform
+{
+    private UwpDisplaySettingsProvider? displaySettingsProvider;
+    private PlatformPaneModel? platformPaneModel;
+
+    protected override bool SupportsSharedResourceDictionaries => false;
+
+    private IDisplaySettingsProvider DisplaySettingsProvider
+    {
+        get
+        {
+            if (displaySettingsProvider is null)
+            {
+                displaySettingsProvider = new UwpDisplaySettingsProvider(DesignerContext.PlatformService);
+                displaySettingsProvider.Initialize();
+                WriteDiagnosticTrace("Temporary UwpDisplaySettingsProvider bridge initialized.");
+            }
+
+            return displaySettingsProvider;
+        }
+    }
+
+    public override PlatformPaneModel PlatformPaneModel
+    {
+        get
+        {
+            if (platformPaneModel is null)
+            {
+                platformPaneModel = new UwpPlatformPaneModel(DesignerContext, DisplaySettingsProvider);
+                WriteDiagnosticTrace("Temporary UwpPlatformPaneModel bridge instantiated.");
+            }
+
+            return platformPaneModel;
+        }
+    }
+
+    public WinUIPlatform(IPlatformReferenceAssemblyResolver referenceAssemblyResolver)
+        : base(referenceAssemblyResolver)
+    {
+        WriteDiagnosticTrace("WinUIPlatform instantiated.");
+    }
+
+    public override void Initialize(IDesignerContext designerContext)
+    {
+        WriteDiagnosticTrace("WinUIPlatform.Initialize reached.");
+        base.Initialize(designerContext);
+    }
+
+    public override AttributeTable[] GetAttributeMetadata()
+    {
+        WriteDiagnosticTrace("WinUIPlatform.GetAttributeMetadata reached.");
+        return Array.Empty<AttributeTable>();
+    }
+
+    public override IProjectContext CreateProjectContext()
+    {
+        WriteDiagnosticTrace("WinUIPlatform.CreateProjectContext reached.");
+        return new WinUIProjectContext(DesignerContext, this);
+    }
+
+    public override SceneView CreateSceneView(SceneDocument document)
+    {
+        WriteDiagnosticTrace("WinUIPlatform.CreateSceneView reached.");
+        UwpSceneViewModel viewModel = new UwpSceneViewModel(DesignerContext, document);
+        WriteDiagnosticTrace("Temporary UwpSceneViewModel bridge instantiated.");
+
+        WinUISceneView view = new WinUISceneView(viewModel);
+        WriteDiagnosticTrace("Minimal WinUISceneView instantiated.");
+        return view;
+    }
+
+    public override ISurfaceProcessMarkupProvider CreateSurfaceProcessMarkupProvider()
+    {
+        WriteDiagnosticTrace("WinUIPlatform.CreateSurfaceProcessMarkupProvider reached.");
+        return new UwpSurfaceProcessMarkupProvider();
+    }
+
+    public override IInstanceBuilderPlatform CreateSurfaceInstanceBuilderPlatform(IProjectContext projectContext)
+    {
+        WriteDiagnosticTrace("WinUIPlatform.CreateSurfaceInstanceBuilderPlatform reached.");
+        return new UwpDesignerInstanceBuilderPlatform(projectContext);
+    }
+
+    protected override IPlatformConverter CreatePlatformConverter()
+    {
+        WriteDiagnosticTrace("WinUIPlatform.CreatePlatformConverter reached.");
+        var converter = new NodeObjectPlatformConverter();
+        converter.RegisterPrimitiveConverter(XamlTypes.HorizontalAlignment, ConvertHorizontalAlignment);
+        converter.RegisterPrimitiveConverter(XamlTypes.VerticalAlignment, ConvertVerticalAlignment);
+        return converter;
+    }
+
+    private static object ConvertHorizontalAlignment(string value)
+        => Enum.TryParse(value, ignoreCase: true, out System.Windows.HorizontalAlignment alignment)
+            ? alignment
+            : System.Windows.HorizontalAlignment.Stretch;
+
+    private static object ConvertVerticalAlignment(string value)
+        => Enum.TryParse(value, ignoreCase: true, out System.Windows.VerticalAlignment alignment)
+            ? alignment
+            : System.Windows.VerticalAlignment.Stretch;
+
+    protected override IGeometry CreateIsolatedSurfaceGeometry()
+    {
+        WriteDiagnosticTrace("WinUIPlatform.CreateIsolatedSurfaceGeometry reached.");
+        return new NodeObjectGeometry(PlatformConverter, value => Math.Floor(value + 0.5));
+    }
+
+    protected override void RegisterNodeBuilders()
+    {
+        WriteDiagnosticTrace("WinUIPlatform.RegisterNodeBuilders reached.");
+        RegisterSurfaceIsolatedDocumentNodeBuilders();
+    }
+
+    protected override void RegisterNodeChildBuilders()
+    {
+        WriteDiagnosticTrace("WinUIPlatform.RegisterNodeChildBuilders reached.");
+        RegisterSurfaceIsolatedDocumentNodeChildBuilders();
+    }
+
+    protected override void RegisterNodePropertyBuilders()
+    {
+        WriteDiagnosticTrace("WinUIPlatform.RegisterNodePropertyBuilders reached.");
+        RegisterSurfaceIsolatedDocumentNodePropertyBuilders();
+    }
+
+    [Conditional("DEBUG")]
+    internal static void WriteDiagnosticTrace(string message)
+    {
+#if DEBUG
+        Trace.WriteLine($"[WinUIDesigner] {message}");
+
+        string? tracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_TRACE_PATH");
+        if (!string.IsNullOrWhiteSpace(tracePath))
+        {
+            try
+            {
+                File.AppendAllText(tracePath, $"{DateTime.UtcNow:O} Platform: {message}\r\n");
+            }
+            catch (IOException)
+            {
+                // Multiple designer processes write to the diagnostic trace.
+            }
+        }
+#endif
+    }
+}

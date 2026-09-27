@@ -1,8 +1,22 @@
 <Project>
   <PropertyGroup>
-    <VsInstallRoot Condition="'$(VsInstallRoot)' == ''">C:\Program Files\Microsoft Visual Studio\18\Enterprise</VsInstallRoot>
+    <VsMajorVersion Condition="'$(VsMajorVersion)' == ''">18</VsMajorVersion>
+    <_VsInstallBase Condition="'$(ProgramFiles)' != ''">$(ProgramFiles)\Microsoft Visual Studio\$(VsMajorVersion)</_VsInstallBase>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and '$(VSINSTALLDIR)' != ''">$(VSINSTALLDIR)</VsInstallRoot>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and Exists('$(_VsInstallBase)\Enterprise')">$(_VsInstallBase)\Enterprise</VsInstallRoot>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and Exists('$(_VsInstallBase)\Professional')">$(_VsInstallBase)\Professional</VsInstallRoot>
+    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and Exists('$(_VsInstallBase)\Community')">$(_VsInstallBase)\Community</VsInstallRoot>
     <LangVersion>preview</LangVersion>
     <Nullable>enable</Nullable>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+
+  <Target Name="ValidateVisualStudioInstall" BeforeTargets="ResolveReferences">
+    <Error
+      Condition="'$(VsInstallRoot)' == ''"
+      Text="Visual Studio $(VsMajorVersion) was not found. Set -p:VsInstallRoot=... or run from a Visual Studio Developer PowerShell." />
+    <Error
+      Condition="'$(VsInstallRoot)' != '' and !Exists('$(VsInstallRoot)\Common7\IDE')"
+      Text="VsInstallRoot does not point to a Visual Studio installation: $(VsInstallRoot)" />
+  </Target>
 </Project>

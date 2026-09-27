@@ -1,0 +1,136 @@
+using System;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Threading;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
+using WinUIDesigner.Surface.Services;
+
+namespace WinUIDesigner.Surface;
+
+internal static class Program
+{
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        RegisterVisualStudioAssemblyResolver();
+        WriteDiagnosticTrace($"Main entered with {args.Length} arguments.");
+
+        if (args.Length != 4 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
+        {
+            WriteDiagnosticTrace("Invalid startup arguments.");
+            return 1;
+        }
+
+        WriteDiagnosticTrace($"WinUISurface started for host PID {hostProcessId}; TAP='{args[1]}'.");
+
+        SurfaceApplication? surfaceApplication = null;
+
+        try
+        {
+            WinRT.ComWrappersSupport.InitializeComWrappers();
+            WriteDiagnosticTrace("CsWinRT COM wrappers initialized; starting Microsoft.UI.Xaml.Application.");
+
+            Application.Start(_ =>
+            {
+                DispatcherQueue dispatcherQueue = DispatcherQueue.GetForCurrentThread()
+                    ?? throw new InvalidOperationException("WinUI DispatcherQueue was not created for the application thread.");
+
+                SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(dispatcherQueue));
+                surfaceApplication = new SurfaceApplication(hostProcessId, args[1], args[2], dispatcherQueue);
+                surfaceApplication.Initialize();
+            });
+
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            WriteDiagnosticTrace($"Surface startup failed: {ex}");
+            return ex.HResult != 0 ? ex.HResult : 1;
+        }
+        finally
+        {
+            surfaceApplication?.Dispose();
+            WriteDiagnosticTrace("WinUISurface exiting.");
+        }
+    }
+
+    private static void RegisterVisualStudioAssemblyResolver()
+    {
+        string? installRoot = Environment.GetEnvironmentVariable("WINUIDESIGNER_VS_INSTALL_ROOT");
+        if (string.IsNullOrWhiteSpace(installRoot))
+        {
+            return;
+        }
+
+        string[] assemblyDirectories =
+        [
+            Path.Combine(installRoot, "Common7", "IDE", "PrivateAssemblies"),
+            Path.Combine(installRoot, "Common7", "IDE", "PublicAssemblies"),
+            Path.Combine(installRoot, "Common7", "IDE"),
+        ];
+
+        AssemblyLoadContext.Default.Resolving += (_, assemblyName) =>
+        {
+            string fileName = $"{assemblyName.Name}.dll";
+            foreach (string directory in assemblyDirectories)
+            {
+                string assemblyPath = Path.Combine(directory, fileName);
+                if (File.Exists(assemblyPath))
+                {
+                    return AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
+                }
+            }
+
+            return null;
+        };
+    }
+
+    [Conditional("DEBUG")]
+    internal static void WriteDiagnosticTrace(string message)
+    {
+#if DEBUG
+        Trace.WriteLine($"[WinUIDesigner] {message}");
+
+        string? tracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_TRACE_PATH");
+        if (!string.IsNullOrWhiteSpace(tracePath))
+        {
+            try
+            {
+                File.AppendAllText(tracePath, $"{DateTime.UtcNow:O} Surface: {message}\r\n");
+            }
+            catch (IOException)
+            {
+                // The Visual Studio host writes to the same diagnostic trace file.
+                // Logging must not terminate the surface process when the two writes race.
+            }
+
+            try
+            {
+                string processTracePath = tracePath + $".surface-{Environment.ProcessId}.log";
+                File.AppendAllText(processTracePath, $"{DateTime.UtcNow:O} {message}\r\n");
+            }
+            catch (IOException)
+            {
+                // Per-process logging is diagnostic-only and must never terminate the surface.
+            }
+        }
+
+        string? surfaceTracePath = Environment.GetEnvironmentVariable("WINUIDESIGNER_SURFACE_TRACE_PATH");
+        if (!string.IsNullOrWhiteSpace(surfaceTracePath))
+        {
+            try
+            {
+                File.AppendAllText(surfaceTracePath, $"{DateTime.UtcNow:O} {message}\r\n");
+            }
+            catch (IOException)
+            {
+                // Explicit child logging is diagnostic-only and must never terminate the surface.
+            }
+        }
+#endif
+    }
+}

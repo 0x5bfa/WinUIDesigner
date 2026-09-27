@@ -70,7 +70,7 @@
              Properties="Configuration=$(Configuration)" />
     <ItemGroup>
       <VSIXSourceItem Include="$(WinUISurfaceOutputDir)\**\*"
-                      Exclude="$(WinUISurfaceOutputDir)\**\*.pdb">
+                      Exclude="$(WinUISurfaceOutputDir)\**\*.pdb;$(WinUISurfaceOutputDir)\**\Microsoft.VisualStudio.*.dll">
         <VSIXSubPath>Surface\%(RecursiveDir)</VSIXSubPath>
       </VSIXSourceItem>
     </ItemGroup>
