@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 #include <windows.h>
 #include <inspectable.h>
 #include <ocidl.h>

@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
@@ -8,6 +11,8 @@ using WinUIDesigner.Surface.Services;
 
 namespace WinUIDesigner.Surface;
 
+// Own the per-process IPC and document services. Register each observer before
+// starting ProtocolHandler so VS cannot send an early message to an empty table.
 public sealed partial class SurfaceApplication : Application, IDisposable
 {
     private readonly int hostProcessId;
@@ -51,6 +56,8 @@ public sealed partial class SurfaceApplication : Application, IDisposable
 
     private void WatchHostProcess()
     {
+        // The pipes do not own Visual Studio's lifetime. Exit the island when devenv
+        // goes away, even if the host never sends an orderly protocol shutdown.
         try
         {
             using Process hostProcess = Process.GetProcessById(hostProcessId);

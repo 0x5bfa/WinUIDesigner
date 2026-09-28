@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Diagnostics;
 using System.Globalization;
@@ -11,6 +14,7 @@ using WinUIDesigner.Surface.Services;
 
 namespace WinUIDesigner.Surface;
 
+// Entry point for the out-of-process WinUI island launched by the VS designer host.
 internal static class Program
 {
 #if DEBUG
@@ -77,6 +81,8 @@ internal static class Program
             Path.Combine(installRoot, "Common7", "IDE"),
         ];
 
+        // Private VS contract assemblies are intentionally not copied into the VSIX.
+        // Resolve them from the same Visual Studio installation that launched us.
         AssemblyLoadContext.Default.Resolving += (_, assemblyName) =>
         {
             string fileName = $"{assemblyName.Name}.dll";

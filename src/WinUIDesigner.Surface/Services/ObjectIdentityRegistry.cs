@@ -1,9 +1,14 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections.Generic;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Maintain the stable object<->handle identity expected by VS's LiveObject cache.
+// Reference identity matters: equal values from distinct runtime objects stay distinct.
 internal sealed class ObjectIdentityRegistry
 {
     private readonly Dictionary<object, long> objectToHandle = new(ReferenceEqualityComparer.Instance);

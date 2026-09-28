@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -9,6 +12,8 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Apply the instance builder's serialized action sequence to the live WinUI tree.
+// Proxy handles are scoped to the action batch and map to stable live-object handles.
 internal sealed class XamlActionService : IDisposable
 {
     private readonly ProtocolHandler protocolHandler;
@@ -41,6 +46,8 @@ internal sealed class XamlActionService : IDisposable
         try
         {
             IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
+            // Keep the wire order: later actions can refer to objects or names created
+            // by earlier actions in this same transaction.
             for (int index = 0; index < actions.Count; index++)
             {
                 if (request.Actions is { } serializedActions && index < serializedActions.Count)

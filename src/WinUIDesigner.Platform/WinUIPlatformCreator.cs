@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Runtime.Versioning;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner;
@@ -6,6 +9,8 @@ using Microsoft.VisualStudio.DesignTools.Utility;
 
 namespace WinUIDesigner.Platform;
 
+// This bridges VS's platform registry to the WinUI-specific project, scene-view,
+// and surface-process implementations.
 public sealed class WinUIPlatformCreator : PlatformCreatorBase
 {
     protected override FrameworkName RuntimeFramework => FrameworkNames.CurrentDotNetCore;

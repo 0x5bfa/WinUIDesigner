@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -13,6 +16,8 @@ using Windows.Graphics;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Hosts the document inside the Visual Studio-provided HWND while keeping the
+// artboard transform, viewport clipping, and native child-window lifetime aligned.
 internal sealed class DesignerSurface : IDisposable
 {
     private const uint WsPopup = 0x80000000;
@@ -104,6 +109,8 @@ internal sealed class DesignerSurface : IDisposable
 
     public Rect GetContentBounds()
     {
+        // Content can render outside its own layout slot; include those descendants
+        // so the bounds reported to the artboard cover the pixels users can see.
         Rect bounds = GetDocumentBounds();
         AppendDescendantBounds(content, content, ref bounds);
         return bounds;
@@ -111,6 +118,8 @@ internal sealed class DesignerSurface : IDisposable
 
     public void SetSurfacePosition(IntPtr parentHwnd, int width, int height)
     {
+        // Message 548 supplies the holder HWND and viewport dimensions after the
+        // surface has been created; this also reparents the XAML island when needed.
         EnsureIsland();
         if (parentWindow != parentHwnd)
         {

@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Globalization;
 using System.IO.Pipes;
@@ -9,6 +12,8 @@ using Microsoft.Win32.SafeHandles;
 
 namespace WinUIDesigner.Surface;
 
+// Adapt VS's inherited anonymous-pipe handles to RuntimeHost's IDataBridge framing;
+// this wraps the host-provided connection rather than negotiating a new endpoint.
 internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
 {
     private readonly SurfaceAnonymousPipe readPipe;
@@ -24,6 +29,8 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
 
     public SurfacePipeDataBridge(string initializationData)
     {
+        // The host serializes read event/pipe and write event/pipe handles for each
+        // direction. This process takes ownership of all eight inherited handles.
         IntPtr[] handles = initializationData
             .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(value => (IntPtr)(long)ulong.Parse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture))
@@ -47,6 +54,8 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
 
     public byte[] ReadMessage()
     {
+        // RuntimeHost messages are length-prefixed. Fill the prefix and then the
+        // declared payload because a pipe read may return only a partial chunk.
         byte[] buffer = new byte[4];
         FillBufferFromReadPipe(buffer, 0);
         if (closed)
@@ -155,6 +164,8 @@ internal sealed class SurfaceAnonymousPipe : IDisposable
 
     public int Read(byte[] buffer, int offset, int maxBytesToRead)
     {
+        // PeekNamedPipe is paired with the inherited events to wait until bytes are
+        // available before reading the current chunk from the pipe.
         int totalBytesAvailable = 0;
         if (!WaitForCondition(writeEvent, () =>
             {

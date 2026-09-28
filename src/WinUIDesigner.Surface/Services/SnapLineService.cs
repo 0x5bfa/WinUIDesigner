@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections.Generic;
 using Microsoft.UI.Dispatching;
@@ -10,6 +13,8 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Supply the shared designer's alignment guides from WinUI layout bounds. Positions
+// are relative to the requested container, not to the screen or HWND.
 internal sealed class SnapLineService : IDisposable
 {
     private readonly ProtocolHandler protocolHandler;
@@ -97,6 +102,8 @@ internal sealed class SnapLineService : IDisposable
         lines.Add(new SingleSnapLine(bounds.Left, bounds.Top, bounds.Bottom, flags | SingleSnapLineFlags.Vertical));
         lines.Add(new SingleSnapLine(centerX, bounds.Top, bounds.Bottom, flags | SingleSnapLineFlags.Vertical | SingleSnapLineFlags.Center));
         lines.Add(new SingleSnapLine(bounds.Right, bounds.Top, bounds.Bottom, flags | SingleSnapLineFlags.Vertical | SingleSnapLineFlags.Maximum));
+        // Only TextBlock exposes a baseline in this implementation; all elements
+        // still receive edge and center guides above.
         double? baseline = TryGetBaseline(element, container);
         if (baseline.HasValue)
         {

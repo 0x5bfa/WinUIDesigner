@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -21,6 +24,9 @@ using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views.NodeObjectCon
 
 namespace WinUIDesigner.Platform;
 
+// VS has no complete WinUI Designer backend, so this platform reuses the shared
+// XAML designer model and selected UWP infrastructure, then supplies WinUI surface
+// hosting and serialization where the two XAML runtimes differ.
 public sealed class WinUIPlatform : XamlPlatform
 {
 #if DEBUG
@@ -111,6 +117,8 @@ public sealed class WinUIPlatform : XamlPlatform
     {
         WriteDiagnosticTrace("WinUIPlatform.CreatePlatformConverter reached.");
         var converter = new NodeObjectPlatformConverter();
+        // The shared WPF frontend expects WPF primitives, while WinUI reports its
+        // own serialized names. Register these layout types explicitly.
         converter.RegisterPrimitiveConverter(XamlTypes.HorizontalAlignment, ConvertHorizontalAlignment);
         converter.RegisterPrimitiveConverter(XamlTypes.VerticalAlignment, ConvertVerticalAlignment);
         converter.RegisterPrimitiveConverter(XamlTypes.Matrix, value => System.Windows.Media.Matrix.Parse(value));

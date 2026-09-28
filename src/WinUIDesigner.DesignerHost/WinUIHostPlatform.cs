@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Diagnostics;
 using System.Globalization;
@@ -10,6 +13,8 @@ using Microsoft.VisualStudio.DesignTools.WpfDesignerHost;
 
 namespace WinUIDesigner.DesignerHost;
 
+// Reuse VS's WPF/.NET host services for process lifetime and IPC, while supplying
+// our own WinUI surface executable and payload staging policy.
 public sealed class WinUIHostPlatform : WpfHostPlatform
 {
 #if DEBUG
@@ -45,6 +50,8 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
     private static Process StartSurfaceProcess(string path, string tapPath, string initializationData)
     {
         using Process currentProcess = Process.GetCurrentProcess();
+        // Keep this argument order in sync with Surface.Program.Main: VS host PID,
+        // diagnostics TAP path, serialized pipe handles, then the inherited flag.
         string arguments = string.Format(
             CultureInfo.InvariantCulture,
             "{0} {1} {2} {3}",
@@ -101,6 +108,8 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
 
     private static string? GetVisualStudioInstallRoot()
     {
+        // The isolated Surface process is outside devenv's probing paths. Pass the
+        // discovered VS root so it can resolve the private Designer contract DLLs.
         string? ideDirectory = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
         string? commonDirectory = ideDirectory is null ? null : Directory.GetParent(ideDirectory)?.FullName;
         string? installRoot = commonDirectory is null ? null : Directory.GetParent(commonDirectory)?.FullName;

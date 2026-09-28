@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -7,6 +10,8 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Attach the VS-compatible XAML Diagnostics TAP and query dependency-property value
+// sources, which WinUI's public DependencyObject API does not expose.
 internal sealed class DiagnosticsPropertySourceService
 {
     private const int S_OK = 0;
@@ -26,6 +31,8 @@ internal sealed class DiagnosticsPropertySourceService
         {
             try
             {
+                // Connection can wait for the diagnostics endpoint to appear; keep
+                // TAP attachment off the UI thread while the surface starts.
                 int hr = NativeMethods.WinUIDesignerDiagnostics_Initialize();
                 Program.WriteDiagnosticTrace($"WinUI diagnostics TAP initialization completed: hr=0x{hr:X8}.");
                 if (hr < 0)
@@ -52,6 +59,8 @@ internal sealed class DiagnosticsPropertySourceService
         nint inspectable = 0;
         try
         {
+            // The native diagnostics API accepts the original WinRT IInspectable,
+            // so temporarily marshal the managed DependencyObject to its ABI pointer.
             inspectable = WinRT.MarshalInspectable<object>.FromManaged(target, true);
             int hr = NativeMethods.WinUIDesignerDiagnostics_GetPropertySource(inspectable, propertyName, out int nativeSource);
             if (hr == E_PENDING)

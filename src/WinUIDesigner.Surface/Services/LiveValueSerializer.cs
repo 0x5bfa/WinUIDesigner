@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.ComponentModel;
 using System.Globalization;
@@ -8,6 +11,8 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Translate runtime objects to the shared TAP's LiveValue wire shape. Complex
+// DependencyObjects use handles so later protocol messages retain object identity.
 internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
 {
     private static readonly System.Reflection.Assembly CoreLibraryAssembly = typeof(object).Assembly;
@@ -42,6 +47,8 @@ internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
 
     public static string GetSerializedTypeName(Type type)
     {
+        // VS's protocol expects framework types from System.Runtime even though the
+        // isolated Surface executes on a concrete CoreLib implementation assembly.
         if (type.Assembly == CoreLibraryAssembly
             && type.IsPublic
             && type.FullName is string fullName

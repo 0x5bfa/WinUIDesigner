@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -8,6 +11,8 @@ using Microsoft.VisualStudio.DesignTools.XamlDesignerHost.Platform.ShadowCopy;
 
 namespace WinUIDesigner.DesignerHost;
 
+// VS selects a shadow-copy worker from the target framework. WinUI is .NET-only,
+// so reject other project kinds before using the Core worker implementation.
 internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
 {
     public IHostShadowCopyWorker CreateWorker(
@@ -71,6 +76,8 @@ internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
 
     public override void EnsureTapAssemblyInFolder(string xamlDiagnosticFolder)
     {
+        // Stage the diagnostics files beside the shadow-copied surface. The attach
+        // API needs the matching architecture's WinUI3 TAP payload at startup.
         string sourceFolder = SurfaceInfo.TapAssemblyFolder;
         if (string.IsNullOrWhiteSpace(sourceFolder))
         {

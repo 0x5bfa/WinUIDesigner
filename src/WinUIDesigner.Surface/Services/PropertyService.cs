@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -167,6 +170,8 @@ internal sealed class PropertyService : IDisposable
         Type declaringType,
         DependencyProperty dependencyProperty)
     {
+        // DT size shadow properties preserve designer intent separately. Publishing
+        // the effective Width/Height as well would make VS feed it back as authored.
         if (XSurfUwp.DT.IsSizePropertyShadowed(target, dependencyProperty))
         {
             return;
@@ -174,6 +179,8 @@ internal sealed class PropertyService : IDisposable
 
         if (diagnosticsPropertySource.TryGetPropertySource(target, name, out BaseValueSource diagnosticsValueSource))
         {
+            // The frontend edits according to BaseValueSource, not only the current
+            // value. Omit Default values so runtime defaults are not authored to XAML.
             if (diagnosticsValueSource != BaseValueSource.Default)
             {
                 AddProperty(properties, name, declaringType, target.GetValue(dependencyProperty), diagnosticsValueSource);

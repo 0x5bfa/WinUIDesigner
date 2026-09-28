@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Pipeline;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner;
@@ -9,6 +12,8 @@ using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Documents;
 
 namespace WinUIDesigner.Platform;
 
+// Keep the shared XAML project/document pipeline, substituting the UWP-compatible
+// property inspector and our surface-process context at its extension points.
 public sealed class WinUIProjectContext : XamlProjectContext
 {
     public WinUIProjectContext(IDesignerContext designerContext, IPlatform platform)

@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -12,6 +15,8 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Resolve and mutate the serialized XAML values used by VS instance-builder actions.
+// This maps protocol type names to WinUI without introducing WPF into the Surface.
 internal static class XamlRuntimeUtilities
 {
     public static Type? ResolveType(string? serializedTypeName)
@@ -21,6 +26,8 @@ internal static class XamlRuntimeUtilities
             return null;
         }
 
+        // Shared VS action contracts can spell framework types with the UWP prefix;
+        // translate that prefix before looking in the WinUI runtime assemblies.
         string candidate = NormalizeWinUITypeName(serializedTypeName.Trim());
         Type? type = Type.GetType(candidate, throwOnError: false);
         if (type is not null)

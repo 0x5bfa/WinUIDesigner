@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -115,6 +118,8 @@ internal sealed class HitTestService : IDisposable
     {
         bool isVisible = ancestorsVisible && element.Visibility == Visibility.Visible;
         int childCount = VisualTreeHelper.GetChildrenCount(element);
+        // Visit frontmost children first so the response follows visual z-order and
+        // the shared selection tool sees the topmost candidate first.
         for (int index = childCount - 1; index >= 0; index--)
         {
             if (VisualTreeHelper.GetChild(element, index) is UIElement child)

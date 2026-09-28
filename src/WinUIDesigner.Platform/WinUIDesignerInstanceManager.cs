@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,6 +18,7 @@ namespace WinUIDesigner.Platform;
 
 internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
 {
+    // Configure app resources before the surface parses a document that may use them.
     private const int ConfigureAppResourcesMessage = 6001;
     private readonly IProtocolHandler protocolHandler;
 
@@ -48,6 +52,8 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
 
         try
         {
+            // The shared instance builder does not expose WinUI App.xaml resources
+            // to the out-of-process surface, so send the supported subset first.
             string? projectPath = targetDocument.Document.DocumentContext?.Project?.ProjectPath;
             string? projectDirectory = Path.GetDirectoryName(projectPath);
             string? appXamlPath = projectDirectory is null ? null : Path.Combine(projectDirectory, "App.xaml");

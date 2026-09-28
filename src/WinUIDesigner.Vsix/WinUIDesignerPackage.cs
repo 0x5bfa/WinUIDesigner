@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -9,6 +12,11 @@ using Microsoft.VisualStudio.Shell;
 
 namespace WinUIDesigner.Vsix;
 
+/// <summary>
+/// Register the WinUI runtime with VS's XAML editor, then install the platform
+/// creator hook while the shared designer services are available. Load for both
+/// solution and no-solution contexts because the editor can initialize either way.
+/// </summary>
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
 [Guid(PackageGuidString)]
 [ProvideXamlRuntimeDesigner("WinUI")]
@@ -29,6 +37,8 @@ public sealed class WinUIDesignerPackage : AsyncPackage
         await base.InitializeAsync(cancellationToken, progress);
         try
         {
+            // Populate VS's existing WinUI configuration before a XAML document
+            // asks PlatformService to create the designer backend.
             WinUIPlatformRegistration.Apply();
         }
         catch (Exception exception)
@@ -47,6 +57,8 @@ public sealed class WinUIDesignerPackage : AsyncPackage
     {
         if (disposing)
         {
+            // RuntimeDetour changes a process-wide VS method; restore it with the
+            // package lifetime so unloading the extension leaves no active hook.
             WinUIPlatformRegistration.Dispose();
         }
 
@@ -82,11 +94,7 @@ public sealed class WinUIDesignerPackage : AsyncPackage
             basePath = Path.GetTempPath();
         }
 
-        return Path.Combine(
-            basePath,
-            "WinUIDesigner",
-            "Logs",
-            $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
+        return Path.Combine(basePath, "WinUIDesigner", "Logs", $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
     }
 #endif
 }

@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -9,6 +12,8 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Implement the shared Designer's VisualState and Storyboard messages directly
+// against WinUI runtime objects in the surface process.
 internal sealed class AnimationService : IDisposable
 {
     private readonly ProtocolHandler protocolHandler;
@@ -54,6 +59,8 @@ internal sealed class AnimationService : IDisposable
 
     private static bool TryGoToState(FrameworkElement root, string stateName, bool useTransitions)
     {
+        // States belong to their templated Control, not necessarily the supplied
+        // root, so search the realized subtree until a control accepts the state.
         if (root is Control control && VisualStateManager.GoToState(control, stateName, useTransitions))
         {
             return true;

@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -20,6 +23,8 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
+// Implements the Visual Studio designer's surface-side protocol and translates
+// those requests into WinUI objects, mutations, bounds, and property operations.
 internal sealed class SurfaceService : IDisposable
 {
     private const int OnApplicationEventMessage = 521;
@@ -56,6 +61,8 @@ internal sealed class SurfaceService : IDisposable
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
 
+        // These numeric message IDs are the shared VS designer wire contract; the
+        // matching request/response types come from the private VS contract assembly.
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>(516, HandleCreateSurfaceAsync));
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CloseDocumentRequestInfo, ResponseWithError>(517, HandleCloseDocumentAsync));
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetPanZoomTransformRequestInfo, ResponseWithError>(518, HandleSetPanZoomTransformAsync));
@@ -780,6 +787,8 @@ internal sealed class SurfaceService : IDisposable
 
     private VisualTreeTopologyEntry[] CaptureVisualTreeTopology(DependencyObject root)
     {
+        // Message 9 carries a full tree snapshot, so compare parent/child order and
+        // stable handles first to avoid resending an unchanged tree on every idle.
         var topology = new List<VisualTreeTopologyEntry>();
         AppendVisualTreeTopology(root, parentHandle: 0, childIndex: 0, topology);
         return topology.ToArray();
@@ -813,6 +822,8 @@ internal sealed class SurfaceService : IDisposable
         bool isRoot,
         List<VisualTreeMutationEvent> mutations)
     {
+        // The designer needs both each element and its ordered parent relation to
+        // rebuild its own selectable tree from this out-of-process visual tree.
         mutations.Add(CreateVisualMutation(element, handle, parentHandle, childIndex, isRoot, VisualMutationType.Add));
 
         int childCount = VisualTreeHelper.GetChildrenCount(element);

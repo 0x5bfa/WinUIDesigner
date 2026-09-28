@@ -1,7 +1,12 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using Microsoft.UI.Xaml;
 
 namespace XSurfUwp;
 
+// Keep design, runtime, and root sizing intent separate. The real Width/Height
+// receives only the currently selected value used to lay out the preview.
 public static class DT
 {
     public static readonly DependencyProperty RootWidthProperty = DependencyProperty.RegisterAttached(
@@ -87,6 +92,8 @@ public static class DT
         DependencyProperty designProperty,
         DependencyProperty runtimeProperty)
     {
+        // Design intent wins over runtime sizing, then root/device sizing. NaN means
+        // that source is unspecified; clearing the real property preserves its default.
         double value = double.NaN;
 
         if (!ReferenceEquals(ReadPropertyValue(dependencyObject, designProperty), DependencyProperty.UnsetValue))

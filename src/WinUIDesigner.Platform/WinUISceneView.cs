@@ -1,3 +1,6 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
 using System;
 using System.Diagnostics;
 using System.Linq;
@@ -15,6 +18,8 @@ using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views;
 
 namespace WinUIDesigner.Platform;
 
+// Retain the shared WPF artboard and tools, but replace the image host with the HWND
+// island host required by the out-of-process WinUI surface.
 internal sealed class WinUISceneView : UwpSceneView
 {
     private static readonly FieldInfo ImageHostField = typeof(UwpSceneView).GetField(
@@ -314,6 +319,8 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         }
 
         private bool ShouldForwardInput(System.Windows.RoutedEventArgs args)
+            // Events from real adorner children already belong to the VS designer;
+            // bridge only the blank overlay events that otherwise have no WPF target.
             => inputBridgeRoot is not null
                 && (ReferenceEquals(args.OriginalSource, inputBridgeRoot)
                     || ReferenceEquals(args.OriginalSource, inputBridgeAdornerLayer));
