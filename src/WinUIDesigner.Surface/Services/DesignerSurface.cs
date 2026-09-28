@@ -6,6 +6,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -25,16 +26,13 @@ internal sealed class DesignerSurface : IDisposable
 
     private readonly Grid viewportRoot;
     private readonly Grid transformRoot;
-    private readonly Canvas borderOverlay;
-    private readonly Border contentBorder;
     private readonly ManualResetEventSlim unfreezeCompositionCompleted = new(initialState: true);
     private FrameworkElement content;
+    private ElementTheme appRequestedTheme;
+    private ElementTheme? previewRequestedTheme;
     private EventHandler<object>? compositionRenderingHandler;
     private double deviceWidth;
     private double deviceHeight;
-    private double offsetX;
-    private double offsetY;
-    private double zoom = 1;
     private DesktopWindowXamlSource? xamlSource;
     private IntPtr hostWindow;
     private IntPtr parentWindow;
@@ -55,26 +53,14 @@ internal sealed class DesignerSurface : IDisposable
         // that transform to the XamlSource root also moves the viewport and breaks
         // clipping/input coordinates when the artboard is scrolled.
         viewportRoot = new Grid();
-        transformRoot = new Grid
-        {
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-        };
-        transformRoot.ActualThemeChanged += (_, _) => UpdateContentBackground();
-        contentBorder = new Border
-        {
-            BorderBrush = new SolidColorBrush(Colors.Black),
-            BorderThickness = new Thickness(1),
-            IsHitTestVisible = false,
-        };
-        borderOverlay = new Canvas { IsHitTestVisible = false };
-
+        transformRoot = (Grid)XamlReader.Load(
+            "<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
+            "Background=\"{ThemeResource ApplicationPageBackgroundThemeBrush}\" />");
+        transformRoot.HorizontalAlignment = HorizontalAlignment.Left;
+        transformRoot.VerticalAlignment = VerticalAlignment.Top;
         transformRoot.Children.Add(content);
         viewportRoot.Children.Add(transformRoot);
-        borderOverlay.Children.Add(contentBorder);
-        viewportRoot.Children.Add(borderOverlay);
         viewportRoot.LayoutUpdated += OnLayoutUpdated;
-        UpdateContentBackground();
         SetDeviceSize(width, height);
     }
 
@@ -153,9 +139,6 @@ internal sealed class DesignerSurface : IDisposable
     public void SetPanZoomTransform(double offsetX, double offsetY, double scale)
     {
         scale = scale <= 0 ? 1.0 : scale;
-        this.offsetX = offsetX;
-        this.offsetY = offsetY;
-        zoom = scale;
         transformRoot.RenderTransform = new CompositeTransform
         {
             ScaleX = scale,
@@ -163,7 +146,6 @@ internal sealed class DesignerSurface : IDisposable
             TranslateX = offsetX,
             TranslateY = offsetY,
         };
-        UpdateBorder();
         Program.WriteDiagnosticTrace($"DesignerSurface pan/zoom updated: offset={offsetX},{offsetY}, scale={scale}.");
     }
 
@@ -177,7 +159,6 @@ internal sealed class DesignerSurface : IDisposable
         transformRoot.Height = height;
         content.Width = width;
         content.Height = height;
-        UpdateBorder();
         transformRoot.Measure(new Size(width, height));
         transformRoot.Arrange(new Rect(0, 0, width, height));
         transformRoot.UpdateLayout();
@@ -261,44 +242,34 @@ internal sealed class DesignerSurface : IDisposable
 
     public void SetCheckerboardColors(Windows.UI.Color color1, Windows.UI.Color color2)
     {
-        // Message 519 describes the design-surface checkerboard. It must not paint
-        // the HWND-sized viewport, because the area outside transformRoot belongs to
-        // the VS artboard and contains grid/adorner visuals. Keep the current minimal
-        // implementation solid while preserving the correct surface-only scope.
-        transformRoot.Background = new SolidColorBrush(color1);
-    }
+        // The island covers the entire viewport, including the area outside the
+        // transformed document. Match SceneScrollViewer.ArtboardBrush there instead
+        // of leaving the island's default white background visible in dark previews.
+        viewportRoot.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(
+            255,
+            (byte)((color1.R >> 1) + (color2.R >> 1)),
+            (byte)((color1.G >> 1) + (color2.G >> 1)),
+            (byte)((color1.B >> 1) + (color2.B >> 1))));
 
-    public void SetContentBorderColor(Windows.UI.Color color)
-    {
-        contentBorder.BorderBrush = new SolidColorBrush(color);
+        // The shared frontend's background toggle sends colors, not a RequestedTheme
+        // action. Use its chosen light/dark backdrop as the preview theme, so controls
+        // and ThemeResource expressions change together without recreating the tree.
+        previewRequestedTheme = color1.R + color1.G + color1.B >= 3 * 128
+            ? ElementTheme.Light : ElementTheme.Dark;
+        ApplyRequestedTheme();
+        Program.WriteDiagnosticTrace($"DesignerSurface preview theme: colors={color1},{color2}, requested={previewRequestedTheme}, actual={viewportRoot.ActualTheme}.");
     }
 
     public void SetRequestedTheme(ElementTheme theme)
     {
-        viewportRoot.RequestedTheme = theme;
-        UpdateContentBackground();
+        appRequestedTheme = theme;
+        ApplyRequestedTheme();
     }
 
-    private void UpdateContentBackground()
+    private void ApplyRequestedTheme()
     {
-        ElementTheme theme = content.RequestedTheme != ElementTheme.Default
-            ? content.RequestedTheme : transformRoot.ActualTheme;
-        transformRoot.Background = new SolidColorBrush(theme == ElementTheme.Dark
-            ? Windows.UI.Color.FromArgb(255, 32, 32, 32) : Colors.White);
-    }
-
-    private void UpdateBorder()
-    {
-        // Keep the outline in viewport coordinates so zoom never scales or
-        // antialiases its one-pixel stroke.
-        double left = Math.Round(offsetX);
-        double top = Math.Round(offsetY);
-        double right = Math.Round(offsetX + deviceWidth * zoom);
-        double bottom = Math.Round(offsetY + deviceHeight * zoom);
-        Canvas.SetLeft(contentBorder, left);
-        Canvas.SetTop(contentBorder, top);
-        contentBorder.Width = Math.Max(0, right - left);
-        contentBorder.Height = Math.Max(0, bottom - top);
+        viewportRoot.RequestedTheme = previewRequestedTheme ?? appRequestedTheme;
+        RefreshLayout();
     }
 
     private static void AppendDescendantBounds(UIElement root, DependencyObject parent, ref Rect bounds)

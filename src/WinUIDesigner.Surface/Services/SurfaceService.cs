@@ -312,6 +312,7 @@ internal sealed class SurfaceService : IDisposable
             surface = new DesignerSurface(root, DefaultSurfaceSize.Width, DefaultSurfaceSize.Height);
             surface.BoundsInvalidated += (_, _) => PublishSurfaceBoundsIfCurrent(documentId, surface);
             surface.SurfaceLayoutUpdated += (_, _) => PublishSurfaceLayoutUpdatedIfCurrent(documentId, surface);
+            surface.SetRequestedTheme(appRequestedTheme);
             surfaces[documentId] = surface;
         }
         else if (!ReferenceEquals(surface.Content, root))
@@ -445,10 +446,6 @@ internal sealed class SurfaceService : IDisposable
             {
                 surface.SetCheckerboardColors(color1, color2);
             }
-            if (TryParseColor(request.ContentBorderColor, out Windows.UI.Color borderColor))
-            {
-                surface.SetContentBorderColor(borderColor);
-            }
         }, "SetArtboardColors (519)");
 
     private Task<ResponseWithError> HandleConfigureAppResourcesAsync(AppResourcesRequest request)
@@ -458,6 +455,10 @@ internal sealed class SurfaceService : IDisposable
             appRequestedTheme = Enum.TryParse(request.RequestedTheme, true, out ElementTheme theme)
                 ? theme : ElementTheme.Default;
             LoadAppResourcesIfNeeded();
+            foreach (DesignerSurface surface in surfaces.Values)
+            {
+                surface.SetRequestedTheme(appRequestedTheme);
+            }
             return Success;
         }, CreateResponseFailure);
 
