@@ -13,7 +13,9 @@
     <StartArguments>/rootsuffix Exp</StartArguments>
     <WinUISurfaceTargetFramework>net10.0-windows10.0.19041.0</WinUISurfaceTargetFramework>
     <WinUISurfaceOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\bin\$(Configuration)\$(WinUISurfaceTargetFramework)</WinUISurfaceOutputDir>
-    <GetVsixSourceItemsDependsOn>$(GetVsixSourceItemsDependsOn);IncludeWinUISurfacePayload</GetVsixSourceItemsDependsOn>
+    <WinUIPlatformOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.Platform\bin\$(Configuration)\net472</WinUIPlatformOutputDir>
+    <WinUIDesignerHostOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.DesignerHost\bin\$(Configuration)\net472</WinUIDesignerHostOutputDir>
+    <GetVsixSourceItemsDependsOn>$(GetVsixSourceItemsDependsOn);IncludeWinUIDesignerManagedPayload;IncludeWinUISurfacePayload</GetVsixSourceItemsDependsOn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -68,6 +70,13 @@
 
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
   <Import Project="$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets" Condition="Exists('$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets')" />
+
+  <Target Name="IncludeWinUIDesignerManagedPayload">
+    <ItemGroup>
+      <VSIXSourceItem Include="$(WinUIPlatformOutputDir)\WinUIDesigner.Platform.dll" />
+      <VSIXSourceItem Include="$(WinUIDesignerHostOutputDir)\WinUIDesigner.DesignerHost.dll" />
+    </ItemGroup>
+  </Target>
 
   <Target Name="IncludeWinUISurfacePayload">
     <MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\WinUIDesigner.Surface.csproj"

@@ -504,18 +504,19 @@ internal sealed class SurfaceService : IDisposable
     {
         foreach ((int id, DesignerSurface surface) in surfaces)
         {
-            bool shouldFreeze = documentIdToFreeze != 0 && id == documentIdToFreeze;
-            if (shouldFreeze)
-            {
-                if (!surface.IsFrozen)
-                {
-                    surface.Freeze();
-                }
-            }
-            else if (surface.IsFrozen)
+            if (id != documentIdToFreeze && surface.IsFrozen)
             {
                 surface.Unfreeze();
             }
+        }
+
+        // Rendering suspension belongs to the UI thread, so resume the old
+        // document before freezing the next one, regardless of dictionary order.
+        if (documentIdToFreeze != 0
+            && surfaces.TryGetValue(documentIdToFreeze, out DesignerSurface? targetSurface)
+            && !targetSurface.IsFrozen)
+        {
+            targetSurface.Freeze();
         }
     }
 

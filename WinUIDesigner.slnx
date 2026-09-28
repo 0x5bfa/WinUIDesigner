@@ -1,6 +1,9 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/WinUIDesigner.DesignerHost/WinUIDesigner.DesignerHost.csproj" />
+    <Project Path="src/WinUIDesigner.DiagnosticsTap/WinUIDesigner.DiagnosticsTap.vcxproj">
+      <Platform Project="x64" />
+    </Project>
     <Project Path="src/WinUIDesigner.Platform/WinUIDesigner.Platform.csproj" />
     <Project Path="src/WinUIDesigner.Surface/WinUIDesigner.Surface.csproj" />
     <Project Path="src/WinUIDesigner.Vsix/WinUIDesigner.Vsix.csproj" />

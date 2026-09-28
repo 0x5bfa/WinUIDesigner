@@ -18,6 +18,7 @@ internal sealed class PropertyService : IDisposable
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ObjectIdentityRegistry objectIdentity;
     private readonly XamlActionService xamlActionService;
+    private readonly DiagnosticsPropertySourceService diagnosticsPropertySource;
     private readonly LiveValueSerializer serializer;
     private readonly List<int> registrationIds = new();
 
@@ -31,6 +32,8 @@ internal sealed class PropertyService : IDisposable
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
         this.xamlActionService = xamlActionService;
+        diagnosticsPropertySource = new DiagnosticsPropertySourceService();
+        diagnosticsPropertySource.StartInitialization();
         serializer = new LiveValueSerializer(objectIdentity);
 
         registrationIds.Add(protocolHandler.RegisterMessageObserver<PropertiesRequestInfo, LiveObjectState>(522, HandleGetProperties));
@@ -61,6 +64,10 @@ internal sealed class PropertyService : IDisposable
         }
 
         AddKnownProperties(value, response.Properties);
+        if (value is FrameworkElement element)
+        {
+            Program.WriteDiagnosticTrace($"Layout properties (522): handle={handle}, type={value.GetType().FullName}, size={element.ActualWidth}x{element.ActualHeight}, margin={element.Margin}, transform={GetTransformToParent(element)}.");
+        }
 
         if (value is IEnumerable enumerable and not string)
         {
@@ -160,14 +167,24 @@ internal sealed class PropertyService : IDisposable
         Type declaringType,
         DependencyProperty dependencyProperty)
     {
+        if (XSurfUwp.DT.IsSizePropertyShadowed(target, dependencyProperty))
+        {
+            return;
+        }
+
+        if (diagnosticsPropertySource.TryGetPropertySource(target, name, out BaseValueSource diagnosticsValueSource))
+        {
+            if (diagnosticsValueSource != BaseValueSource.Default)
+            {
+                AddProperty(properties, name, declaringType, target.GetValue(dependencyProperty), diagnosticsValueSource);
+            }
+
+            return;
+        }
+
         object localValue = target.ReadLocalValue(dependencyProperty);
         if (!ReferenceEquals(localValue, DependencyProperty.UnsetValue))
         {
-            if (XSurfUwp.DT.IsSizePropertyShadowed(target, dependencyProperty))
-            {
-                return;
-            }
-
             AddProperty(properties, name, declaringType, target.GetValue(dependencyProperty), BaseValueSource.Local);
             return;
         }

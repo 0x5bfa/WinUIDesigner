@@ -113,6 +113,8 @@ public sealed class WinUIPlatform : XamlPlatform
         var converter = new NodeObjectPlatformConverter();
         converter.RegisterPrimitiveConverter(XamlTypes.HorizontalAlignment, ConvertHorizontalAlignment);
         converter.RegisterPrimitiveConverter(XamlTypes.VerticalAlignment, ConvertVerticalAlignment);
+        converter.RegisterPrimitiveConverter(XamlTypes.Matrix, value => System.Windows.Media.Matrix.Parse(value));
+        converter.RegisterPrimitiveConverter(XamlTypes.Thickness, value => new System.Windows.ThicknessConverter().ConvertFromInvariantString(value)!);
         return converter;
     }
 

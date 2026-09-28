@@ -39,6 +39,7 @@ internal sealed class DesignerSurface : IDisposable
     private IntPtr hostWindow;
     private IntPtr parentWindow;
     private bool boundsUpdatePending;
+    private bool renderingSuspended;
     private bool disposed;
 
     public event EventHandler? BoundsInvalidated;
@@ -83,6 +84,10 @@ internal sealed class DesignerSurface : IDisposable
 
     public void Freeze()
     {
+        if (!renderingSuspended)
+        {
+            renderingSuspended = DiagnosticsPropertySourceService.TrySetRenderingEnabled(false);
+        }
         IsFrozen = true;
     }
 
@@ -93,6 +98,10 @@ internal sealed class DesignerSurface : IDisposable
             return;
         }
 
+        if (renderingSuspended && DiagnosticsPropertySourceService.TrySetRenderingEnabled(true))
+        {
+            renderingSuspended = false;
+        }
         IsFrozen = false;
         ArmUnfreezeCompositionBarrier();
     }
@@ -389,6 +398,12 @@ internal sealed class DesignerSurface : IDisposable
         }
 
         disposed = true;
+        if (renderingSuspended)
+        {
+            _ = DiagnosticsPropertySourceService.TrySetRenderingEnabled(true);
+            renderingSuspended = false;
+        }
+        IsFrozen = false;
         viewportRoot.LayoutUpdated -= OnLayoutUpdated;
         if (compositionRenderingHandler is not null)
         {

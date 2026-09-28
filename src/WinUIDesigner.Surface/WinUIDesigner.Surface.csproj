@@ -8,6 +8,9 @@
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <DiagnosticsTapProject>$(MSBuildProjectDirectory)\..\WinUIDesigner.DiagnosticsTap\WinUIDesigner.DiagnosticsTap.vcxproj</DiagnosticsTapProject>
+    <DiagnosticsTapOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.DiagnosticsTap\bin\x64\$(Configuration)</DiagnosticsTapOutputDir>
+    <VisualStudioMSBuild>$(VsInstallRoot)\MSBuild\Current\Bin\MSBuild.exe</VisualStudioMSBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,4 +39,10 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <Target Name="BuildDiagnosticsTap" AfterTargets="Build">
+    <Exec Command="&quot;$(VisualStudioMSBuild)&quot; &quot;$(DiagnosticsTapProject)&quot; /nologo /t:Build /p:Configuration=$(Configuration) /p:Platform=x64" />
+    <Copy SourceFiles="$(DiagnosticsTapOutputDir)\WinUIDesigner.DiagnosticsTap.dll"
+          DestinationFolder="$(TargetDir)" />
+  </Target>
 </Project>
