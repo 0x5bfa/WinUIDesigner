@@ -18,7 +18,7 @@
 		<WinUISurfaceOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\bin\$(Configuration)\$(WinUISurfaceTargetFramework)</WinUISurfaceOutputDir>
 		<WinUIPlatformOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.Platform\bin\$(Configuration)\net472</WinUIPlatformOutputDir>
 		<WinUIDesignerHostOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.DesignerHost\bin\$(Configuration)\net472</WinUIDesignerHostOutputDir>
-		<GetVsixSourceItemsDependsOn>$(GetVsixSourceItemsDependsOn);IncludeWinUIDesignerManagedPayload;IncludeWinUISurfacePayload</GetVsixSourceItemsDependsOn>
+		<GetVsixSourceItemsDependsOn>$(GetVsixSourceItemsDependsOn);IncludeWinUIDesignerManagedPayload;IncludeWinUISurfacePayload;IncludeMarketplaceLicense;IncludeMarketplaceBranding</GetVsixSourceItemsDependsOn>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -86,6 +86,25 @@
 		<ItemGroup>
 			<VSIXSourceItem Include="$(WinUISurfaceOutputDir)\**\*" Exclude="$(WinUISurfaceOutputDir)\**\*.pdb;$(WinUISurfaceOutputDir)\**\Microsoft.VisualStudio.*.dll">
 				<VSIXSubPath>Surface\%(RecursiveDir)</VSIXSubPath>
+			</VSIXSourceItem>
+		</ItemGroup>
+	</Target>
+
+	<Target Name="IncludeMarketplaceLicense">
+		<ItemGroup>
+			<VSIXSourceItem Include="$(MSBuildProjectDirectory)\..\..\LICENSE">
+				<TargetPath>LICENSE.txt</TargetPath>
+			</VSIXSourceItem>
+		</ItemGroup>
+	</Target>
+
+	<Target Name="IncludeMarketplaceBranding">
+		<ItemGroup>
+			<VSIXSourceItem Include="$(MSBuildProjectDirectory)\assets\logo-90.png">
+				<TargetPath>Images\WinUIDesignerIcon.png</TargetPath>
+			</VSIXSourceItem>
+			<VSIXSourceItem Include="$(MSBuildProjectDirectory)\assets\preview.png">
+				<TargetPath>Images\WinUIDesignerPreview.png</TargetPath>
 			</VSIXSourceItem>
 		</ItemGroup>
 	</Target>
