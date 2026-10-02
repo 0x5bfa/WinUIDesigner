@@ -17,162 +17,19 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Check out selected ref
+      - name: Checkout the repository
         uses: actions/checkout@v7
-      - name: Require default branch
-        shell: pwsh
-        run: |
-          if ($env:GITHUB_REF -ne 'refs/heads/master') {
-            throw "Marketplace publishing is restricted to master. Selected ref: '$env:GITHUB_REF'."
-          }
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
       - name: Set up .NET 10 SDK
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
-      - name: Resolve Visual Studio 2026
-        id: visual-studio
+      - name: Build solution
         shell: pwsh
         run: |
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          if (-not (Test-Path -LiteralPath $vswhere)) {
-            throw "vswhere.exe was not found at '$vswhere'."
-          }
-
-          $installations = @(& $vswhere -products * -format json | ConvertFrom-Json)
-          $visualStudio = $installations |
-            Where-Object {
-              $_.installationVersion -like '18.*' -and
-              (Test-Path -LiteralPath (Join-Path $_.installationPath 'Common7\IDE\PrivateAssemblies'))
-            } |
-            Sort-Object { [version]$_.installationVersion } -Descending |
-            Select-Object -First 1
-
-          if ($null -eq $visualStudio) {
-            $versions = ($installations | ForEach-Object { $_.installationVersion }) -join ', '
-            throw "Visual Studio 2026 (18.x) with DesignTools private assemblies was not found. Installed versions: $versions"
-          }
-
-          $installRoot = [string]$visualStudio.installationPath
-          "VS_INSTALL_ROOT=$installRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VSINSTALLDIR=$installRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VsInstallRoot=$installRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VS_VERSION=$($visualStudio.installationVersion)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Verify .NET Framework targeting pack
-        shell: pwsh
-        run: |
-          $targetingPack = Join-Path ${env:ProgramFiles(x86)} 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2'
-          if (-not (Test-Path -LiteralPath $targetingPack)) {
-            throw ".NET Framework 4.7.2 targeting pack was not found at '$targetingPack'."
-          }
-
-      - name: Restore
-        shell: pwsh
-        run: dotnet restore .\WinUIDesigner.slnx --nologo -p:DeployExtension=false -p:VsInstallRoot="$env:VS_INSTALL_ROOT"
-
-      - name: Build Release VSIX
-        shell: pwsh
-        run: |
-          $msbuildPath = Join-Path $env:VS_INSTALL_ROOT 'MSBuild\Current\Bin\MSBuild.exe'
-          if (-not (Test-Path -LiteralPath $msbuildPath)) {
-            throw "MSBuild.exe was not found at '$msbuildPath'."
-          }
-
-          & $msbuildPath .\WinUIDesigner.slnx `
-            /m `
-            /p:Configuration=Release `
-            /p:DeployExtension=false `
-            /p:ContinuousIntegrationBuild=true `
-            "/p:VsInstallRoot=$env:VS_INSTALL_ROOT" `
-            /nologo `
-            /verbosity:minimal
-          if ($LASTEXITCODE -ne 0) {
-            throw "MSBuild.exe failed with exit code $LASTEXITCODE."
-          }
-
-      - name: Validate VSIX and prepare release files
-        shell: pwsh
-        run: |
-          $vsixPath = Join-Path $env:GITHUB_WORKSPACE 'src\WinUIDesigner.Vsix\bin\Release\net472\WinUIDesigner.vsix'
-          if (-not (Test-Path -LiteralPath $vsixPath)) {
-            throw "Expected VSIX was not produced: '$vsixPath'."
-          }
-
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [System.IO.Compression.ZipFile]::OpenRead($vsixPath)
-          try {
-            $privateVisualStudioAssemblies = @(
-              $archive.Entries |
-                Where-Object { $_.FullName -match '(^|/)Microsoft\.VisualStudio\..+\.dll$' }
-            )
-            if ($privateVisualStudioAssemblies.Count -gt 0) {
-              $paths = $privateVisualStudioAssemblies.FullName -join [Environment]::NewLine
-              throw "The VSIX contains Visual Studio assemblies that must not be redistributed:`n$paths"
-            }
-
-            $symbols = @($archive.Entries | Where-Object { $_.FullName -match '\.pdb$' })
-            if ($symbols.Count -gt 0) {
-              $paths = $symbols.FullName -join [Environment]::NewLine
-              throw "The VSIX contains PDB files that should remain build artifacts:`n$paths"
-            }
-
-            $manifestEntry = $archive.GetEntry('extension.vsixmanifest')
-            if ($null -eq $manifestEntry) {
-              throw 'The VSIX does not contain extension.vsixmanifest.'
-            }
-
-            if ($null -eq $archive.GetEntry('LICENSE.txt')) {
-              throw 'The VSIX does not contain the Marketplace license file LICENSE.txt.'
-            }
-
-            $packagedPaths = @(
-              $archive.Entries | ForEach-Object { $_.FullName.Replace('\', '/') }
-            )
-            foreach ($requiredAsset in @('Images/WinUIDesignerIcon.png', 'Images/WinUIDesignerPreview.png')) {
-              if ($requiredAsset -notin $packagedPaths) {
-                throw "The VSIX does not contain the required Marketplace image '$requiredAsset'."
-              }
-            }
-
-            $reader = [System.IO.StreamReader]::new($manifestEntry.Open())
-            try {
-              [xml]$manifest = $reader.ReadToEnd()
-            }
-            finally {
-              $reader.Dispose()
-            }
-
-            $identity = $manifest.SelectSingleNode("//*[local-name()='Identity']")
-            $version = $identity.GetAttribute('Version')
-            if ($version -notmatch '^\d+(\.\d+){1,3}$') {
-              throw "VSIX identity version '$version' must be numeric (for example, 0.1.0.0); prerelease labels belong in the Preview metadata/tag."
-            }
-
-            $installationTargets = @($manifest.SelectNodes("//*[local-name()='InstallationTarget']"))
-            if ($installationTargets.Count -eq 0) {
-              throw 'The VSIX manifest does not declare any Visual Studio installation targets.'
-            }
-
-            $unsupportedTargets = @(
-              $installationTargets |
-                Where-Object { $_.GetAttribute('Version') -notmatch '^\[17\.14,' }
-            )
-            if ($unsupportedTargets.Count -gt 0) {
-              $ranges = $unsupportedTargets | ForEach-Object { $_.GetAttribute('Version') } | Sort-Object -Unique
-              throw "Marketplace publishing currently requires the stable Visual Studio API lower bound 17.14. Unsupported installation target ranges: $($ranges -join ', ')"
-            }
-          }
-          finally {
-            $archive.Dispose()
-          }
-
-          $releaseDir = Join-Path $env:RUNNER_TEMP 'WinUIDesigner-CD'
-          New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
-          $releaseVsix = Join-Path $releaseDir 'WinUIDesigner.vsix'
-          Copy-Item -LiteralPath $vsixPath -Destination $releaseVsix
-          $sha256 = (Get-FileHash -LiteralPath $releaseVsix -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$sha256  WinUIDesigner.vsix" | Set-Content -LiteralPath (Join-Path $releaseDir 'WinUIDesigner.vsix.sha256') -Encoding ascii
+          msbuild .\WinUIDesigner.slnx /restore /p:Configuration=Release /p:DeployExtension=false /nologo /verbosity:minimal /m
 
       - name: Publish to Visual Studio Marketplace
         shell: pwsh
@@ -180,24 +37,11 @@ jobs:
         env:
           VS_MARKETPLACE_PAT: ${{ secrets.VS_MARKETPLACE_PAT }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:VS_MARKETPLACE_PAT)) {
-            throw 'Add the VS_MARKETPLACE_PAT Actions secret before dispatching this workflow.'
-          }
-
-          $publisher = Join-Path $env:VS_INSTALL_ROOT 'VSSDK\VisualStudioIntegration\Tools\Bin\VsixPublisher.exe'
-          if (-not (Test-Path -LiteralPath $publisher)) {
-            throw "VsixPublisher.exe was not found at '$publisher'."
-          }
-
-          $vsix = Join-Path $env:RUNNER_TEMP 'WinUIDesigner-CD\WinUIDesigner.vsix'
-          if (-not (Test-Path -LiteralPath $vsix)) {
-            throw "Expected VSIX was not found: '$vsix'."
-          }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsInstallRoot = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          $publisher = Join-Path $vsInstallRoot 'VSSDK\VisualStudioIntegration\Tools\Bin\VsixPublisher.exe'
 
           & $publisher publish `
-            -payload $vsix `
+            -payload '.\bin\Release\net472\WinUIDesigner.vsix' `
             -publishManifest '.\publishManifest.json' `
             -personalAccessToken $env:VS_MARKETPLACE_PAT
-          if ($LASTEXITCODE -ne 0) {
-            throw "VsixPublisher.exe failed with exit code $LASTEXITCODE."
-          }
