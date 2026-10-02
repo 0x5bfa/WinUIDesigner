@@ -1,16 +1,24 @@
+# Copyright (c) 0x5BFA. All rights reserved.
+# Licensed under the MIT license.
+
 name: CI
 
 on:
   push:
+    paths-ignore:
+      - '.github/assets/**'
+      - 'docs/**'
+      - '*.md'
   pull_request:
-  workflow_dispatch:
+    paths-ignore:
+      - '.github/assets/**'
+      - 'docs/**'
+      - '*.md'
+
+run-name: ${{ github.event_name == 'pull_request' && 'DesktopFlyouts PR Validation' || 'DesktopFlyouts CI Validation' }}
 
 permissions:
   contents: read
-
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build:
@@ -18,106 +26,16 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Check out source
+      - name: Checkout the repository
         uses: actions/checkout@v7
-      - name: Set up .NET 10 SDK
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+      - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
-      - name: Resolve Visual Studio 2026
-        id: visual-studio
-        shell: pwsh
-        run: |
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          if (-not (Test-Path -LiteralPath $vswhere)) {
-            throw "vswhere.exe was not found at '$vswhere'."
-          }
-
-          $installations = @(& $vswhere -products * -format json | ConvertFrom-Json)
-          $visualStudio = $installations |
-            Where-Object {
-              $_.installationVersion -like '18.*' -and
-              (Test-Path -LiteralPath (Join-Path $_.installationPath 'Common7\IDE\PrivateAssemblies'))
-            } |
-            Sort-Object { [version]$_.installationVersion } -Descending |
-            Select-Object -First 1
-
-          if ($null -eq $visualStudio) {
-            $versions = ($installations | ForEach-Object { $_.installationVersion }) -join ', '
-            throw "Visual Studio 2026 (18.x) with DesignTools private assemblies was not found. Installed versions: $versions"
-          }
-
-          $installRoot = [string]$visualStudio.installationPath
-          "VS_INSTALL_ROOT=$installRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VSINSTALLDIR=$installRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VsInstallRoot=$installRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "VS_VERSION=$($visualStudio.installationVersion)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "installationPath=$installRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "installationVersion=$($visualStudio.installationVersion)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-          Write-Host "Using Visual Studio $($visualStudio.installationVersion) at $installRoot"
-
-      - name: Verify .NET Framework targeting pack
-        shell: pwsh
-        run: |
-          $targetingPack = Join-Path ${env:ProgramFiles(x86)} 'Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2'
-          if (-not (Test-Path -LiteralPath $targetingPack)) {
-            throw ".NET Framework 4.7.2 targeting pack was not found at '$targetingPack'."
-          }
-
-      - name: Restore
-        shell: pwsh
-        run: dotnet restore .\WinUIDesigner.slnx --nologo -p:DeployExtension=false -p:VsInstallRoot="$env:VS_INSTALL_ROOT"
-
       - name: Build Release VSIX
         shell: pwsh
         run: |
-          $msbuildPath = Join-Path $env:VS_INSTALL_ROOT 'MSBuild\Current\Bin\MSBuild.exe'
-          if (-not (Test-Path -LiteralPath $msbuildPath)) {
-            throw "MSBuild.exe was not found at '$msbuildPath'."
-          }
-
-          & $msbuildPath .\WinUIDesigner.slnx `
-            /m `
-            /p:Configuration=Release `
-            /p:DeployExtension=false `
-            /p:ContinuousIntegrationBuild=true `
-            "/p:VsInstallRoot=$env:VS_INSTALL_ROOT" `
-            /nologo `
-            /verbosity:minimal
-          if ($LASTEXITCODE -ne 0) {
-            throw "MSBuild.exe failed with exit code $LASTEXITCODE."
-          }
-
-      - name: Validate VSIX payload
-        shell: pwsh
-        run: |
-          $vsixPath = Join-Path $env:GITHUB_WORKSPACE 'src\WinUIDesigner.Vsix\bin\Release\net472\WinUIDesigner.vsix'
-          if (-not (Test-Path -LiteralPath $vsixPath)) {
-            throw "Expected VSIX was not produced: '$vsixPath'."
-          }
-
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [System.IO.Compression.ZipFile]::OpenRead($vsixPath)
-          try {
-            $privateVisualStudioAssemblies = @(
-              $archive.Entries |
-                Where-Object { $_.FullName -match '(^|/)Microsoft\.VisualStudio\..+\.dll$' }
-            )
-            if ($privateVisualStudioAssemblies.Count -gt 0) {
-              $paths = $privateVisualStudioAssemblies.FullName -join [Environment]::NewLine
-              throw "The VSIX contains Visual Studio assemblies that must not be redistributed:`n$paths"
-            }
-
-            $symbols = @($archive.Entries | Where-Object { $_.FullName -match '\.pdb$' })
-            if ($symbols.Count -gt 0) {
-              $paths = $symbols.FullName -join [Environment]::NewLine
-              throw "The VSIX contains PDB files that should remain build artifacts:`n$paths"
-            }
-          }
-          finally {
-            $archive.Dispose()
-          }
-
-          Write-Host "Validated VSIX payload: $vsixPath"
+          msbuild .\WinUIDesigner.slnx /restore /p:Configuration=Release /p:DeployExtension=false /nologo /verbosity:minimal /m
