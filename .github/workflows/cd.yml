@@ -8,6 +8,8 @@ name: CD
 on:
   workflow_dispatch:
 
+run-name: 'Publish VSIX to Visual Studio Marketplace'
+
 permissions:
   contents: read
 

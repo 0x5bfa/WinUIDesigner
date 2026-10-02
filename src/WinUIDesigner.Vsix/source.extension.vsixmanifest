@@ -7,7 +7,7 @@
     <Metadata>
         <Identity
             Id="0x5BFA.WinUIDesigner"
-            Version="0.1.0.0"
+            Version="1.0.1"
             Language="en-US"
             Publisher="0x5BFA" />
         <DisplayName>WinUI 3 XAML Designer</DisplayName>
@@ -19,20 +19,20 @@
         <Preview>true</Preview>
     </Metadata>
     <Installation>
-        <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.14,18.0)">
+        <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.0,)">
             <ProductArchitecture>amd64</ProductArchitecture>
         </InstallationTarget>
-        <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.14,18.0)">
+        <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="[17.0,)">
             <ProductArchitecture>amd64</ProductArchitecture>
         </InstallationTarget>
-        <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.14,18.0)">
+        <InstallationTarget Id="Microsoft.VisualStudio.Enterprise" Version="[17.0,)">
             <ProductArchitecture>amd64</ProductArchitecture>
         </InstallationTarget>
     </Installation>
     <Prerequisites>
         <Prerequisite
             Id="Microsoft.VisualStudio.Component.CoreEditor"
-            Version="[18.0,19.0)"
+            Version="[17.0,)"
             DisplayName="Visual Studio core editor" />
     </Prerequisites>
     <Assets>
