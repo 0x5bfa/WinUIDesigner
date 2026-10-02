@@ -15,7 +15,7 @@ on:
       - 'docs/**'
       - '*.md'
 
-run-name: ${{ github.event_name == 'pull_request' && 'DesktopFlyouts PR Validation' || 'DesktopFlyouts CI Validation' }}
+run-name: ${{ github.event_name == 'pull_request' && 'WinUIDesigner PR Validation' || 'WinUIDesigner CI Validation' }}
 
 permissions:
   contents: read
@@ -35,7 +35,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Build Release VSIX
+      - name: Build solution
         shell: pwsh
         run: |
           msbuild .\WinUIDesigner.slnx /restore /p:Configuration=Release /p:DeployExtension=false /nologo /verbosity:minimal /m

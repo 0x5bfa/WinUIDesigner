@@ -11,7 +11,7 @@
             Language="en-US"
             Publisher="0x5BFA" />
         <DisplayName>WinUI 3 XAML Designer</DisplayName>
-        <Description xml:space="preserve">Experimental preview of the Visual Studio XAML Designer for WinUI 3.</Description>
+        <Description xml:space="preserve">WinUI 3 XAML designer integration for Visual Studio.</Description>
         <License>LICENSE.txt</License>
         <Icon>Images\WinUIDesignerIcon.png</Icon>
         <PreviewImage>Images\WinUIDesignerPreview.png</PreviewImage>
