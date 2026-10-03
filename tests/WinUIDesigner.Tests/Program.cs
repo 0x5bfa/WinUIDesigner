@@ -125,6 +125,49 @@ await Test("explicit removal detaches document ownership without leaking release
     Check(registry.ReleaseDocument(8).Contains(value));
     return Task.CompletedTask;
 });
+await Test("collection type arguments use project reference contracts", () =>
+{
+    string name = RuntimeTypeNameSerializer.Serialize(typeof(ICollection<object>));
+    Check(name.StartsWith("System.Collections.Generic.ICollection`1[[System.Object, System.Runtime,", StringComparison.Ordinal));
+    Check(!name.Contains("System.Private.CoreLib", StringComparison.Ordinal));
+    Check(name.EndsWith("PublicKeyToken=b03f5f7f11d50a3a", StringComparison.Ordinal));
+    return Task.CompletedTask;
+});
+await Test("dictionary entries normalize both generic arguments", () =>
+{
+    string name = RuntimeTypeNameSerializer.Serialize(typeof(KeyValuePair<object, string>));
+    Check(name.StartsWith("System.Collections.Generic.KeyValuePair`2[[System.Object, System.Runtime,", StringComparison.Ordinal));
+    Check(name.Contains("[System.String, System.Runtime,", StringComparison.Ordinal));
+    Check(!name.Contains("System.Private.CoreLib", StringComparison.Ordinal));
+    return Task.CompletedTask;
+});
+await Test("array shapes retain rank and normalized element identity", () =>
+{
+    Check(RuntimeTypeNameSerializer.Serialize(typeof(object[])).StartsWith("System.Object[], System.Runtime,", StringComparison.Ordinal));
+    Check(RuntimeTypeNameSerializer.Serialize(typeof(object[,])).StartsWith("System.Object[,], System.Runtime,", StringComparison.Ordinal));
+    Check(RuntimeTypeNameSerializer.Serialize(typeof(object).MakeArrayType(1)).StartsWith("System.Object[*], System.Runtime,", StringComparison.Ordinal));
+    return Task.CompletedTask;
+});
+await Test("project nested types keep their authored assembly identity", () =>
+{
+    Check(RuntimeTypeNameSerializer.Serialize(typeof(SerializationTypes.Nested)) == typeof(SerializationTypes.Nested).AssemblyQualifiedName);
+    return Task.CompletedTask;
+});
+await Test("projection collections expose public contracts instead of ABI nested types", () =>
+{
+    var assembly = System.Reflection.Emit.AssemblyBuilder.DefineDynamicAssembly(
+        new System.Reflection.AssemblyName("WinRT.Runtime"), System.Reflection.Emit.AssemblyBuilderAccess.Run);
+    var module = assembly.DefineDynamicModule("ProjectionTest");
+    var parent = module.DefineType("ABI.System.Collections.Generic.IDictionaryMethods`2",
+        System.Reflection.TypeAttributes.Public | System.Reflection.TypeAttributes.Abstract);
+    var view = parent.DefineNestedType("DictionaryKeyCollection",
+        System.Reflection.TypeAttributes.NestedPublic | System.Reflection.TypeAttributes.Abstract);
+    view.AddInterfaceImplementation(typeof(ICollection<object>));
+    Type viewType = view.CreateType()!;
+    parent.CreateType();
+    Check(RuntimeTypeNameSerializer.Serialize(viewType) == RuntimeTypeNameSerializer.Serialize(typeof(ICollection<object>)));
+    return Task.CompletedTask;
+});
 return failures == 0 ? 0 : 1;
 
 async Task Test(string name, Func<Task> test)
@@ -152,4 +195,9 @@ sealed class Overloads
     public string Select(string value) => "string";
     public string Select(int value) => "int";
     public static string Factory() => "factory";
+}
+
+public static class SerializationTypes
+{
+    public sealed class Nested { }
 }

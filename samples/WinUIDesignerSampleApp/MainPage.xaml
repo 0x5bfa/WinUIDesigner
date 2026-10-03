@@ -1,0 +1,87 @@
+<Page
+    x:Class="WinUIDesignerSampleApp.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ext="using:WinUIDesignerSampleApp.Extensions"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    d:DesignHeight="1000"
+    d:DesignWidth="1366"
+    mc:Ignorable="d">
+    <Page.Resources>
+        <SolidColorBrush x:Key="TestBrush" Color="SteelBlue" />
+    </Page.Resources>
+    <Grid x:Name="RootGrid">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="480" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Canvas>
+            <Button
+                x:Name="MoveTarget"
+                Canvas.Left="40"
+                Canvas.Top="50"
+                Width="160"
+                Height="48"
+                Content="Move and resize" />
+            <Button
+                Canvas.Left="40"
+                Canvas.Top="120"
+                Content="Unnamed first" />
+            <Button
+                Canvas.Left="40"
+                Canvas.Top="180"
+                Content="Unnamed second" />
+            <Border
+                Canvas.Left="240"
+                Canvas.Top="150"
+                Width="100"
+                Height="80"
+                Background="{StaticResource TestBrush}" />
+        </Canvas>
+        <Rectangle
+            Width="100"
+            Height="100"
+            Margin="38,858,0,0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Stroke="Black" />
+        <StackPanel
+            Grid.Column="1"
+            Margin="24"
+            Spacing="16">
+            <toolkit:SettingsCard
+                x:Name="ToolkitTarget"
+                Description="Metadata, template and PRI resources"
+                Header="Toolkit project dependency">
+                <ToggleSwitch x:Name="ToolkitContent" />
+            </toolkit:SettingsCard>
+            <Button
+                x:Name="StyledTarget"
+                Content="Application resource and BasedOn"
+                Style="{StaticResource DerivedButtonStyle}" />
+            <TextBlock
+                x:Name="BoundTarget"
+                Foreground="{StaticResource AppTestBrush}"
+                Text="{Binding Header, ElementName=ToolkitTarget}" />
+            <TextBlock FontSize="24" Text="文字列資源と画像の確認" />
+            <!--<TextBlock x:Name="ExtensionTarget" Text="{ext:String Key=HelloWorld}" />-->
+            <TextBlock
+                x:Name="UidTextTarget"
+                x:Uid="UidGreeting"
+                Text="x:Uid 未適用: この文字列が残る場合は資源を解決できていません" />
+            <Button
+                x:Name="UidButtonTarget"
+                x:Uid="UidButton"
+                Content="x:Uid 未適用" />
+            <Image
+                x:Name="ProjectImageTarget"
+                Width="320"
+                Height="180"
+                HorizontalAlignment="Left"
+                Source="ms-appx:///WinUIDesignerSampleApp/Assets/image.jpg"
+                Stretch="Uniform" />
+        </StackPanel>
+    </Grid>
+</Page>
