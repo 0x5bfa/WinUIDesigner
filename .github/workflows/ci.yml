@@ -39,12 +39,13 @@ jobs:
         shell: pwsh
         run: |
           msbuild .\WinUIDesigner.slnx /restore /p:Configuration=Release /p:DeployExtension=false /nologo /verbosity:minimal /m
-      - name: Validate designer contracts
+
+      - name: Run tests
         shell: pwsh
-        run: dotnet run --project .\tests\WinUIDesigner.Tests\WinUIDesigner.Tests.csproj --configuration Release --no-build
-      - name: Validate standard Toolbox items
+        run: |
+          dotnet run --project .\tests\WinUIDesigner.Tests\WinUIDesigner.Tests.csproj --configuration Release --no-build
+          dotnet run --project .\tests\WinUIDesigner.Toolbox.Tests\WinUIDesigner.Toolbox.Tests.csproj --configuration Release --no-build
+
+      - name: Build sample app
         shell: pwsh
-        run: dotnet run --project .\tests\WinUIDesigner.Toolbox.Tests\WinUIDesigner.Toolbox.Tests.csproj --configuration Release --no-build
-      - name: Build real designer fixtures
-        shell: pwsh
-        run: msbuild .\tests\DesignerSmokeApp\DesignerSmokeApp.slnx /restore /p:Configuration=Release /nologo /verbosity:minimal
+        run: msbuild .\samples\WinUIDesignerSampleApp\WinUIDesignerSampleApp.slnx /restore /p:Configuration=Release /nologo /verbosity:minimal
