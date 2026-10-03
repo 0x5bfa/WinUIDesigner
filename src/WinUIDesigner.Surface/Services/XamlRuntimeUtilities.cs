@@ -9,7 +9,9 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
@@ -35,6 +37,14 @@ internal static class XamlRuntimeUtilities
         // Shared VS action contracts can spell framework types with the UWP prefix;
         // translate that prefix before looking in the WinUI runtime assemblies.
         string candidate = NormalizeWinUITypeName(serializedTypeName.Trim());
+        if (candidate.Split(',')[0].Trim() == StaticResourceReference.ProtocolTypeName)
+        {
+            return typeof(StaticResourceReference);
+        }
+        if (IsFallbackControlType(candidate.Split(',')[0].Trim()))
+        {
+            return typeof(Microsoft.UI.Xaml.Controls.ContentControl);
+        }
         Type? type = Type.GetType(candidate, throwOnError: false);
         if (type is not null)
         {
@@ -53,6 +63,9 @@ internal static class XamlRuntimeUtilities
 
         return ProjectRuntimeResolver.ResolveType(fullName);
     }
+
+    public static bool IsFallbackControlType(string typeName)
+        => typeName is "XSurfUwp.Fallback.FallbackControl" or "XSurfUwp.Fallback.LayoutFaultFallbackControl";
 
     public static object? ConvertString(string? serializedTypeName, string? value, bool isEnum = false)
     {
@@ -123,10 +136,29 @@ internal static class XamlRuntimeUtilities
 
     public static void SetPropertyValue(object target, string fullPropertyName, object? value)
     {
+        // The native UWP SetPropertyAction evaluates custom extensions before
+        // assigning their result. Keep the extension proxy intact for later edits.
+        if (value is MarkupExtension extension)
+        {
+            try
+            {
+                value = typeof(MarkupExtension).GetMethod("ProvideValue",
+                    BindingFlags.Instance | BindingFlags.NonPublic, Type.EmptyTypes)!.Invoke(extension, null);
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is not null)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+        }
+
         ResolveProperty(target, fullPropertyName, out PropertyInfo? property, out DependencyProperty? dependencyProperty);
         if (dependencyProperty is not null && target is DependencyObject dependencyObject)
         {
-            dependencyObject.SetValue(dependencyProperty, value);
+            if (value is BindingBase binding)
+                BindingOperations.SetBinding(dependencyObject, dependencyProperty, binding);
+            else
+                dependencyObject.SetValue(dependencyProperty, value);
             return;
         }
 

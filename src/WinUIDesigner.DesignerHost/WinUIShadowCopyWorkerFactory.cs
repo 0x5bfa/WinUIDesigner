@@ -7,9 +7,12 @@ using System.IO;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.VisualStudio.DesignTools.DesignerContract;
 using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
 using Microsoft.VisualStudio.DesignTools.XamlDesignerHost.Platform.ShadowCopy;
+using Microsoft.VisualStudio.DesignTools.Utility.IO;
+using Microsoft.VisualStudio.DesignTools.Xaml.LanguageService;
 
 namespace WinUIDesigner.DesignerHost;
 
@@ -50,6 +53,7 @@ internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
 {
     private const string SurfaceExecutableName = "WinUISurface.exe";
     private readonly string[] projectAssemblies;
+    private readonly IHostProject hostProject;
 
     public WinUICoreShadowCopyWorker(
         SurfaceProcessInfo surfaceInfo,
@@ -57,6 +61,7 @@ internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
         IEnumerable<string> controlAssembliesForShadowCopy)
         : base(surfaceInfo, hostProject, controlAssembliesForShadowCopy)
     {
+        this.hostProject = hostProject;
         projectAssemblies = hostProject.References.Select(reference => reference.Path)
             .Concat(new[] { hostProject.TargetAssemblyPath }).Where(path => !string.IsNullOrEmpty(path))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -107,6 +112,23 @@ internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
         }
 
         return cachedSurface;
+    }
+
+    public override async Task CopyProjectContentAsync(CancellationToken cancelToken)
+    {
+        await base.CopyProjectContentAsync(cancelToken).ConfigureAwait(false);
+
+        // UWP stages media even in platform-only mode. WPF's worker only copies
+        // the output directory in All mode, so it cannot provide these assets.
+        foreach (IHostSourceItem item in hostProject.Items ?? Enumerable.Empty<IHostSourceItem>())
+        {
+            cancelToken.ThrowIfCancellationRequested();
+            if (!MediaFileExtensions.IsMediaFile(item.Path) || !File.Exists(item.Path)) continue;
+            string relativePath = UwpUriResolver.GetDeploymentRelativePath(hostProject, item.RelativePath, isForRuntime: false)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            SurfaceInfo.ShadowCacheContent.AddItem(item.Path, relativePath, forceCopyNow: true);
+            WinUIHostPlatform.WriteDiagnosticTrace($"Project media staged: '{item.Path}' -> '{relativePath}'; mode={SurfaceInfo.ShadowCopyType}.");
+        }
     }
 
     public override void EnsureTapAssemblyInFolder(string xamlDiagnosticFolder)

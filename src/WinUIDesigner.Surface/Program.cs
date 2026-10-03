@@ -26,6 +26,8 @@ internal static class Program
         RegisterVisualStudioAssemblyResolver();
         ProjectRuntimeResolver.Initialize(AppContext.BaseDirectory);
         WriteDiagnosticTrace($"Main entered with {args.Length} arguments.");
+        Assembly surfaceAssembly = typeof(Program).Assembly;
+        WriteDiagnosticTrace($"Surface assembly='{surfaceAssembly.Location}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
 
         if (args.Length != 4 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
         {

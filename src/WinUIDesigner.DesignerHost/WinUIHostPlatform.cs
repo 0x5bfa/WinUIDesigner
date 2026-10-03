@@ -128,7 +128,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             : null;
     }
 
-    private static void WriteDiagnosticTrace(string message)
+    internal static void WriteDiagnosticTrace(string message)
     {
         Trace.WriteLine($"[WinUIDesigner] {message}");
 

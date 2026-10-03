@@ -110,8 +110,12 @@ internal sealed class XamlActionService : IDisposable
     {
         using var scope = objectIdentity.EnterDocument(document.DocumentId);
         object? root = null;
-        foreach (XamlAction action in XamlActionJsonSerializer.Deserialize(document.Actions ?? []))
+        IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(document.Actions ?? []);
+        for (int index = 0; index < actions.Count; index++)
         {
+            XamlAction action = actions[index];
+            if (document.Actions is { } serializedActions && index < serializedActions.Count)
+                Program.WriteDiagnosticTrace($"BuildDocument ({document.DocumentId}) action[{index}]: {serializedActions[index]}");
             try
             {
             Execute(action, (id, value) =>
@@ -206,7 +210,9 @@ internal sealed class XamlActionService : IDisposable
                 break;
 
             case SetPropertyAction setProperty:
-                XamlRuntimeUtilities.SetPropertyValue(RequireObject(setProperty.ParentHandle), setProperty.FullPropertyName, ResolveObject(setProperty.PropertyValueHandle));
+                object propertyOwner = RequireObject(setProperty.ParentHandle);
+                XamlRuntimeUtilities.SetPropertyValue(propertyOwner, setProperty.FullPropertyName,
+                    ResolveActionValue(setProperty.PropertyValueHandle, propertyOwner));
                 break;
 
             case ClearPropertyAction clearProperty:
@@ -239,7 +245,8 @@ internal sealed class XamlActionService : IDisposable
                 break;
 
             case AddChildAction addChild:
-                XamlRuntimeUtilities.AddChild(RequireObject(addChild.ParentHandle), addChild.Index, ResolveObject(addChild.ChildHandle));
+                object childOwner = RequireObject(addChild.ParentHandle);
+                XamlRuntimeUtilities.AddChild(childOwner, addChild.Index, ResolveActionValue(addChild.ChildHandle, childOwner));
                 break;
 
             case RemoveChildAction removeChild:
@@ -253,10 +260,11 @@ internal sealed class XamlActionService : IDisposable
                 break;
 
             case AddDictionaryEntryAction addDictionaryEntry:
+                object dictionaryOwner = RequireObject(addDictionaryEntry.DictionaryHandle);
                 XamlRuntimeUtilities.SetDictionaryEntry(
-                    RequireObject(addDictionaryEntry.DictionaryHandle),
+                    dictionaryOwner,
                     ResolveObject(addDictionaryEntry.KeyHandle),
-                    ResolveObject(addDictionaryEntry.ValueHandle));
+                    ResolveActionValue(addDictionaryEntry.ValueHandle, dictionaryOwner));
                 break;
 
             case RemoveDictionaryEntryAction removeDictionaryEntry:
@@ -266,10 +274,11 @@ internal sealed class XamlActionService : IDisposable
                 break;
 
             case UpdateDictionaryValueAction updateDictionaryValue:
+                object updatedDictionaryOwner = RequireObject(updateDictionaryValue.DictionaryHandle);
                 XamlRuntimeUtilities.SetDictionaryEntry(
-                    RequireObject(updateDictionaryValue.DictionaryHandle),
+                    updatedDictionaryOwner,
                     ResolveObject(updateDictionaryValue.KeyHandle),
-                    ResolveObject(updateDictionaryValue.ValueHandle));
+                    ResolveActionValue(updateDictionaryValue.ValueHandle, updatedDictionaryOwner));
                 break;
 
             case NullReferenceAction nullReference:
@@ -410,6 +419,18 @@ internal sealed class XamlActionService : IDisposable
         }
 
         return null;
+    }
+
+    private object? ResolveActionValue(long handle, object owner)
+    {
+        object? value = ResolveObject(handle);
+        if (value is StaticResourceReference reference)
+        {
+            value = resourceScopes.ResolveStaticResource(owner, reference.ResourceKey);
+            // The native UWP TAP replaces the reference's object state with its value.
+            actionObjects[handle] = value;
+        }
+        return value;
     }
 
     private object RequireObject(long handle)

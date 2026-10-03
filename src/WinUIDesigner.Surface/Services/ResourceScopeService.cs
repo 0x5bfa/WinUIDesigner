@@ -34,6 +34,28 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
         };
     }
 
+    public object? ResolveStaticResource(object owner, object? key)
+    {
+        if (key is null) throw new InvalidOperationException("A StaticResource reference has no resource key.");
+        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        for (object? current = owner; current is not null && visited.Add(current);
+            current = parents.TryGetValue(current, out object? parent) ? parent : (current as FrameworkElement)?.Parent)
+        {
+            ResourceDictionary? dictionary = current switch
+            {
+                FrameworkElement element => element.Resources,
+                ResourceDictionary resources => resources,
+                Application app => app.Resources,
+                _ => null,
+            };
+            if (dictionary is not null && dictionary.TryGetValue(key, out object? value)) return value;
+        }
+
+        if (Application.Current.Resources.TryGetValue(key, out object? applicationValue)) return applicationValue;
+        if (themeResources is not null && themeResources.TryGetValue(key, out object? themeValue)) return themeValue;
+        throw new KeyNotFoundException($"Unable to resolve StaticResource '{key}' in the owning resource scope.");
+    }
+
     public object Parse(object? owner, string xaml)
     {
         ResourceDictionary application = Application.Current.Resources;

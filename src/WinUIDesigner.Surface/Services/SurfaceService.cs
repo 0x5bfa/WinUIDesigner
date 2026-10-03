@@ -536,6 +536,15 @@ internal sealed class SurfaceService : IDisposable
 
         foreach (XElement element in document.Root.DescendantsAndSelf())
         {
+            // The UWP cleaner can suppress project code and emit its own stand-in.
+            // Keep that decision, but use a WinUI control instead of UwpSurface.
+            if (element.Name.NamespaceName == "using:XSurfUwp.Fallback"
+                && XamlRuntimeUtilities.IsFallbackControlType("XSurfUwp.Fallback." + element.Name.LocalName))
+            {
+                element.Name = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml/presentation") + "ContentControl";
+                if (element.Attribute("Content") is null && element.Attribute("Tag") is { } originalType)
+                    element.SetAttributeValue("Content", originalType.Value);
+            }
             foreach (XAttribute attribute in new List<XAttribute>(element.Attributes()))
             {
                 if (!attribute.IsNamespaceDeclaration && attribute.Name.NamespaceName == XSurfUwpNamespace)
