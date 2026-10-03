@@ -42,9 +42,9 @@ public sealed class WinUIPlatform : XamlPlatform
         {
             if (displaySettingsProvider is null)
             {
-                displaySettingsProvider = new UwpDisplaySettingsProvider(DesignerContext.PlatformService);
+                displaySettingsProvider = new WinUIDisplaySettingsProvider(DesignerContext.PlatformService);
                 displaySettingsProvider.Initialize();
-                WriteDiagnosticTrace("Temporary UwpDisplaySettingsProvider bridge initialized.");
+                WriteDiagnosticTrace("UWP device display settings initialized.");
             }
 
             return displaySettingsProvider;

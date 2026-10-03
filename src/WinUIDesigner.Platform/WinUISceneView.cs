@@ -179,6 +179,19 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
             return handle;
         }
 
+        protected override void OnWindowPositionChanged(System.Windows.Rect boundingBox)
+        {
+            base.OnWindowPositionChanged(boundingBox);
+
+            // The UWP child overlay positions itself at (0, 0). In the VS editor its
+            // parent also contains the device toolbar, whereas the surface holder
+            // starts below it. Keep the input/adorner overlay over the holder.
+            if (ExtensibilityLayerHwndSource?.HwndSource is { } overlay)
+            {
+                WinUIOverlayWindow.PositionAtHost(overlay.Handle, Handle, boundingBox);
+            }
+        }
+
         protected override void DestroyWindowCore(HandleRef hwnd)
         {
             if (mutationObserverRegistrationId != 0 && Host.Pipeline is InstanceBuilderPipeline pipeline)
