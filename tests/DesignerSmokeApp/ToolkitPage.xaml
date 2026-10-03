@@ -2,13 +2,16 @@
     x:Class="DesignerSmokeApp.ToolkitPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    d:DesignWidth="800" d:DesignHeight="600" mc:Ignorable="d">
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    mc:Ignorable="d">
     <StackPanel Margin="24" Spacing="16">
-        <toolkit:SettingsCard x:Name="ToolkitTarget" Header="Toolkit project dependency" Description="Metadata, template and PRI resources">
-            <ToggleSwitch x:Name="ToolkitContent" Header="Nested content" />
+        <toolkit:SettingsCard
+            x:Name="ToolkitTarget"
+            Description="Metadata, template and PRI resources"
+            Header="Toolkit project dependency">
+            <ToggleSwitch x:Name="ToolkitContent" />
         </toolkit:SettingsCard>
     </StackPanel>
 </Page>

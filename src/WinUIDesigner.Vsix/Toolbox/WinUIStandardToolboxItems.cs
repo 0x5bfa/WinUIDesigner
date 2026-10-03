@@ -14,29 +14,48 @@ internal static class WinUIStandardToolboxItems
     public const string GroupId = "WinUIDesigner.WinUI3.Controls";
 
     // Explicit placement catalog; do not expose every public type in the projection
-    // (Page, Window, flyouts, abstract bases, and template parts are not assets).
+    // Coverage and justified exclusions are checked against the SDK in Toolbox.Tests.
     public static IReadOnlyList<string> TypeNames { get; } = Array.AsReadOnly(new[]
     {
-        "AppBarButton", "AppBarSeparator", "AppBarToggleButton", "AutoSuggestBox",
-        "Border", "Button", "CalendarDatePicker", "CalendarView", "Canvas", "CheckBox",
-        "ColorPicker", "ComboBox", "CommandBar", "ContentControl", "ContentPresenter",
-        "DatePicker", "DropDownButton", "Expander", "FlipView", "Frame", "Grid", "GridView",
-        "HyperlinkButton", "Image", "InfoBar", "ItemsControl", "ItemsRepeater", "ListBox",
-        "ListView", "MediaPlayerElement", "NavigationView", "NumberBox", "ParallaxView",
-        "PasswordBox", "PersonPicture", "Pivot", "PivotItem", "ProgressBar", "ProgressRing",
-        "RadioButton", "RadioButtons", "RatingControl", "RelativePanel", "RichEditBox",
-        "RichTextBlock", "RichTextBlockOverflow", "ScrollViewer", "SemanticZoom", "Slider",
-        "SplitButton", "SplitView", "StackPanel", "TabView", "TextBlock", "TextBox", "TimePicker",
-        "ToggleSplitButton", "ToggleSwitch", "TreeView", "UserControl", "VariableSizedWrapGrid",
-        "Viewbox", "WebView2",
+        "AnimatedIcon", "AnimatedVisualPlayer", "AnnotatedScrollBar", "AppBar", "AppBarButton",
+        "AppBarElementContainer", "AppBarSeparator", "AppBarToggleButton", "AutoSuggestBox", "BitmapIcon",
+        "Border", "BreadcrumbBar", "Button", "CalendarDatePicker", "CalendarView", "Canvas", "CheckBox",
+        "ColorPicker", "ComboBox", "ComboBoxItem", "CommandBar", "ContentControl", "ContentDialog",
+        "ContentPresenter", "DatePicker", "DropDownButton", "Expander", "FlipView", "FlipViewItem",
+        "FontIcon", "Frame", "Grid", "GridView", "GridViewItem", "Hub", "HubSection", "HyperlinkButton",
+        "IconSourceElement", "Image", "ImageIcon", "InfoBadge", "InfoBar", "ItemContainer", "ItemsControl",
+        "ItemsPresenter", "ItemsRepeater", "ItemsRepeaterScrollHost", "ItemsStackPanel", "ItemsView",
+        "ItemsWrapGrid", "ListBox", "ListBoxItem", "ListView", "ListViewItem", "MapControl",
+        "MediaPlayerElement", "MediaTransportControls", "MenuBar", "MenuBarItem", "MenuFlyoutItem",
+        "MenuFlyoutSeparator", "MenuFlyoutSubItem", "NavigationView", "NavigationViewItem",
+        "NavigationViewItemHeader", "NavigationViewItemSeparator", "NumberBox", "ParallaxView",
+        "PasswordBox", "PathIcon", "PersonPicture", "PipsPager", "Pivot", "PivotItem", "ProgressBar",
+        "ProgressRing", "RadioButton", "RadioButtons", "RadioMenuFlyoutItem", "RatingControl",
+        "RefreshContainer", "RefreshVisualizer", "RelativePanel", "RichEditBox", "RichTextBlock",
+        "RichTextBlockOverflow", "ScrollView", "ScrollViewer", "SelectorBar", "SelectorBarItem",
+        "SemanticZoom", "Slider", "SplitButton", "SplitMenuFlyoutItem", "SplitView", "StackPanel",
+        "SwapChainPanel", "SwipeControl", "SymbolIcon", "SystemBackdropElement", "TabView", "TabViewItem",
+        "TeachingTip", "TextBlock", "TextBox", "TimePicker", "TitleBar", "ToggleMenuFlyoutItem",
+        "ToggleSplitButton", "ToggleSwitch", "ToolTip", "TreeView", "TreeViewItem", "TwoPaneView",
+        "UserControl", "VariableSizedWrapGrid", "Viewbox", "VirtualizingStackPanel", "WebView2",
+        "WrapGrid",
     }.Select(name => "Microsoft.UI.Xaml.Controls." + name).Concat(new[]
     {
+        "Microsoft.UI.Xaml.Controls.Primitives.ColorSpectrum",
+        "Microsoft.UI.Xaml.Controls.Primitives.Popup",
         "Microsoft.UI.Xaml.Controls.Primitives.RepeatButton",
         "Microsoft.UI.Xaml.Controls.Primitives.ScrollBar",
+        "Microsoft.UI.Xaml.Controls.Primitives.ScrollPresenter",
+        "Microsoft.UI.Xaml.Controls.Primitives.Thumb",
+        "Microsoft.UI.Xaml.Controls.Primitives.TickBar",
         "Microsoft.UI.Xaml.Controls.Primitives.ToggleButton",
-        "Microsoft.UI.Xaml.Shapes.Ellipse", "Microsoft.UI.Xaml.Shapes.Line",
-        "Microsoft.UI.Xaml.Shapes.Path", "Microsoft.UI.Xaml.Shapes.Polygon",
-        "Microsoft.UI.Xaml.Shapes.Polyline", "Microsoft.UI.Xaml.Shapes.Rectangle",
+        "Microsoft.UI.Xaml.Documents.Glyphs",
+        "Microsoft.UI.Xaml.Shapes.Ellipse",
+        "Microsoft.UI.Xaml.Shapes.Line",
+        "Microsoft.UI.Xaml.Shapes.Path",
+        "Microsoft.UI.Xaml.Shapes.Polygon",
+        "Microsoft.UI.Xaml.Shapes.Polyline",
+        "Microsoft.UI.Xaml.Shapes.Rectangle",
     }).ToArray());
 
     public static string GetItemId(string typeName) => typeName + ", " + AssemblyIdentity;
