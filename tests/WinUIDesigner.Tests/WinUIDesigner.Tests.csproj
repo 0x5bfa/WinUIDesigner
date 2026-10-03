@@ -8,6 +8,7 @@
     <Compile Include="../../src/WinUIDesigner.Surface/MessageFrameReader.cs" Link="MessageFrameReader.cs" />
     <Compile Include="../../src/WinUIDesigner.Surface/QueuedOperation.cs" Link="QueuedOperation.cs" />
     <Compile Include="../../src/WinUIDesigner.Surface/RuntimeMemberResolver.cs" Link="RuntimeMemberResolver.cs" />
+    <Compile Include="../../src/WinUIDesigner.Surface/RuntimeTypeNameSerializer.cs" Link="RuntimeTypeNameSerializer.cs" />
     <Compile Include="../../src/WinUIDesigner.Surface/DocumentConstructionException.cs" Link="DocumentConstructionException.cs" />
     <Compile Include="../../src/WinUIDesigner.Surface/Services/ObjectIdentityRegistry.cs" Link="ObjectIdentityRegistry.cs" />
     <Reference Include="Microsoft.VisualStudio.DesignTools.RuntimeHostBase">

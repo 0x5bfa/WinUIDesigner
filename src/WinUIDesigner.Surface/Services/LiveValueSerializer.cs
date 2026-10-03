@@ -2,6 +2,7 @@
 // Licensed under MIT License.
 
 using System;
+using System.Collections;
 using System.ComponentModel;
 using System.Globalization;
 using Microsoft.UI.Xaml;
@@ -15,13 +16,11 @@ namespace WinUIDesigner.Surface.Services;
 // DependencyObjects use handles so later protocol messages retain object identity.
 internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
 {
-    private static readonly System.Reflection.Assembly CoreLibraryAssembly = typeof(object).Assembly;
-    private static readonly string SystemRuntimeAssemblyFullName =
-        $"System.Runtime, Version={CoreLibraryAssembly.GetName().Version}, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a";
-
     public LiveValue Serialize(object? value)
     {
-        if (value is null)
+        // WinUI exposes its no-default sentinel as a WinRT.IInspectable. It is
+        // absence of a value, not a user object that should acquire a live handle.
+        if (value is null || ReferenceEquals(value, DependencyProperty.UnsetValue))
         {
             return new LiveValue();
         }
@@ -46,20 +45,7 @@ internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
         => $"{name}:{GetSerializedTypeName(declaringType)}";
 
     public static string GetSerializedTypeName(Type type)
-    {
-        // VS's protocol expects framework types from System.Runtime even though the
-        // isolated Surface executes on a concrete CoreLib implementation assembly.
-        if (type.Assembly == CoreLibraryAssembly
-            && type.IsPublic
-            && type.FullName is string fullName
-            && !type.IsArray
-            && !type.IsGenericType)
-        {
-            return $"{fullName}, {SystemRuntimeAssemblyFullName}";
-        }
-
-        return type.AssemblyQualifiedName ?? type.FullName ?? type.Name;
-    }
+        => RuntimeTypeNameSerializer.Serialize(type);
 
     private static bool ShouldUseHandle(Type type, object value)
     {
@@ -68,7 +54,9 @@ internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
             return false;
         }
 
-        return value is DependencyObject || !CanConvertToString(type);
+        // A collection converter can produce "(Collection)", but the frontend
+        // still needs the original object handle to query its keys and items.
+        return value is DependencyObject or IEnumerable || !CanConvertToString(type);
     }
 
     private static string? SerializeToString(object value, Type type)

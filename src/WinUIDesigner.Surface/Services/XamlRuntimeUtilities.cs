@@ -179,7 +179,8 @@ internal static class XamlRuntimeUtilities
             // actual selected element need not derive from the property's owner.
             Type metadataType = targetType is not null && declaringType!.IsAssignableFrom(targetType)
                 ? targetType : declaringType!;
-            return dependencyProperty.GetMetadata(metadataType).DefaultValue;
+            object? value = dependencyProperty.GetMetadata(metadataType).DefaultValue;
+            return ReferenceEquals(value, DependencyProperty.UnsetValue) ? null : value;
         }
 
         PropertyInfo? property = (declaringType ?? targetType)?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);

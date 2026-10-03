@@ -117,7 +117,9 @@ public sealed partial class SurfaceApplication : Application, IXamlMetadataProvi
         }
 
         disposed = true;
-        dataBridge?.Close();
+        // Shutdown cancels pending protocol/dispatcher requests before their
+        // document state is released; closing only the pipes leaves them live.
+        protocolHandler?.Shutdown();
         surfaceService?.Dispose();
         protocolHandler?.Dispose();
         dataBridge?.Dispose();

@@ -112,6 +112,10 @@ internal sealed class SurfaceService : IDisposable
                     await InvokeOnDispatcher(() => { TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId); return true; }, ex => throw ex).ConfigureAwait(false);
                     continue;
                 }
+                // A resource build can fail before its dictionary is installed.
+                // Record ownership first so the failure path also releases the
+                // partially constructed nonvisual objects and action handles.
+                await InvokeOnDispatcher(() => { TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId); return true; }, ex => throw ex).ConfigureAwait(false);
                 var resources = await BuildDocumentAsync(resourceDocument, resources: true).ConfigureAwait(false);
                 await InvokeOnDispatcher(() =>
                 {
@@ -128,7 +132,7 @@ internal sealed class SurfaceService : IDisposable
                 }, ex => throw ex).ConfigureAwait(false);
             }
             var result = await BuildDocumentAsync(document, resources: false).ConfigureAwait(false);
-            return await InvokeOnDispatcher(() => CreateSurface(requestInfo, result.Root, result.PreparedXaml), CreateFailure).ConfigureAwait(false);
+            return await InvokeOnDispatcher(() => CreateSurface(requestInfo, result.Root, result.PreparedXaml), ex => throw ex).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -216,6 +220,13 @@ internal sealed class SurfaceService : IDisposable
 
     private void CloseSurfaceDocument(int documentId)
     {
+        // VS can close an application/resource document directly after an edit.
+        // Keeping it in the cache would reuse its old dictionary on the next build.
+        if (resourceDocuments.Remove(documentId, out var closedResource))
+        {
+            Application.Current.Resources.MergedDictionaries.Remove(closedResource);
+            foreach (var ids in documentResources.Values) ids.Remove(documentId);
+        }
         if (documentResources.Remove(documentId, out var resourceIds))
         {
             foreach (int resourceId in resourceIds)
@@ -272,7 +283,9 @@ internal sealed class SurfaceService : IDisposable
         catch (Exception ex)
         {
             Program.WriteDiagnosticTrace($"CreateSurface failed: {ex}");
-            return CreateFailure(ex);
+            // Let the construction failure path release resources and identities,
+            // including a surface installed before a later initialization failure.
+            throw;
         }
     }
 
