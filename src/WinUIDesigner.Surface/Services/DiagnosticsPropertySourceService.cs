@@ -19,10 +19,12 @@ internal sealed class DiagnosticsPropertySourceService
     private const int NativeVisualStateSource = 14;
     private int initializationStarted;
     private volatile bool nativeUnavailable;
+    private long retryAfter;
 
     public void StartInitialization()
     {
-        if (Interlocked.Exchange(ref initializationStarted, 1) != 0)
+        if (nativeUnavailable || Environment.TickCount64 < Interlocked.Read(ref retryAfter)
+            || Interlocked.Exchange(ref initializationStarted, 1) != 0)
         {
             return;
         }
@@ -37,7 +39,9 @@ internal sealed class DiagnosticsPropertySourceService
                 Program.WriteDiagnosticTrace($"WinUI diagnostics TAP initialization completed: hr=0x{hr:X8}.");
                 if (hr < 0)
                 {
-                    nativeUnavailable = true;
+                    // Missing endpoints can be transient while the island starts.
+                    // Missing DLLs/exports below are permanent for this process.
+                    Interlocked.Exchange(ref retryAfter, Environment.TickCount64 + 30_000);
                 }
             }
             catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
@@ -45,6 +49,7 @@ internal sealed class DiagnosticsPropertySourceService
                 nativeUnavailable = true;
                 Program.WriteDiagnosticTrace($"WinUI diagnostics TAP initialization unavailable: {ex}");
             }
+            finally { Interlocked.Exchange(ref initializationStarted, 0); }
         });
     }
 
@@ -55,6 +60,8 @@ internal sealed class DiagnosticsPropertySourceService
         {
             return false;
         }
+        if (Environment.TickCount64 >= Interlocked.Read(ref retryAfter) && Interlocked.Read(ref retryAfter) != 0)
+            StartInitialization();
 
         nint inspectable = 0;
         try

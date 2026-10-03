@@ -5,9 +5,11 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Linq;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
@@ -48,7 +50,8 @@ internal sealed class PropertyService : IDisposable
 
     private LiveObjectState HandleGetProperties(PropertiesRequestInfo request)
     {
-        LiveObjectState response = InvokeOnDispatcher(() => CreateObjectState(request.Object));
+        LiveObjectState response = InvokeOnDispatcher(() => CreateObjectState(request.Object),
+            () => new LiveObjectState { Properties = [], Items = [] }, request.Object);
         Program.WriteDiagnosticTrace($"GetProperties (522) completed for handle {request.Object}: properties={response.Properties.Count}, items={response.Items.Count}.");
         return response;
     }
@@ -66,6 +69,7 @@ internal sealed class PropertyService : IDisposable
             return response;
         }
 
+        using var scope = objectIdentity.EnterDocument(objectIdentity.GetDocumentId(value));
         AddKnownProperties(value, response.Properties);
         if (value is FrameworkElement element)
         {
@@ -85,14 +89,10 @@ internal sealed class PropertyService : IDisposable
 
     private void AddKnownProperties(object value, List<LiveObjectPropertyValue> properties)
     {
-        string[] propertyNames = value is FrameworkElement
-            ? [
-                "DesiredSize", "RenderSize", "Visibility", "Name",
-                "Width", "Height", "MinWidth", "MinHeight", "MaxWidth", "MaxHeight",
-                "ActualWidth", "ActualHeight", "Margin", "HorizontalAlignment", "VerticalAlignment",
-                "FlowDirection", "Resources", "Style", "UseLayoutRounding", "RenderTransform", "RenderTransformOrigin"
-            ]
-            : ["Visibility"];
+        string[] propertyNames = value.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(property => property.CanRead && property.GetIndexParameters().Length == 0
+                && property.Name is not ("Parent" or "TemplatedParent" or "XamlRoot" or "DispatcherQueue" or "Dispatcher"))
+            .Select(property => property.Name).Distinct().ToArray();
 
         Type runtimeType = value.GetType();
         foreach (string name in propertyNames)
@@ -130,6 +130,23 @@ internal sealed class PropertyService : IDisposable
 
         if (value is FrameworkElement element)
         {
+            // Attached layout properties belong to their owner type, not to the
+            // selected element's CLR property list.
+            foreach (Type owner in new[] { typeof(Canvas), typeof(Grid), typeof(RelativePanel), typeof(ScrollViewer), typeof(ToolTipService) })
+            {
+                foreach (PropertyInfo attached in owner.GetProperties(BindingFlags.Public | BindingFlags.Static))
+                {
+                    if (!attached.Name.EndsWith("Property", StringComparison.Ordinal) || attached.PropertyType != typeof(DependencyProperty)) continue;
+                    string name = attached.Name[..^8];
+                    if (owner.GetMethod("Get" + name, BindingFlags.Public | BindingFlags.Static) is null) continue;
+                    try
+                    {
+                        if (attached.GetValue(null) is DependencyProperty dp)
+                            AddDependencyProperty(properties, element, name, owner, dp);
+                    }
+                    catch (Exception ex) { Program.WriteDiagnosticTrace($"Attached property '{owner.FullName}.{name}' could not be read: {ex.Message}"); }
+                }
+            }
             try
             {
                 AddDesignTimeProperty(
@@ -183,7 +200,7 @@ internal sealed class PropertyService : IDisposable
             // value. Omit Default values so runtime defaults are not authored to XAML.
             if (diagnosticsValueSource != BaseValueSource.Default)
             {
-                AddProperty(properties, name, declaringType, target.GetValue(dependencyProperty), diagnosticsValueSource);
+                AddDependencyValue(properties, target, name, declaringType, dependencyProperty, diagnosticsValueSource);
             }
 
             return;
@@ -192,14 +209,27 @@ internal sealed class PropertyService : IDisposable
         object localValue = target.ReadLocalValue(dependencyProperty);
         if (!ReferenceEquals(localValue, DependencyProperty.UnsetValue))
         {
-            AddProperty(properties, name, declaringType, target.GetValue(dependencyProperty), BaseValueSource.Local);
+            AddDependencyValue(properties, target, name, declaringType, dependencyProperty, BaseValueSource.Local);
             return;
         }
 
         if (target is FrameworkElement element && HasStyleSetter(element.Style, dependencyProperty))
         {
-            AddProperty(properties, name, declaringType, target.GetValue(dependencyProperty), BaseValueSource.Style);
+            AddDependencyValue(properties, target, name, declaringType, dependencyProperty, BaseValueSource.Style);
         }
+    }
+
+    private void AddDependencyValue(List<LiveObjectPropertyValue> properties, DependencyObject target,
+        string name, Type declaringType, DependencyProperty property, BaseValueSource source)
+    {
+        object? baseValue = XamlRuntimeUtilities.GetBaseValue(target, property);
+        properties.Add(new LiveObjectPropertyValue
+        {
+            Property = LiveValueSerializer.SerializeProperty(name, declaringType),
+            BaseValue = serializer.Serialize(baseValue),
+            CurrentValue = serializer.Serialize(target.GetValue(property)),
+            ValueSource = source,
+        });
     }
 
     private void AddProperty(
@@ -213,6 +243,7 @@ internal sealed class PropertyService : IDisposable
         {
             Property = LiveValueSerializer.SerializeProperty(name, declaringType),
             BaseValue = serializer.Serialize(value),
+            CurrentValue = serializer.Serialize(value),
             ValueSource = valueSource,
         });
     }
@@ -227,6 +258,7 @@ internal sealed class PropertyService : IDisposable
         {
             Property = $"{name}:XSurfUwp.DT",
             BaseValue = serializer.Serialize(value),
+            CurrentValue = serializer.Serialize(value),
             ValueSource = valueSource,
         });
     }
@@ -319,7 +351,7 @@ internal sealed class PropertyService : IDisposable
     private LiveValueResponse HandleGetDefaultValue(DefaultValueRequestInfo request)
     {
         Program.WriteDiagnosticTrace($"GetDefaultValue (523): property={request.FullPropertyName}, target={request.TargetTypeName}.");
-        LiveValue value = InvokeOnDispatcher(() => serializer.Serialize(GetDefaultValue(request.FullPropertyName, request.TargetTypeName)));
+        LiveValue value = InvokeOnDispatcher(() => serializer.Serialize(GetDefaultValue(request.FullPropertyName, request.TargetTypeName)), () => new LiveValue());
         return new LiveValueResponse { Value = value };
     }
 
@@ -352,7 +384,7 @@ internal sealed class PropertyService : IDisposable
             }
 
             return serializer.Serialize(XamlRuntimeUtilities.GetUnderlyingValue(target, request.Property));
-        });
+        }, () => new LiveValue(), request.Object);
         return new UnderlyingValueSourceInformation { UnderlyingValue = value };
     }
 
@@ -361,55 +393,30 @@ internal sealed class PropertyService : IDisposable
         Program.WriteDiagnosticTrace($"Execute lookup actions (539): count={request.Actions?.Count ?? 0}.");
         return new UnderlyingValueSourceInformation
         {
-            UnderlyingValue = xamlActionService.ExecuteLookupActions(request, serializer),
+            UnderlyingValue = InvokeOnDispatcher(() => xamlActionService.ExecuteLookupActions(request, serializer), () => new LiveValue()),
         };
     }
 
     private LiveValue HandleEvaluateStaticExtension(EvaluateStaticExtensionRequest request)
     {
         Program.WriteDiagnosticTrace($"EvaluateStaticExtension (546): member={request.MemberName}, type={request.TypeName}.");
-        return InvokeOnDispatcher(() => serializer.Serialize(XamlRuntimeUtilities.ResolveMember(request.MemberName)));
+        return InvokeOnDispatcher(() => serializer.Serialize(XamlRuntimeUtilities.ResolveMember(request.MemberName)), () => new LiveValue());
     }
 
-    private T InvokeOnDispatcher<T>(Func<T> callback)
+    private T InvokeOnDispatcher<T>(Func<T> callback, Func<T> failure, long handle = 0)
     {
-        if (dispatcherQueue.HasThreadAccess)
-        {
-            return InvokeSafely(callback);
-        }
-
-        T? result = default;
-        using var completion = new System.Threading.ManualResetEventSlim();
-        if (!dispatcherQueue.TryEnqueue(() =>
-        {
-            try
-            {
-                result = InvokeSafely(callback);
-            }
-            finally
-            {
-                completion.Set();
-            }
-        }))
-        {
-            Program.WriteDiagnosticTrace("Property request could not be queued on the WinUI DispatcherQueue.");
-            return default!;
-        }
-
-        completion.Wait();
-        return result!;
-    }
-
-    private static T InvokeSafely<T>(Func<T> callback)
-    {
-        try
-        {
-            return callback();
-        }
+        try { return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken); }
         catch (Exception ex)
         {
             Program.WriteDiagnosticTrace($"Property request failed: {ex}");
-            return default!;
+            int documentId = objectIdentity.TryGetObject(handle, out var target) && target is not null
+                ? objectIdentity.GetDocumentId(target) : 0;
+            protocolHandler.PostMessage(529, new UnhandledExceptionResponse
+            {
+                DocumentId = documentId, Handle = handle, Message = ex.Message,
+                CallStack = ex.ToString(), IsArtboardException = true,
+            });
+            return failure();
         }
     }
 

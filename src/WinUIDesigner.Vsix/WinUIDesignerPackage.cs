@@ -9,6 +9,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
+using WinUIDesigner.Vsix.Toolbox;
 
 namespace WinUIDesigner.Vsix;
 
@@ -20,21 +22,26 @@ namespace WinUIDesigner.Vsix;
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
 [Guid(PackageGuidString)]
 [ProvideXamlRuntimeDesigner("WinUI")]
+[ProvideStaticWinUIToolboxItems]
+[ProvideToolboxItemDiscovery("WinUI 3", "WinUIComponents", typeof(WinUIToolboxItemDiscovery), typeof(WinUIToolboxItemCreator), new[] { ".NETCoreApp" }, AppDomainCreatorType = typeof(WinUIToolboxAppDomainControl))]
 [ProvideAutoLoad(VSConstants.UICONTEXT.NoSolution_string, PackageAutoLoadFlags.BackgroundLoad)]
 [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
 [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasSingleProject_string, PackageAutoLoadFlags.BackgroundLoad)]
 [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasMultipleProjects_string, PackageAutoLoadFlags.BackgroundLoad)]
-public sealed class WinUIDesignerPackage : AsyncPackage
+public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 {
-#if DEBUG
+    private readonly WinUIStaticToolboxItemProvider toolboxItemProvider = new();
     private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
-#endif
 
     public const string PackageGuidString = "4b134b27-b9ee-4f30-a267-cf19aa49f896";
+
+    int IVsToolboxItemProvider.GetItemContent(string itemId, ushort format, out IntPtr global)
+        => toolboxItemProvider.GetItemContent(itemId, format, out global);
 
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {
         await base.InitializeAsync(cancellationToken, progress);
+        await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
         try
         {
             // Populate VS's existing WinUI configuration before a XAML document
@@ -43,11 +50,8 @@ public sealed class WinUIDesignerPackage : AsyncPackage
         }
         catch (Exception exception)
         {
-#if DEBUG
+            ActivityLog.LogError(nameof(WinUIDesignerPackage), exception.ToString());
             WriteDiagnosticTrace($"Package initialization failed: {exception}");
-#else
-            _ = exception;
-#endif
 
             throw;
         }
@@ -65,8 +69,6 @@ public sealed class WinUIDesignerPackage : AsyncPackage
         base.Dispose(disposing);
     }
 
-#if DEBUG
-    [Conditional("DEBUG")]
     private static void WriteDiagnosticTrace(string message)
     {
         Trace.WriteLine($"[WinUIDesigner] {message}");
@@ -96,5 +98,4 @@ public sealed class WinUIDesignerPackage : AsyncPackage
 
         return Path.Combine(basePath, "WinUIDesigner", "Logs", $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
     }
-#endif
 }

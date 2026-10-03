@@ -29,22 +29,23 @@ internal sealed class HitTestService : IDisposable
         // Visual Studio's HitTestRequest uses System.Windows.Point/Rect even for the
         // platform-neutral wire protocol. Keep the WinUI surface independent of WPF
         // by deserializing the same DataContract JSON shape into local DTOs.
-        registrationId = protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>(526, HandleHit);
+        registrationId = protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>(526, request =>
+        {
+            try { return HandleHit(request); }
+            catch (Exception ex)
+            {
+                Program.WriteDiagnosticTrace($"HitTest (526) failed for root {request.RootHandle}: {ex}");
+                protocolHandler.PostMessage(529, new UnhandledExceptionResponse { Handle = request.RootHandle, Message = ex.Message, CallStack = ex.ToString() });
+                return Empty;
+            }
+        });
     }
 
     private HitResponse HandleHit(HitTestRequestContract request)
     {
         if (!dispatcherQueue.HasThreadAccess)
         {
-            HitResponse? response = null;
-            using var completion = new System.Threading.ManualResetEventSlim();
-            if (!dispatcherQueue.TryEnqueue(() => { response = HandleHit(request); completion.Set(); }))
-            {
-                return Empty;
-            }
-
-            completion.Wait();
-            return response ?? Empty;
+            return DispatcherOperation.Invoke(dispatcherQueue, () => HandleHit(request), protocolHandler.CancellationToken);
         }
 
         if (!objectIdentity.TryGetObject(request.RootHandle, out object? rootObject) || rootObject is not UIElement root)
@@ -105,6 +106,14 @@ internal sealed class HitTestService : IDisposable
     private static List<HitCandidate> HitTestPoint(UIElement root, Windows.Foundation.Point point)
     {
         var hits = new List<HitCandidate>();
+        if (root.XamlRoot is not null)
+        {
+            // Message 526 already uses the island/host coordinate space. RootHandle
+            // restricts the subtree; it does not make the point root-relative.
+            foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(point, root, includeAllElements: true))
+                hits.Add(new HitCandidate(element, IsVisibleInTree(element)));
+            return hits;
+        }
         AppendPointHits(root, root, point, ancestorsVisible: true, hits);
         return hits;
     }
@@ -137,6 +146,12 @@ internal sealed class HitTestService : IDisposable
     private static List<HitCandidate> HitTestRect(UIElement root, Windows.Foundation.Rect rect)
     {
         var hits = new List<HitCandidate>();
+        if (root.XamlRoot is not null)
+        {
+            foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(rect, root, includeAllElements: true))
+                hits.Add(new HitCandidate(element, IsVisibleInTree(element)));
+            return hits;
+        }
         AppendRectHits(root, root, rect, ancestorsVisible: true, hits);
         return hits;
     }
@@ -212,6 +227,13 @@ internal sealed class HitTestService : IDisposable
            left.X + left.Width >= right.X &&
            left.Y <= right.Y + right.Height &&
            left.Y + left.Height >= right.Y;
+
+    private static bool IsVisibleInTree(UIElement element)
+    {
+        for (UIElement? current = element; current is not null; current = VisualTreeHelper.GetParent(current) as UIElement)
+            if (current.Visibility != Visibility.Visible || !current.IsHitTestVisible) return false;
+        return true;
+    }
 
     private readonly record struct HitCandidate(UIElement Element, bool IsVisible);
 

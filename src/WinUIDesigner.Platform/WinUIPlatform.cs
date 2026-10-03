@@ -3,6 +3,7 @@
 
 using System;
 using System.Diagnostics;
+using System.ComponentModel;
 using System.IO;
 using Microsoft.VisualStudio.DesignTools.Extensibility.Metadata;
 using Microsoft.VisualStudio.DesignTools.Markup.Metadata;
@@ -29,9 +30,7 @@ namespace WinUIDesigner.Platform;
 // hosting and serialization where the two XAML runtimes differ.
 public sealed class WinUIPlatform : XamlPlatform
 {
-#if DEBUG
     private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
-#endif
     private UwpDisplaySettingsProvider? displaySettingsProvider;
     private PlatformPaneModel? platformPaneModel;
 
@@ -81,7 +80,16 @@ public sealed class WinUIPlatform : XamlPlatform
     public override AttributeTable[] GetAttributeMetadata()
     {
         WriteDiagnosticTrace("WinUIPlatform.GetAttributeMetadata reached.");
-        return Array.Empty<AttributeTable>();
+        var builder = new AttributeTableBuilder();
+        foreach (string property in new[] { "Width", "Height", "MinWidth", "MinHeight", "MaxWidth", "MaxHeight", "Margin", "HorizontalAlignment", "VerticalAlignment" })
+            builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", property, new CategoryAttribute("Layout"));
+        builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", "Width", new DefaultValueAttribute(double.NaN));
+        builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", "Height", new DefaultValueAttribute(double.NaN));
+        foreach (string property in new[] { "Parent", "TemplatedParent", "XamlRoot", "DispatcherQueue", "Dispatcher", "ActualWidth", "ActualHeight", "DesiredSize", "RenderSize" })
+            builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", property, BrowsableAttribute.No);
+        builder.AddCustomAttributes("Microsoft.UI.Xaml.Controls.Control", "FontSize", new CategoryAttribute("Text"));
+        builder.AddCustomAttributes("Microsoft.UI.Xaml.Controls.TextBlock", "Text", new CategoryAttribute("Text"));
+        return new[] { builder.CreateTable() };
     }
 
     public override IProjectContext CreateProjectContext()
@@ -104,7 +112,7 @@ public sealed class WinUIPlatform : XamlPlatform
     public override ISurfaceProcessMarkupProvider CreateSurfaceProcessMarkupProvider()
     {
         WriteDiagnosticTrace("WinUIPlatform.CreateSurfaceProcessMarkupProvider reached.");
-        return new UwpSurfaceProcessMarkupProvider();
+        return new WinUISurfaceProcessMarkupProvider();
     }
 
     public override IInstanceBuilderPlatform CreateSurfaceInstanceBuilderPlatform(IProjectContext projectContext)
@@ -160,10 +168,8 @@ public sealed class WinUIPlatform : XamlPlatform
         RegisterSurfaceIsolatedDocumentNodePropertyBuilders();
     }
 
-    [Conditional("DEBUG")]
     internal static void WriteDiagnosticTrace(string message)
     {
-#if DEBUG
         Trace.WriteLine($"[WinUIDesigner] {message}");
 
         try
@@ -179,10 +185,8 @@ public sealed class WinUIPlatform : XamlPlatform
         {
             // Diagnostic logging must not interrupt designer activation.
         }
-#endif
     }
 
-#if DEBUG
     private static string CreateDiagnosticTracePath()
     {
         string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -197,5 +201,4 @@ public sealed class WinUIPlatform : XamlPlatform
             "Logs",
             $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
     }
-#endif
 }

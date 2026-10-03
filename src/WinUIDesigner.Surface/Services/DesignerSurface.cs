@@ -30,7 +30,7 @@ internal sealed class DesignerSurface : IDisposable
     private static readonly IntPtr HwndBottom = new(1);
 
     private readonly Grid viewportRoot;
-    private readonly Grid transformRoot;
+    private readonly Canvas transformRoot;
     private readonly ManualResetEventSlim unfreezeCompositionCompleted = new(initialState: true);
     private FrameworkElement content;
     private ElementTheme appRequestedTheme;
@@ -44,6 +44,7 @@ internal sealed class DesignerSurface : IDisposable
     private bool boundsUpdatePending;
     private bool renderingSuspended;
     private bool disposed;
+    private double publishedDpi;
 
     public event EventHandler? BoundsInvalidated;
 
@@ -58,20 +59,28 @@ internal sealed class DesignerSurface : IDisposable
         // that transform to the XamlSource root also moves the viewport and breaks
         // clipping/input coordinates when the artboard is scrolled.
         viewportRoot = new Grid();
-        transformRoot = (Grid)XamlReader.Load(
-            "<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
+        // Canvas arranges the document at its origin even when d:DesignWidth is
+        // smaller than the chosen device. A Grid centers a Stretch child whose
+        // explicit width is smaller, disagreeing with the frontend's root origin.
+        transformRoot = (Canvas)XamlReader.Load(
+            "<Canvas xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
             "Background=\"{ThemeResource ApplicationPageBackgroundThemeBrush}\" />");
         transformRoot.HorizontalAlignment = HorizontalAlignment.Left;
         transformRoot.VerticalAlignment = VerticalAlignment.Top;
         transformRoot.Children.Add(content);
         viewportRoot.Children.Add(transformRoot);
         viewportRoot.LayoutUpdated += OnLayoutUpdated;
+        if (!XSurfUwp.DT.IsSizePropertyShadowed(content, FrameworkElement.WidthProperty) && double.IsFinite(content.Width))
+            XSurfUwp.DT.SetRuntimeWidth(content, content.Width);
+        if (!XSurfUwp.DT.IsSizePropertyShadowed(content, FrameworkElement.HeightProperty) && double.IsFinite(content.Height))
+            XSurfUwp.DT.SetRuntimeHeight(content, content.Height);
         SetDeviceSize(width, height);
     }
 
     public FrameworkElement Content => content;
 
     public bool IsFrozen { get; private set; }
+    public event Action<double>? DpiChanged;
 
     public void Freeze()
     {
@@ -166,8 +175,8 @@ internal sealed class DesignerSurface : IDisposable
         deviceHeight = height;
         transformRoot.Width = width;
         transformRoot.Height = height;
-        content.Width = width;
-        content.Height = height;
+        XSurfUwp.DT.SetRootWidth(content, width);
+        XSurfUwp.DT.SetRootHeight(content, height);
         transformRoot.Measure(new Size(width, height));
         transformRoot.Arrange(new Rect(0, 0, width, height));
         transformRoot.UpdateLayout();
@@ -185,6 +194,10 @@ internal sealed class DesignerSurface : IDisposable
         transformRoot.Children.Remove(content);
         content = newContent;
         transformRoot.Children.Insert(0, newContent);
+        if (!XSurfUwp.DT.IsSizePropertyShadowed(content, FrameworkElement.WidthProperty) && double.IsFinite(content.Width))
+            XSurfUwp.DT.SetRuntimeWidth(content, content.Width);
+        if (!XSurfUwp.DT.IsSizePropertyShadowed(content, FrameworkElement.HeightProperty) && double.IsFinite(content.Height))
+            XSurfUwp.DT.SetRuntimeHeight(content, content.Height);
         SetDeviceSize(deviceWidth > 0 ? deviceWidth : 800, deviceHeight > 0 ? deviceHeight : 600);
         Program.WriteDiagnosticTrace($"DesignerSurface content replaced with {newContent.GetType().FullName}.");
     }
@@ -367,7 +380,23 @@ internal sealed class DesignerSurface : IDisposable
         xamlSource = new DesktopWindowXamlSource();
         xamlSource.Initialize(Win32Interop.GetWindowIdFromWindow(hostWindow));
         xamlSource.Content = viewportRoot;
+        if (viewportRoot.XamlRoot is { } root)
+        {
+            root.Changed += OnXamlRootChanged;
+            PublishDpi(root);
+        }
         Program.WriteDiagnosticTrace($"DesktopWindowXamlSource initialized on surface HWND 0x{hostWindow.ToInt64():X}.");
+    }
+
+    private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
+        => PublishDpi(sender);
+
+    private void PublishDpi(XamlRoot root)
+    {
+        double dpi = root.RasterizationScale * 96;
+        if (publishedDpi == dpi) return;
+        publishedDpi = dpi;
+        DpiChanged?.Invoke(dpi);
     }
 
     public void Dispose()
@@ -385,6 +414,7 @@ internal sealed class DesignerSurface : IDisposable
         }
         IsFrozen = false;
         viewportRoot.LayoutUpdated -= OnLayoutUpdated;
+        if (viewportRoot.XamlRoot is { } root) root.Changed -= OnXamlRootChanged;
         if (compositionRenderingHandler is not null)
         {
             CompositionTarget.Rendering -= compositionRenderingHandler;

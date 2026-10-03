@@ -20,7 +20,9 @@ internal sealed class XamlActionService : IDisposable
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ObjectIdentityRegistry objectIdentity;
     private readonly SurfaceService surfaceService;
+    private readonly ResourceScopeService resourceScopes;
     private readonly Dictionary<long, object?> actionObjects = new();
+    private readonly Dictionary<long, object?> trackedActionObjects = new();
     private readonly int registrationId;
 
     public XamlActionService(
@@ -33,6 +35,7 @@ internal sealed class XamlActionService : IDisposable
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
         this.surfaceService = surfaceService;
+        resourceScopes = new ResourceScopeService(objectIdentity);
         registrationId = protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, ResponseWithError>(507, HandleExecuteActions);
     }
 
@@ -43,9 +46,19 @@ internal sealed class XamlActionService : IDisposable
             return InvokeOnDispatcher(() => HandleExecuteActions(request));
         }
 
+        XamlAction? failedAction = null;
         try
         {
             IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
+            int documentId = 0;
+            foreach (XamlAction action in actions)
+            {
+                if (action is SetDispatcherAction dispatcher && objectIdentity.TryGetObject(dispatcher.DispatcherObjectHandle, out object? target) && target is not null)
+                    documentId = objectIdentity.GetDocumentId(target);
+                if (action is SetSurfaceContentAction content) documentId = content.DocumentId;
+                if (documentId != 0) break;
+            }
+            using var documentScope = objectIdentity.EnterDocument(documentId);
             // Keep the wire order: later actions can refer to objects or names created
             // by earlier actions in this same transaction.
             for (int index = 0; index < actions.Count; index++)
@@ -55,7 +68,9 @@ internal sealed class XamlActionService : IDisposable
                     Program.WriteDiagnosticTrace($"ExecuteXamlActions (507) action[{index}]: {serializedActions[index]}");
                 }
 
-                Execute(actions[index]);
+                failedAction = actions[index];
+                Execute(failedAction);
+                TrackActionObjects();
             }
 
             surfaceService.CompleteActionBatch();
@@ -65,7 +80,12 @@ internal sealed class XamlActionService : IDisposable
         catch (Exception ex)
         {
             Program.WriteDiagnosticTrace($"ExecuteXamlActions (507) failed: {ex}");
-            return Failure(ex);
+            // Synchronize the surviving changes, then report the exact failed
+            // action using the shared error contract. Raw exception text is not
+            // valid ActionError JSON and prevents frontend error processing.
+            try { surfaceService.CompleteActionBatch(); }
+            catch (Exception layoutError) { Program.WriteDiagnosticTrace($"Layout after failed action: {layoutError}"); }
+            return Failure(ex, failedAction);
         }
     }
 
@@ -73,25 +93,7 @@ internal sealed class XamlActionService : IDisposable
     {
         if (!dispatcherQueue.HasThreadAccess)
         {
-            LiveValue? value = null;
-            using var completion = new System.Threading.ManualResetEventSlim();
-            if (!dispatcherQueue.TryEnqueue(() =>
-            {
-                try
-                {
-                    value = ExecuteLookupActions(request, serializer);
-                }
-                finally
-                {
-                    completion.Set();
-                }
-            }))
-            {
-                return new LiveValue();
-            }
-
-            completion.Wait();
-            return value ?? new LiveValue();
+            return DispatcherOperation.Invoke(dispatcherQueue, () => ExecuteLookupActions(request, serializer), protocolHandler.CancellationToken);
         }
 
         object? captured = null;
@@ -102,6 +104,44 @@ internal sealed class XamlActionService : IDisposable
         }
 
         return serializer.Serialize(captured);
+    }
+
+    public object BuildDocument(CreateDocumentInfo document)
+    {
+        using var scope = objectIdentity.EnterDocument(document.DocumentId);
+        object? root = null;
+        foreach (XamlAction action in XamlActionJsonSerializer.Deserialize(document.Actions ?? []))
+        {
+            try
+            {
+            Execute(action, (id, value) =>
+            {
+                if (id != document.DocumentId) throw new InvalidOperationException("The construction action targets another document.");
+                root = value;
+            });
+            TrackActionObjects();
+            }
+            catch (Exception ex) { throw new DocumentConstructionException(ex, action); }
+        }
+        return root ?? throw new InvalidOperationException($"No root was constructed for document {document.DocumentId}.");
+    }
+
+    private void TrackActionObjects()
+    {
+        foreach (var entry in actionObjects)
+        {
+            if (entry.Value is not null && (!trackedActionObjects.TryGetValue(entry.Key, out var oldValue) || !ReferenceEquals(oldValue, entry.Value)))
+                objectIdentity.Track(entry.Value);
+            trackedActionObjects[entry.Key] = entry.Value;
+        }
+    }
+
+    public void ReleaseDocument(int documentId)
+    {
+        var released = objectIdentity.ReleaseDocument(documentId);
+        resourceScopes.RemoveObjects(released);
+        foreach (long key in new List<long>(actionObjects.Keys))
+            if (actionObjects[key] is object value && released.Contains(value)) { actionObjects.Remove(key); trackedActionObjects.Remove(key); }
     }
 
     private void Execute(XamlAction action, Action<int, object?>? setSurfaceContentOverride = null)
@@ -268,11 +308,14 @@ internal sealed class XamlActionService : IDisposable
                     ResolveObject);
                 break;
 
-            case UpdateResourceMutationsAction:
-            case SetResourcesSearchParentAction:
-            case SetThemeResourcesEditingScopeAction:
-                // These actions describe lookup scope and mutation attribution. The WinUI
-                // ResourceDictionary itself is already mutated by the actions above.
+            case UpdateResourceMutationsAction resources:
+                resourceScopes.UpdateResources(RequireObject(resources.Handle));
+                break;
+            case SetResourcesSearchParentAction parent:
+                resourceScopes.SetParent(RequireObject(parent.ChildHandle), parent.ParentHandle == 0 ? null : RequireObject(parent.ParentHandle));
+                break;
+            case SetThemeResourcesEditingScopeAction theme:
+                resourceScopes.SetThemeScope(theme.Assembly, theme.RelativePath);
                 break;
 
             case DisableXBindAction disableXBind:
@@ -300,7 +343,13 @@ internal sealed class XamlActionService : IDisposable
         }
 
         object? instance;
-        if (!string.IsNullOrWhiteSpace(action.FactoryMethod))
+        if (typeof(Application).IsAssignableFrom(runtimeType))
+        {
+            // The process already owns its one WinUI Application. Resource actions
+            // target this instance without running the user's application startup.
+            instance = Application.Current;
+        }
+        else if (!string.IsNullOrWhiteSpace(action.FactoryMethod))
         {
             instance = XamlRuntimeUtilities.InvokeFactory(
                 runtimeType,
@@ -337,8 +386,7 @@ internal sealed class XamlActionService : IDisposable
 
     private void ExecuteXamlParseInstance(XamlParseInstanceAction action)
     {
-        object instance = XamlRuntimeUtilities.ParseXaml(action.Xaml)
-            ?? throw new InvalidOperationException("WinUI XamlReader returned null.");
+        object instance = resourceScopes.Parse(action.OwnerHandle == 0 ? null : RequireObject(action.OwnerHandle), action.Xaml);
         actionObjects[action.LiveHandle] = instance;
         objectIdentity.GetHandle(instance);
         if (action.MarkupHandle != 0)
@@ -351,11 +399,13 @@ internal sealed class XamlActionService : IDisposable
     {
         if (actionObjects.TryGetValue(handle, out object? value))
         {
+            if (value is not null) objectIdentity.Track(value);
             return value;
         }
 
         if (objectIdentity.TryGetObject(handle, out value))
         {
+            if (value is not null) objectIdentity.Track(value);
             return value;
         }
 
@@ -367,35 +417,26 @@ internal sealed class XamlActionService : IDisposable
 
     private ResponseWithError InvokeOnDispatcher(Func<ResponseWithError> callback)
     {
-        ResponseWithError? response = null;
-        using var completion = new System.Threading.ManualResetEventSlim();
-        if (!dispatcherQueue.TryEnqueue(() =>
-        {
-            try
-            {
-                response = callback();
-            }
-            finally
-            {
-                completion.Set();
-            }
-        }))
-        {
-            return Failure(new InvalidOperationException("Failed to enqueue XAML actions on the WinUI DispatcherQueue."));
-        }
-
-        completion.Wait();
-        return response ?? Failure(new InvalidOperationException("XAML action execution did not return a response."));
+        try { return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken); }
+        catch (Exception ex) { return Failure(ex); }
     }
 
     private static ResponseWithError Success => new() { HResult = 0 };
 
-    private static ResponseWithError Failure(Exception exception)
+    private static ResponseWithError Failure(Exception exception, XamlAction? action = null)
         => new()
         {
             HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
-            Error = exception.ToString(),
+            Error = action is null ? exception.ToString() : ActionErrorJsonSerializer.Serialize(new List<ActionError>
+            {
+                new() { XamlAction = action, Error = exception.ToString() },
+            }),
         };
 
-    public void Dispose() => protocolHandler.UnregisterMessageObserver(registrationId);
+    public void Dispose()
+    {
+        actionObjects.Clear();
+        trackedActionObjects.Clear();
+        protocolHandler.UnregisterMessageObserver(registrationId);
+    }
 }

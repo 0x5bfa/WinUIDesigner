@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
@@ -15,10 +16,64 @@ internal sealed class ObjectIdentityRegistry
     private readonly Dictionary<long, object> handleToObject = new();
     private readonly Dictionary<object, SourceInfo> sourceInfo = new(ReferenceEqualityComparer.Instance);
     private long nextHandle = 1;
+    private int currentDocument;
+    private readonly Dictionary<int, HashSet<object>> documents = new();
+    private readonly Dictionary<object, HashSet<int>> owners = new(ReferenceEqualityComparer.Instance);
+
+    public IDisposable EnterDocument(int documentId)
+    {
+        int previous = currentDocument;
+        currentDocument = documentId;
+        return new DocumentScope(() => currentDocument = previous);
+    }
+
+    public int GetDocumentId(object value)
+        => owners.TryGetValue(value, out var ids) ? ids.FirstOrDefault() : 0;
+
+    public void Track(object value)
+    {
+        if (currentDocument == 0) return;
+        if (!documents.TryGetValue(currentDocument, out var objects))
+            documents[currentDocument] = objects = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        objects.Add(value);
+        if (!owners.TryGetValue(value, out var ids))
+            owners[value] = ids = new HashSet<int>();
+        ids.Add(currentDocument);
+    }
+
+    public HashSet<object> ReleaseDocument(int documentId)
+    {
+        var released = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        if (!documents.Remove(documentId, out var objects)) return released;
+        foreach (object value in objects)
+        {
+            if (!owners.TryGetValue(value, out var ids)) continue;
+            ids.Remove(documentId);
+            if (ids.Count != 0) continue;
+            owners.Remove(value);
+            RemoveObject(value);
+            released.Add(value);
+        }
+        return released;
+    }
+
+    public void Clear()
+    {
+        objectToHandle.Clear(); handleToObject.Clear(); sourceInfo.Clear();
+        documents.Clear(); owners.Clear(); currentDocument = 0;
+        // Never reuse a handle that the frontend may still have cached.
+    }
+
+    private sealed class DocumentScope(Action restore) : IDisposable
+    {
+        private Action? restoreAction = restore;
+        public void Dispose() { var action = restoreAction; restoreAction = null; action?.Invoke(); }
+    }
 
     public long GetHandle(object value)
     {
         ArgumentNullException.ThrowIfNull(value);
+        Track(value);
 
         if (objectToHandle.TryGetValue(value, out long handle))
         {
@@ -39,6 +94,7 @@ internal sealed class ObjectIdentityRegistry
     public void RegisterHandle(long handle, object value)
     {
         ArgumentNullException.ThrowIfNull(value);
+        Track(value);
         if (handle == 0)
         {
             throw new ArgumentOutOfRangeException(nameof(handle));
@@ -46,8 +102,7 @@ internal sealed class ObjectIdentityRegistry
 
         if (handleToObject.TryGetValue(handle, out object? oldValue) && !ReferenceEquals(oldValue, value))
         {
-            objectToHandle.Remove(oldValue);
-            sourceInfo.Remove(oldValue);
+            RemoveObject(oldValue);
         }
 
         if (objectToHandle.TryGetValue(value, out long oldHandle) && oldHandle != handle)
@@ -68,11 +123,13 @@ internal sealed class ObjectIdentityRegistry
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(info);
         sourceInfo[value] = CloneSourceInfo(info);
+        Track(value);
     }
 
     public void RegisterMarkupInfo(object value, long markupHandle, int changeVersion)
     {
         ArgumentNullException.ThrowIfNull(value);
+        Track(value);
         sourceInfo[value] = new SourceInfo
         {
             MarkupHandle = markupHandle,
@@ -91,11 +148,7 @@ internal sealed class ObjectIdentityRegistry
 
     public void RemoveHandle(long handle)
     {
-        if (handleToObject.Remove(handle, out object? value))
-        {
-            objectToHandle.Remove(value);
-            sourceInfo.Remove(value);
-        }
+        if (handleToObject.TryGetValue(handle, out object? value)) RemoveObject(value);
     }
 
     public void RemoveObject(object value)
@@ -106,6 +159,9 @@ internal sealed class ObjectIdentityRegistry
         }
 
         sourceInfo.Remove(value);
+        if (owners.Remove(value, out var ids))
+            foreach (int id in ids)
+                if (documents.TryGetValue(id, out var objects)) objects.Remove(value);
     }
 
     private static SourceInfo CloneSourceInfo(SourceInfo info)

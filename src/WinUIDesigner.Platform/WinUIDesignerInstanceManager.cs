@@ -13,6 +13,7 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Pipeline;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
+using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents;
 
 namespace WinUIDesigner.Platform;
 
@@ -48,7 +49,6 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
         ISurfaceProcessDocument targetDocument,
         IReadOnlyList<ISurfaceProcessDocument> preparedDocuments)
     {
-        _ = preparedDocuments;
 
         try
         {
@@ -68,12 +68,14 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
             ResponseWithError response = await protocolHandler.SendMessageAsync<ResponseWithError>(
                 ConfigureAppResourcesMessage,
                 new AppResourcesRequest { HasXamlControlsResources = hasXamlControlsResources, RequestedTheme = requestedTheme }).ConfigureAwait(false);
+            if (response.HResult < 0) throw new InvalidOperationException(response.Error);
             WinUIPlatform.WriteDiagnosticTrace(
                 $"App.xaml resources configured: XamlControlsResources={hasXamlControlsResources}, RequestedTheme={requestedTheme ?? "Default"}, result=0x{response.HResult:X8}.");
         }
         catch (Exception ex)
         {
             WinUIPlatform.WriteDiagnosticTrace($"App.xaml resource configuration failed: {ex}");
+            throw;
         }
 
         bool includeInstanceBuildingActions = SurfaceProcessContext.ResetParseLoadDocumentFailure(targetDocument.DocumentId);
@@ -83,6 +85,17 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
         {
             Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions),
         };
+
+        if (MarkupProvider is WinUISurfaceProcessMarkupProvider provider)
+        {
+            string? appDirectory = Path.GetDirectoryName(targetDocument.Document.DocumentContext?.Project?.ProjectPath);
+            if (provider.AppXaml is null && appDirectory is not null && File.Exists(Path.Combine(appDirectory, "App.xaml")))
+                provider.PrepareApplicationDocumentsForLoading(ignoreAppXbf: true);
+            if (provider.AppXaml is { } application)
+                request.Application = MakeCreateDocumentInfo(application, includeInstanceBuildingActions);
+            if (provider.DesignTimeResources is { } resources)
+                request.DesignTimeResources = MakeCreateDocumentInfo(resources, includeInstanceBuildingActions);
+        }
 
         return request;
     }

@@ -6,4 +6,8 @@
     <Project Path="src/WinUIDesigner.Surface/WinUIDesigner.Surface.csproj" />
     <Project Path="src/WinUIDesigner.Vsix/WinUIDesigner.Vsix.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WinUIDesigner.Tests/WinUIDesigner.Tests.csproj" />
+    <Project Path="tests/WinUIDesigner.Toolbox.Tests/WinUIDesigner.Toolbox.Tests.csproj" />
+  </Folder>
 </Solution>

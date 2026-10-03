@@ -3,6 +3,7 @@
 
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -18,9 +19,7 @@ namespace WinUIDesigner.Vsix;
 
 internal static class WinUIPlatformRegistration
 {
-#if DEBUG
     private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
-#endif
 
     // Visual Studio ships a desktop WinUI configuration but no creator wired to this vsix.
     // Match its stable prefix while allowing SDK/target-version suffixes.
@@ -30,9 +29,21 @@ internal static class WinUIPlatformRegistration
     private static readonly ConditionalWeakTable<PlatformService, WinUIPlatformCreator> PlatformCreators = new();
 
     private static Hook? getPlatformCreatorHook;
+    private static PlatformConfiguration? modifiedConfiguration;
+    private static readonly Dictionary<string, string?> OriginalBindings = new();
 
     public static void Apply()
     {
+        if (getPlatformCreatorHook is not null) return;
+        string version = FileVersionInfo.GetVersionInfo(typeof(PlatformService).Assembly.Location).FileVersion ?? string.Empty;
+        if (!version.StartsWith("18.9.", StringComparison.Ordinal) || IntPtr.Size != 8)
+            throw new NotSupportedException($"WinUI Designer requires the verified Visual Studio 18.9 x64 contracts. Found {version}.");
+        // Validate all private entry points before changing process-wide registration.
+        _ = typeof(Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views.UwpSceneView).GetField("imageHost", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException("UwpSceneView.imageHost");
+        MethodInfo method = typeof(PlatformService).GetMethod(
+            nameof(PlatformService.GetPlatformCreator), BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(PlatformIdentifier) }, null)
+            ?? throw new MissingMethodException(typeof(PlatformService).FullName, nameof(PlatformService.GetPlatformCreator));
         // Use the frontend's existing WinUI configuration. Adding another one can
         // make otherwise identical project contexts resolve to competing creators.
         PlatformConfiguration configuration = PlatformConfigurationService
@@ -40,27 +51,41 @@ internal static class WinUIPlatformRegistration
             .SingleOrDefault(candidate => candidate.Specification.StartsWith(DesktopWinUISpecificationPrefix, StringComparison.Ordinal))
             ?? throw new InvalidOperationException("Visual Studio's desktop WinUI PlatformConfiguration was not found.");
 
+        foreach (string key in new[] { "PlatformCreatorAssembly", "PlatformCreatorType", "HostPlatformAssembly", "HostPlatformType", "ToolboxPage" })
+            OriginalBindings[key] = configuration.Properties.TryGetValue(key, out string? value) ? value : null;
+        modifiedConfiguration = configuration;
+        try
+        {
         configuration.Properties["PlatformCreatorAssembly"] = typeof(WinUIPlatformCreator).Assembly.FullName;
         configuration.Properties["PlatformCreatorType"] = typeof(WinUIPlatformCreator).FullName;
         configuration.Properties["HostPlatformAssembly"] = typeof(WinUIHostPlatform).Assembly.Location;
         configuration.Properties["HostPlatformType"] = typeof(WinUIHostPlatform).FullName;
+        configuration.Properties["ToolboxPage"] = typeof(Toolbox.WinUIToolboxItemDiscovery).GUID.ToString("B");
 
         WriteDiagnosticTrace($"Injected WinUI designer bindings into '{configuration.Specification}'.");
 
         // PlatformService does not consult the configured creator for this runtime
         // in the current VS build. Detour its exact overload as a narrow fallback.
-        MethodInfo method = typeof(PlatformService).GetMethod(
-            nameof(PlatformService.GetPlatformCreator), BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(PlatformIdentifier) }, null)
-            ?? throw new MissingMethodException(typeof(PlatformService).FullName, nameof(PlatformService.GetPlatformCreator));
-
         getPlatformCreatorHook ??= new Hook(method, GetPlatformCreatorHook);
         WriteDiagnosticTrace("Installed PlatformService.GetPlatformCreator fallback hook.");
+        }
+        catch { Dispose(); throw; }
     }
 
     public static void Dispose()
     {
         getPlatformCreatorHook?.Dispose();
         getPlatformCreatorHook = null;
+        if (modifiedConfiguration is not null)
+        {
+            foreach (var entry in OriginalBindings)
+            {
+                if (entry.Value is null) modifiedConfiguration.Properties.Remove(entry.Key);
+                else modifiedConfiguration.Properties[entry.Key] = entry.Value;
+            }
+        }
+        OriginalBindings.Clear();
+        modifiedConfiguration = null;
     }
 
     private delegate IPlatformCreator? GetPlatformCreatorDelegate(PlatformService instance, PlatformIdentifier platformIdentifier);
@@ -82,10 +107,8 @@ internal static class WinUIPlatformRegistration
         return winUICreator;
     }
 
-    [Conditional("DEBUG")]
     private static void WriteDiagnosticTrace(string message)
     {
-#if DEBUG
         Trace.WriteLine($"[WinUIDesigner] {message}");
 
         try
@@ -101,10 +124,8 @@ internal static class WinUIPlatformRegistration
         {
             // Diagnostic logging must not interrupt designer activation.
         }
-#endif
     }
 
-#if DEBUG
     private static string CreateDiagnosticTracePath()
     {
         string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -115,5 +136,4 @@ internal static class WinUIPlatformRegistration
 
         return Path.Combine(basePath, "WinUIDesigner", "Logs", $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
     }
-#endif
 }

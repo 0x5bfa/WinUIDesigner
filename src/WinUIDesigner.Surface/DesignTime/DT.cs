@@ -2,6 +2,7 @@
 // Licensed under MIT License.
 
 using Microsoft.UI.Xaml;
+using System.Runtime.CompilerServices;
 
 namespace XSurfUwp;
 
@@ -9,6 +10,26 @@ namespace XSurfUwp;
 // receives only the currently selected value used to lay out the preview.
 public static class DT
 {
+    private static readonly ConditionalWeakTable<FrameworkElement, Style> SuppressedStyles = new();
+    public static readonly DependencyProperty ShouldDisableImplicitStyleProperty = DependencyProperty.RegisterAttached(
+        "ShouldDisableImplicitStyle", typeof(bool), typeof(DT), new PropertyMetadata(false, (owner, args) =>
+        {
+            if (owner is not FrameworkElement element) return;
+            if ((bool)args.NewValue)
+            {
+                if (!ReferenceEquals(element.ReadLocalValue(FrameworkElement.StyleProperty), DependencyProperty.UnsetValue)) return;
+                var style = new Style { TargetType = element.GetType() };
+                SuppressedStyles.Remove(element); SuppressedStyles.Add(element, style);
+                element.Style = style;
+            }
+            else if (SuppressedStyles.TryGetValue(element, out Style? style))
+            {
+                if (ReferenceEquals(element.Style, style)) element.ClearValue(FrameworkElement.StyleProperty);
+                SuppressedStyles.Remove(element);
+            }
+        }));
+    public static void SetShouldDisableImplicitStyle(DependencyObject owner, bool value) => owner.SetValue(ShouldDisableImplicitStyleProperty, value);
+    public static bool GetShouldDisableImplicitStyle(DependencyObject owner) => (bool)owner.GetValue(ShouldDisableImplicitStyleProperty);
     public static readonly DependencyProperty RootWidthProperty = DependencyProperty.RegisterAttached(
         "RootWidth",
         typeof(double),
@@ -157,7 +178,8 @@ public static class DT
 
         if (dependencyObject.GetValue(FrameworkElement.StyleProperty) is Style style)
         {
-            foreach (SetterBase setterBase in style.Setters)
+            for (Style? current = style; current is not null; current = current.BasedOn)
+            foreach (SetterBase setterBase in current.Setters)
             {
                 if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty))
                 {
@@ -179,7 +201,8 @@ public static class DT
 
         if (dependencyObject.GetValue(FrameworkElement.StyleProperty) is Style style)
         {
-            foreach (SetterBase setterBase in style.Setters)
+            for (Style? current = style; current is not null; current = current.BasedOn)
+            foreach (SetterBase setterBase in current.Setters)
             {
                 if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty))
                 {

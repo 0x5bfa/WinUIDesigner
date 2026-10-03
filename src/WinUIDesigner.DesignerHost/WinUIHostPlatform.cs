@@ -17,9 +17,7 @@ namespace WinUIDesigner.DesignerHost;
 // our own WinUI surface executable and payload staging policy.
 public sealed class WinUIHostPlatform : WpfHostPlatform
 {
-#if DEBUG
     private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
-#endif
 
     protected override IShadowCopyWorkerFactory ShadowCopyWorkerFactory { get; } = new WinUIShadowCopyWorkerFactory();
 
@@ -38,14 +36,24 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         bool inhibitStartupWatsons,
         CancellationToken cancelToken)
     {
+        cancelToken.ThrowIfCancellationRequested();
         using Process currentProcess = Process.GetCurrentProcess();
         string initializationData = dataBridge.Serialize(currentProcess.Id);
 
         WriteDiagnosticTrace($"Surface activation reached: '{path}'.");
         Process surfaceProcess = StartSurfaceProcess(path, tapPath, initializationData);
+        if (cancelToken.IsCancellationRequested)
+        {
+            try { surfaceProcess.Kill(); }
+            finally { surfaceProcess.Dispose(); }
+            cancelToken.ThrowIfCancellationRequested();
+        }
         WriteDiagnosticTrace($"WinUISurface.exe started (PID={surfaceProcess.Id}); pipe initialization data passed.");
         return new Win32SurfaceProcess(surfaceProcess, surfaceProcessId);
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetThreadDpiAwarenessContext();
 
     private static Process StartSurfaceProcess(string path, string tapPath, string initializationData)
     {
@@ -58,7 +66,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             currentProcess.Id,
             WpfHostPlatform.ShellEscape(tapPath),
             WpfHostPlatform.ShellEscape(initializationData),
-            0);
+            GetThreadDpiAwarenessContext().ToInt64());
 
         var process = new Process
         {
@@ -120,10 +128,8 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             : null;
     }
 
-    [Conditional("DEBUG")]
     private static void WriteDiagnosticTrace(string message)
     {
-#if DEBUG
         Trace.WriteLine($"[WinUIDesigner] {message}");
 
         try
@@ -139,10 +145,8 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         {
             // Diagnostic logging must not interrupt designer activation.
         }
-#endif
     }
 
-#if DEBUG
     private static string CreateDiagnosticTracePath()
     {
         string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -157,5 +161,4 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             "Logs",
             $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
     }
-#endif
 }

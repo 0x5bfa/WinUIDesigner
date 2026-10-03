@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/WinUIStandardToolboxItems.cs" Link="WinUIStandardToolboxItems.cs" />
+    <Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/WinUIStaticToolboxItemProvider.cs" Link="WinUIStaticToolboxItemProvider.cs" />
+    <Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ToolboxTrace.cs" Link="ToolboxTrace.cs" />
+    <PackageReference Include="Mono.Cecil" Version="0.11.6" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="Microsoft.VisualStudio.Shell.Framework">
+      <HintPath>$(VsInstallRoot)/Common7/IDE/PublicAssemblies/Microsoft.VisualStudio.Shell.Framework.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.Interop">
+      <HintPath>$(VsInstallRoot)/Common7/IDE/PublicAssemblies/Microsoft.VisualStudio.Interop.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.VisualStudio.DesignTools.Utility">
+      <HintPath>$(VsInstallRoot)/Common7/IDE/PrivateAssemblies/Microsoft.VisualStudio.DesignTools.Utility.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

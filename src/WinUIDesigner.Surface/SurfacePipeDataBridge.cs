@@ -19,7 +19,7 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
     private readonly SurfaceAnonymousPipe readPipe;
     private readonly SurfaceAnonymousPipe writePipe;
     private bool isFirstMessage = true;
-    private bool closed;
+    private volatile bool closed;
 
     public ManualResetEvent ReadyEvent { get; } = new(initialState: true);
 
@@ -47,6 +47,7 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
 
     public void Close()
     {
+        if (closed) return;
         closed = true;
         readPipe.Close();
         writePipe.Close();
@@ -54,22 +55,11 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
 
     public byte[] ReadMessage()
     {
-        // RuntimeHost messages are length-prefixed. Fill the prefix and then the
-        // declared payload because a pipe read may return only a partial chunk.
-        byte[] buffer = new byte[4];
-        FillBufferFromReadPipe(buffer, 0);
-        if (closed)
-        {
-            return null!;
-        }
-
-        int payloadLength = BitConverter.ToInt32(buffer, 0);
-        Array.Resize(ref buffer, 4 + payloadLength);
-        FillBufferFromReadPipe(buffer, 4);
-        if (closed)
-        {
-            return null!;
-        }
+        if (closed) return null!;
+        byte[]? buffer;
+        try { buffer = MessageFrameReader.Read(readPipe.Read); }
+        catch { Close(); throw; }
+        if (buffer is null) { Close(); return null!; }
 
         if (isFirstMessage)
         {
@@ -88,6 +78,7 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
 
     public bool VerifyConnected(CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
         return !closed;
     }
 
@@ -101,19 +92,6 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private void FillBufferFromReadPipe(byte[] buffer, int startingOffset)
-    {
-        for (int offset = startingOffset; offset < buffer.Length;)
-        {
-            int read = readPipe.Read(buffer, offset, buffer.Length - offset);
-            if (closed || read == 0)
-            {
-                return;
-            }
-
-            offset += read;
-        }
-    }
 }
 
 internal sealed class SurfaceAnonymousPipe : IDisposable
@@ -125,7 +103,7 @@ internal sealed class SurfaceAnonymousPipe : IDisposable
         Shutdown,
     }
 
-    private bool done;
+    private volatile bool done;
     private readonly AutoResetEvent readEvent = new(initialState: false);
     private readonly AutoResetEvent writeEvent = new(initialState: false);
     private readonly AnonymousPipeServerStream readPipe;
@@ -251,8 +229,15 @@ internal sealed class SurfaceAnonymousPipe : IDisposable
                     return false;
             }
         }
-        while (waitHandle.WaitOne());
+        while (!done && WaitForSignal(waitHandle));
 
         return false;
+    }
+
+    private static bool WaitForSignal(WaitHandle waitHandle)
+    {
+        // Recheck the pipe periodically: a terminated peer cannot signal its event.
+        _ = waitHandle.WaitOne(250);
+        return true;
     }
 }

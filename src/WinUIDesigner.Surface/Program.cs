@@ -7,6 +7,7 @@ using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -17,14 +18,13 @@ namespace WinUIDesigner.Surface;
 // Entry point for the out-of-process WinUI island launched by the VS designer host.
 internal static class Program
 {
-#if DEBUG
     private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
-#endif
 
     [STAThread]
     private static int Main(string[] args)
     {
         RegisterVisualStudioAssemblyResolver();
+        ProjectRuntimeResolver.Initialize(AppContext.BaseDirectory);
         WriteDiagnosticTrace($"Main entered with {args.Length} arguments.");
 
         if (args.Length != 4 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
@@ -39,6 +39,10 @@ internal static class Program
 
         try
         {
+            if (!long.TryParse(args[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out long dpiContext))
+                throw new ArgumentException("Invalid DPI awareness context.");
+            if (SetThreadDpiAwarenessContext((nint)(dpiContext == 0 ? -4 : dpiContext)) == 0)
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
             WinRT.ComWrappersSupport.InitializeComWrappers();
             WriteDiagnosticTrace("CsWinRT COM wrappers initialized; starting Microsoft.UI.Xaml.Application.");
 
@@ -65,6 +69,9 @@ internal static class Program
             WriteDiagnosticTrace("WinUISurface exiting.");
         }
     }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nint SetThreadDpiAwarenessContext(nint context);
 
     private static void RegisterVisualStudioAssemblyResolver()
     {
@@ -99,10 +106,8 @@ internal static class Program
         };
     }
 
-    [Conditional("DEBUG")]
     internal static void WriteDiagnosticTrace(string message)
     {
-#if DEBUG
         Trace.WriteLine($"[WinUIDesigner] {message}");
 
         try
@@ -118,10 +123,8 @@ internal static class Program
         {
             // Diagnostic logging must not terminate the surface.
         }
-#endif
     }
 
-#if DEBUG
     private static string CreateDiagnosticTracePath()
     {
         string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -136,5 +139,4 @@ internal static class Program
             "Logs",
             $"WinUIDesigner-{Environment.ProcessId}.log");
     }
-#endif
 }

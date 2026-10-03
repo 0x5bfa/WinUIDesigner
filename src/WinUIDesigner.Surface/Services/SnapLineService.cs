@@ -118,7 +118,13 @@ internal sealed class SnapLineService : IDisposable
             GeneralTransform transform = element.TransformToVisual(container);
             Point origin = transform.TransformPoint(new Point(0, 0));
             Point corner = transform.TransformPoint(new Point(element.ActualWidth, element.ActualHeight));
-            bounds = new Rect(Math.Min(origin.X, corner.X), Math.Min(origin.Y, corner.Y), Math.Abs(corner.X - origin.X), Math.Abs(corner.Y - origin.Y));
+            Point topRight = transform.TransformPoint(new Point(element.ActualWidth, 0));
+            Point bottomLeft = transform.TransformPoint(new Point(0, element.ActualHeight));
+            double left = Math.Min(Math.Min(origin.X, corner.X), Math.Min(topRight.X, bottomLeft.X));
+            double top = Math.Min(Math.Min(origin.Y, corner.Y), Math.Min(topRight.Y, bottomLeft.Y));
+            double right = Math.Max(Math.Max(origin.X, corner.X), Math.Max(topRight.X, bottomLeft.X));
+            double bottom = Math.Max(Math.Max(origin.Y, corner.Y), Math.Max(topRight.Y, bottomLeft.Y));
+            bounds = new Rect(left, top, right - left, bottom - top);
             return true;
         }
         catch
@@ -147,15 +153,13 @@ internal sealed class SnapLineService : IDisposable
 
     private T InvokeOnDispatcher<T>(Func<T> action, T fallback)
     {
-        T? result = default;
-        using var completion = new System.Threading.ManualResetEventSlim();
-        if (!dispatcherQueue.TryEnqueue(() => { result = action(); completion.Set(); }))
+        try { return DispatcherOperation.Invoke(dispatcherQueue, action, protocolHandler.CancellationToken); }
+        catch (Exception ex)
         {
+            Program.WriteDiagnosticTrace($"Snap request failed: {ex}");
+            protocolHandler.PostMessage(529, new UnhandledExceptionResponse { Message = ex.Message, CallStack = ex.ToString() });
             return fallback;
         }
-
-        completion.Wait();
-        return result ?? fallback;
     }
 
     public void Dispose()

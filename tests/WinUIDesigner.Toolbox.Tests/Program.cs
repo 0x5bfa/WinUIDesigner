@@ -1,0 +1,80 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Windows;
+using Microsoft.VisualStudio.DesignTools.Utility;
+using Mono.Cecil;
+using WinUIDesigner.Vsix.Toolbox;
+
+internal static class Program
+{
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        var provider = new WinUIStaticToolboxItemProvider();
+        ushort format = checked((ushort)DataFormats.GetDataFormat(WinUIStandardToolboxItems.ClipboardFormat).Id);
+        Check(provider.GetItemContent("Microsoft.UI.Xaml.Controls.Page, " + WinUIStandardToolboxItems.AssemblyIdentity,
+            format, out IntPtr invalid) < 0 && invalid == IntPtr.Zero, "non-catalog types must not allocate data");
+        Check(provider.GetItemContent(WinUIStandardToolboxItems.GetItemId("Microsoft.UI.Xaml.Controls.Button"),
+            1, out invalid) < 0 && invalid == IntPtr.Zero, "foreign clipboard formats must be rejected");
+        Check(provider.GetItemContent(null!, format, out invalid) < 0 && invalid == IntPtr.Zero, "null item IDs must be rejected");
+        Check(WinUIStandardToolboxItems.TypeNames.Distinct().Count() == WinUIStandardToolboxItems.TypeNames.Count,
+            "duplicate IDs must not create duplicate Toolbox entries");
+
+        foreach (string type in WinUIStandardToolboxItems.TypeNames)
+        {
+            Check(provider.GetItemContent(WinUIStandardToolboxItems.GetItemId(type), format, out IntPtr global) == 0,
+                "provider must supply " + type);
+            IntPtr address = GlobalLock(global);
+            try
+            {
+                IDictionary<string, object> decoded = ToolEncoder.Decode(address);
+                Check((string)decoded["CreationTypeName"] == WinUIStandardToolboxItems.GetItemId(type), "creation type must survive encoding");
+                var assembly = (AssemblyName)decoded["CreationAssemblyName"];
+                Check(assembly.FullName == WinUIStandardToolboxItems.AssemblyIdentity && string.IsNullOrEmpty(assembly.CodeBase),
+                    "standard items must resolve the project's projection rather than pin a local DLL path");
+                Check((string)decoded["CreationTypeSdkAppliesTo"] == "WinUI", "UWP projects must not accept WinUI-only items");
+                Check((string)decoded["TargetPlatform"] == "Windows, Version=10.0", "target platform must survive encoding");
+                Check((string)decoded["ToolTypeName"] == "[CreationTool]", "shared creation pipeline must recognize the tool");
+            }
+            finally
+            {
+                GlobalUnlock(global);
+                GlobalFree(global);
+            }
+        }
+
+        string projectionPath = args.Length > 0 ? args[0] : Path.GetFullPath(
+            "src/WinUIDesigner.Surface/bin/Release/net10.0-windows10.0.19041.0/Microsoft.WinUI.dll");
+        using (AssemblyDefinition projection = AssemblyDefinition.ReadAssembly(projectionPath))
+        {
+            Check(projection.Name.FullName == WinUIStandardToolboxItems.AssemblyIdentity, "catalog assembly identity must match the projection");
+            foreach (string typeName in WinUIStandardToolboxItems.TypeNames)
+            {
+                TypeDefinition type = projection.MainModule.GetType(typeName);
+                Check(type is not null && type.IsPublic && !type.IsAbstract && !type.HasGenericParameters,
+                    "catalog item must be a public concrete type: " + typeName);
+                Check(type!.Methods.Any(method => method.IsConstructor && method.IsPublic && !method.IsStatic && !method.HasParameters),
+                    "catalog item must have a public default constructor: " + typeName);
+                bool visual = false;
+                var visited = new HashSet<string>();
+                for (TypeDefinition? current = type; current is not null && visited.Add(current.FullName);)
+                {
+                    if (current.FullName == "Microsoft.UI.Xaml.FrameworkElement") { visual = true; break; }
+                    current = current.BaseType is null ? null : projection.MainModule.GetType(current.BaseType.FullName);
+                }
+                Check(visual, "catalog item must derive from FrameworkElement: " + typeName);
+            }
+        }
+        Console.WriteLine($"PASS: {WinUIStandardToolboxItems.TypeNames.Count} standard items, native data ownership, format rejection, WinUI filtering, and projection metadata.");
+        return 0;
+    }
+
+    private static void Check(bool valid, string message) { if (!valid) throw new Exception(message); }
+    [DllImport("kernel32.dll")] private static extern IntPtr GlobalLock(IntPtr handle);
+    [DllImport("kernel32.dll")] private static extern bool GlobalUnlock(IntPtr handle);
+    [DllImport("kernel32.dll")] private static extern IntPtr GlobalFree(IntPtr handle);
+}

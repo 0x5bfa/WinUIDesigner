@@ -133,25 +133,8 @@ internal sealed class AnimationService : IDisposable
 
     private ResponseWithError InvokeOnDispatcher(Func<ResponseWithError> callback)
     {
-        ResponseWithError? response = null;
-        using var completion = new System.Threading.ManualResetEventSlim();
-        if (!dispatcherQueue.TryEnqueue(() =>
-        {
-            try
-            {
-                response = callback();
-            }
-            finally
-            {
-                completion.Set();
-            }
-        }))
-        {
-            return Failure("Failed to enqueue animation work on the WinUI DispatcherQueue.");
-        }
-
-        completion.Wait();
-        return response ?? Failure("Animation request did not return a response.");
+        try { return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken); }
+        catch (Exception ex) { return new ResponseWithError { HResult = ex.HResult, Error = ex.ToString() }; }
     }
 
     private static ResponseWithError Success => new() { HResult = 0 };

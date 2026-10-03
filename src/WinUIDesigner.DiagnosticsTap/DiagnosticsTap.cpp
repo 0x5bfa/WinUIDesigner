@@ -376,13 +376,13 @@ extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_Init
     const ULONGLONG timeout = GetTickCount64() + 60'000;
     HRESULT initializeResult = endpointNotFound;
 
-    for (unsigned int connection = 1; connection <= 4 && GetTickCount64() < timeout; ++connection)
+    do
     {
+      for (unsigned int connection = 1; connection <= 4 && GetTickCount64() < timeout; ++connection)
+      {
         wchar_t endpoint[64]{};
         swprintf_s(endpoint, L"WinUIVisualDiagConnection%u", connection);
 
-        do
-        {
             initializeResult = initialize(
                 endpoint,
                 processId,
@@ -396,9 +396,9 @@ extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_Init
                 return initializeResult;
             }
 
-            Sleep(500);
-        } while (GetTickCount64() < timeout);
-    }
+      }
+      Sleep(500);
+    } while (GetTickCount64() < timeout);
 
     return initializeResult;
 }

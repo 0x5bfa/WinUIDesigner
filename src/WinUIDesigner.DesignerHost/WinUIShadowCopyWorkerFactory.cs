@@ -4,6 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using Microsoft.VisualStudio.DesignTools.DesignerContract;
 using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
@@ -25,6 +27,20 @@ internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
         {
             throw new NotSupportedException("WinUI Designer currently supports .NETCoreApp projects only.");
         }
+        if (!string.Equals(surfaceProcessInfo.PlatformIdentifier?.TargetRuntime, "Managed", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(surfaceProcessInfo.RuntimeArchitecture, "x64", StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException($"WinUI Designer requires a managed x64 project. Runtime={surfaceProcessInfo.PlatformIdentifier?.TargetRuntime}, architecture={surfaceProcessInfo.RuntimeArchitecture}.");
+        string payloadWinUI = Path.Combine(Path.GetDirectoryName(typeof(WinUIShadowCopyWorkerFactory).Assembly.Location)!, "Surface", "Microsoft.WinUI.dll");
+        string? projectWinUI = hostProject.References.Select(reference => reference.Path)
+            .FirstOrDefault(reference => string.Equals(Path.GetFileName(reference), "Microsoft.WinUI.dll", StringComparison.OrdinalIgnoreCase));
+        if (!File.Exists(payloadWinUI)) throw new FileNotFoundException("The designer WinUI runtime was not installed.", payloadWinUI);
+        if (projectWinUI is not null && File.Exists(projectWinUI))
+        {
+            string? expected = FileVersionInfo.GetVersionInfo(payloadWinUI).FileVersion;
+            string? actual = FileVersionInfo.GetVersionInfo(projectWinUI).FileVersion;
+            if (expected != actual)
+                throw new NotSupportedException($"The project WinUI runtime ({actual}) differs from the verified designer runtime ({expected}). Use Microsoft.WindowsAppSDK 2.5.1 for this designer build.");
+        }
 
         return new WinUICoreShadowCopyWorker(surfaceProcessInfo, hostProject, controlAssembliesForShadowCopy);
     }
@@ -33,6 +49,7 @@ internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
 internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
 {
     private const string SurfaceExecutableName = "WinUISurface.exe";
+    private readonly string[] projectAssemblies;
 
     public WinUICoreShadowCopyWorker(
         SurfaceProcessInfo surfaceInfo,
@@ -40,6 +57,9 @@ internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
         IEnumerable<string> controlAssembliesForShadowCopy)
         : base(surfaceInfo, hostProject, controlAssembliesForShadowCopy)
     {
+        projectAssemblies = hostProject.References.Select(reference => reference.Path)
+            .Concat(new[] { hostProject.TargetAssemblyPath }).Where(path => !string.IsNullOrEmpty(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     public override string CopySurfaceProcessPayload(CancellationToken cancelToken)
@@ -63,6 +83,21 @@ internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
             string relativePath = file.Substring(payloadDirectory.Length)
                 .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             SurfaceInfo.ShadowCacheContent.AddItem(file, relativePath, forceCopyNow: true);
+        }
+
+        // WPF's Core worker copies assemblies, but WinUI control libraries also
+        // carry compiled templates in a sibling PRI. Keep each library's index
+        // separate from the surface's primary resource index.
+        foreach (string assembly in projectAssemblies)
+        {
+            cancelToken.ThrowIfCancellationRequested();
+            string? directory = Path.GetDirectoryName(assembly);
+            if (!Directory.Exists(directory)) continue;
+            foreach (string pri in Directory.EnumerateFiles(directory, "*.pri"))
+            {
+                string target = Path.Combine("ProjectResources", Path.GetFileNameWithoutExtension(assembly), Path.GetFileName(pri));
+                SurfaceInfo.ShadowCacheContent.AddItem(pri, target, forceCopyNow: true);
+            }
         }
 
         string? cachedSurface = SurfaceInfo.ShadowCacheContent.FindCachedItem(SurfaceExecutableName);

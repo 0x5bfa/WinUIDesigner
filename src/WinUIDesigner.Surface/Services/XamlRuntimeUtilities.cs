@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
@@ -19,6 +20,11 @@ namespace WinUIDesigner.Surface.Services;
 // This maps protocol type names to WinUI without introducing WPF into the Surface.
 internal static class XamlRuntimeUtilities
 {
+    private static readonly ConditionalWeakTable<FrameworkElement, Dictionary<string, object?>> NameChanges = new();
+    private static readonly ConditionalWeakTable<FrameworkElement, object> NameScopeRoots = new();
+
+    public static void RegisterNameScope(FrameworkElement root)
+        => NameScopeRoots.GetValue(root, _ => new object());
     public static Type? ResolveType(string? serializedTypeName)
     {
         if (string.IsNullOrWhiteSpace(serializedTypeName))
@@ -45,7 +51,7 @@ internal static class XamlRuntimeUtilities
             }
         }
 
-        return null;
+        return ProjectRuntimeResolver.ResolveType(fullName);
     }
 
     public static object? ConvertString(string? serializedTypeName, string? value, bool isEnum = false)
@@ -166,25 +172,32 @@ internal static class XamlRuntimeUtilities
         Type? targetType = ResolveType(targetTypeName);
         string propertyName = GetPropertyName(fullPropertyName);
         Type? declaringType = GetDeclaringType(fullPropertyName) ?? targetType;
-        if (targetType is not null &&
-            typeof(DependencyObject).IsAssignableFrom(targetType) &&
-            !targetType.IsAbstract &&
-            targetType.GetConstructor(Type.EmptyTypes) is not null)
+        DependencyProperty? dependencyProperty = declaringType is null ? null : FindDependencyProperty(declaringType, propertyName);
+        if (dependencyProperty is not null)
         {
-            object? target = Activator.CreateInstance(targetType);
-            if (target is DependencyObject dependencyObject)
-            {
-                DependencyProperty? dependencyProperty = FindDependencyProperty(declaringType ?? targetType, propertyName)
-                    ?? FindDependencyProperty(targetType, propertyName);
-                if (dependencyProperty is not null)
-                {
-                    return dependencyObject.GetValue(dependencyProperty);
-                }
-            }
+            // VS also asks about properties of candidate parent/control types. The
+            // actual selected element need not derive from the property's owner.
+            Type metadataType = targetType is not null && declaringType!.IsAssignableFrom(targetType)
+                ? targetType : declaringType!;
+            return dependencyProperty.GetMetadata(metadataType).DefaultValue;
         }
 
         PropertyInfo? property = (declaringType ?? targetType)?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+        if (property?.GetCustomAttribute<DefaultValueAttribute>() is { } attribute) return attribute.Value;
         return property?.PropertyType.IsValueType == true ? Activator.CreateInstance(property.PropertyType) : null;
+    }
+
+    public static object? GetBaseValue(DependencyObject target, DependencyProperty property)
+    {
+        if (target is FrameworkElement element && element.GetBindingExpression(property) is { } expression)
+            return expression.ParentBinding;
+        object local = target.ReadLocalValue(property);
+        if (!ReferenceEquals(local, DependencyProperty.UnsetValue)) return local;
+        if (target is FrameworkElement styled)
+            for (Style? style = styled.Style; style is not null; style = style.BasedOn)
+                foreach (SetterBase setterBase in style.Setters)
+                    if (setterBase is Setter setter && ReferenceEquals(setter.Property, property)) return setter.Value;
+        return target.GetValue(property);
     }
 
     public static object? GetUnderlyingValue(object target, string fullPropertyName)
@@ -193,30 +206,14 @@ internal static class XamlRuntimeUtilities
         if (dependencyProperty is not null && target is DependencyObject dependencyObject)
         {
             if (XSurfUwp.DT.IsSizeShadowProperty(dependencyProperty))
-            {
                 return XSurfUwp.DT.GetUnderlyingSizeShadowValue(dependencyObject, dependencyProperty);
-            }
-
-            object localValue = dependencyObject.ReadLocalValue(dependencyProperty);
-            bool hadLocalValue = !ReferenceEquals(localValue, DependencyProperty.UnsetValue);
-            if (hadLocalValue)
-            {
-                dependencyObject.ClearValue(dependencyProperty);
-            }
-
-            try
-            {
-                return dependencyObject.GetValue(dependencyProperty);
-            }
-            finally
-            {
-                if (hadLocalValue)
-                {
-                    dependencyObject.SetValue(dependencyProperty, localValue);
-                }
-            }
+            if (target is FrameworkElement element)
+                for (Style? style = element.Style; style is not null; style = style.BasedOn)
+                    foreach (SetterBase setterBase in style.Setters)
+                        if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty)) return setter.Value;
+            // A value query must never clear and recreate a binding on the live object.
+            return GetDefaultValue(fullPropertyName, target.GetType().AssemblyQualifiedName);
         }
-
         return property?.CanRead == true ? property.GetValue(target) : null;
     }
 
@@ -332,6 +329,8 @@ internal static class XamlRuntimeUtilities
     {
         if (lookupContext is FrameworkElement frameworkElement)
         {
+            FrameworkElement owner = FindVisualRoot(frameworkElement);
+            if (NameChanges.TryGetValue(owner, out var changes) && changes.TryGetValue(elementName, out var changed)) return changed;
             object? named = frameworkElement.FindName(elementName);
             if (named is not null)
             {
@@ -352,26 +351,12 @@ internal static class XamlRuntimeUtilities
         }
 
         FrameworkElement scopeOwner = FindVisualRoot(element);
-        MethodInfo? unregisterName = scopeOwner.GetType().GetMethod("UnregisterName", BindingFlags.Public | BindingFlags.Instance, [typeof(string)]);
-        MethodInfo? registerName = scopeOwner.GetType().GetMethod("RegisterName", BindingFlags.Public | BindingFlags.Instance, [typeof(string), typeof(object)]);
-
-        if (!string.IsNullOrEmpty(oldName) && unregisterName is not null)
-        {
-            unregisterName.Invoke(scopeOwner, [oldName]);
-        }
-
-        if (!string.IsNullOrEmpty(newName))
-        {
-            element.Name = newName;
-            if (registerName is not null)
-            {
-                registerName.Invoke(scopeOwner, [newName, element]);
-            }
-        }
-        else
-        {
-            element.Name = string.Empty;
-        }
+        if (!string.IsNullOrEmpty(newName) && FindElement(scopeOwner, newName) is { } existing && !ReferenceEquals(existing, element))
+            throw new InvalidOperationException($"The name '{newName}' is already registered in this scope.");
+        var changes = NameChanges.GetOrCreateValue(scopeOwner);
+        if (!string.IsNullOrEmpty(oldName)) changes[oldName] = null;
+        element.Name = newName ?? string.Empty;
+        if (!string.IsNullOrEmpty(newName)) changes[newName] = element;
     }
 
     public static object? InvokeMethod(
@@ -413,11 +398,9 @@ internal static class XamlRuntimeUtilities
     {
         Type[] parameterTypes = ResolveParameterTypes(argumentTypeNames);
         object?[] arguments = ResolveArguments(argumentHandles, resolveObject);
-        ConstructorInfo? constructor = parameterTypes.Length == arguments.Length && parameterTypes.Length > 0
-            ? runtimeType.GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, parameterTypes, null)
-            : null;
-        constructor ??= runtimeType.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
-            .FirstOrDefault(candidate => candidate.GetParameters().Length == arguments.Length);
+        if (parameterTypes.Length != arguments.Length)
+            throw new ArgumentException("Constructor argument types and handles have different lengths.");
+        ConstructorInfo? constructor = RuntimeMemberResolver.FindConstructor(runtimeType, parameterTypes);
         if (constructor is null)
         {
             throw new MissingMethodException(runtimeType.FullName, ".ctor");
@@ -453,7 +436,7 @@ internal static class XamlRuntimeUtilities
 
     public static object? GetChild(object parent, int index)
     {
-        object? collection = GetChildCollection(parent);
+        object? collection = GetChildCollectionOrSelf(parent);
         if (collection is IList list && index >= 0 && index < list.Count)
         {
             return list[index];
@@ -476,16 +459,23 @@ internal static class XamlRuntimeUtilities
 
     public static void AddChild(object parent, int index, object? child)
     {
-        object? collection = GetChildCollection(parent);
+        object? collection = GetChildCollectionOrSelf(parent);
         if (collection is IList list)
         {
-            int insertionIndex = index < 0 || index > list.Count ? list.Count : index;
-            list.Insert(insertionIndex, child);
+            int listInsertionIndex = index < 0 || index > list.Count ? list.Count : index;
+            list.Insert(listInsertionIndex, child);
             return;
         }
 
-        if (TryInvokeCollectionMutation(collection, "Insert", index, child)
-            || TryInvokeCollectionMutation(collection, "InsertAt", index, child)
+        int insertionIndex = index;
+        if (TryGetCollectionCount(collection, out int count) && (insertionIndex < 0 || insertionIndex > count))
+        {
+            insertionIndex = count;
+        }
+
+        if (TryInvokeCollectionMutation(collection, "Insert", insertionIndex, child)
+            || TryInvokeCollectionMutation(collection, "InsertAt", insertionIndex, child)
+            || TryInvokeCollectionMutation(collection, "Add", child)
             || TryInvokeCollectionMutation(collection, "Append", child))
         {
             return;
@@ -504,7 +494,7 @@ internal static class XamlRuntimeUtilities
 
     public static void RemoveChild(object parent, int index)
     {
-        object? collection = GetChildCollection(parent);
+        object? collection = GetChildCollectionOrSelf(parent);
         if (collection is IList list && index >= 0 && index < list.Count)
         {
             list.RemoveAt(index);
@@ -677,6 +667,7 @@ internal static class XamlRuntimeUtilities
         FrameworkElement current = element;
         while (VisualTreeHelper.GetParent(current) is FrameworkElement parent)
         {
+            if (NameScopeRoots.TryGetValue(current, out _)) break;
             current = parent;
         }
         return current;
@@ -684,10 +675,19 @@ internal static class XamlRuntimeUtilities
 
     private static object? FindVisualDescendantByName(DependencyObject root, string elementName)
     {
-        int count = VisualTreeHelper.GetChildrenCount(root);
-        for (int index = 0; index < count; index++)
+        // Search authored content only. Template-generated visuals participate
+        // in their native FindName scope and must not shadow page names here.
+        var children = new List<DependencyObject>();
+        foreach (string propertyName in new[] { "Children", "Content", "Child" })
         {
-            DependencyObject child = VisualTreeHelper.GetChild(root, index);
+            object? value = root.GetType().GetProperty(propertyName)?.GetValue(root);
+            if (value is DependencyObject single) children.Add(single);
+            else if (value is IEnumerable collection)
+                children.AddRange(collection.OfType<DependencyObject>());
+        }
+        foreach (DependencyObject child in children)
+        {
+            if (child is FrameworkElement boundary && NameScopeRoots.TryGetValue(boundary, out _)) continue;
             if (child is FrameworkElement { Name: var name } && string.Equals(name, elementName, StringComparison.Ordinal))
             {
                 return child;
@@ -735,22 +735,13 @@ internal static class XamlRuntimeUtilities
 
     private static MethodInfo? FindMethod(Type declaringType, string methodName, Type[] parameterTypes, bool staticOnly)
     {
-        BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | (staticOnly ? BindingFlags.Static : BindingFlags.Static | BindingFlags.Instance);
-        if (parameterTypes.Length > 0)
-        {
-            MethodInfo? exact = declaringType.GetMethod(methodName, flags, null, parameterTypes, null);
-            if (exact is not null)
-            {
-                return exact;
-            }
-        }
-
-        return declaringType.GetMethods(flags)
-            .FirstOrDefault(candidate => candidate.Name == methodName && candidate.GetParameters().Length == parameterTypes.Length);
+        return RuntimeMemberResolver.FindMethod(declaringType, methodName, parameterTypes, staticOnly);
     }
 
     private static object?[] CoerceArguments(object?[] arguments, ParameterInfo[] parameters)
     {
+        if (arguments.Length != parameters.Length)
+            throw new ArgumentException("Method argument types and handles have different lengths.");
         var coerced = new object?[arguments.Length];
         for (int index = 0; index < arguments.Length; index++)
         {
@@ -774,6 +765,51 @@ internal static class XamlRuntimeUtilities
         return null;
     }
 
+    private static object? GetChildCollectionOrSelf(object parent)
+    {
+        object? collection = GetChildCollection(parent);
+        if (collection is not null)
+        {
+            return collection;
+        }
+
+        Type type = parent.GetType();
+        if (parent is IList
+            || type.GetInterfaces().Any(interfaceType =>
+                interfaceType.IsGenericType
+                && (interfaceType.GetGenericTypeDefinition() == typeof(IList<>)
+                    || interfaceType.GetGenericTypeDefinition() == typeof(ICollection<>))))
+        {
+            return parent;
+        }
+
+        return null;
+    }
+
+    private static bool TryGetCollectionCount(object? collection, out int count)
+    {
+        count = 0;
+        if (collection is null)
+        {
+            return false;
+        }
+
+        if (collection is ICollection nonGenericCollection)
+        {
+            count = nonGenericCollection.Count;
+            return true;
+        }
+
+        PropertyInfo? countProperty = collection.GetType().GetProperty("Count", BindingFlags.Public | BindingFlags.Instance);
+        if (countProperty?.PropertyType == typeof(int) && countProperty.GetValue(collection) is int value)
+        {
+            count = value;
+            return true;
+        }
+
+        return false;
+    }
+
     private static bool TryInvokeCollectionMutation(object? collection, string methodName, params object?[] arguments)
     {
         if (collection is null)
@@ -781,21 +817,47 @@ internal static class XamlRuntimeUtilities
             return false;
         }
 
-        MethodInfo? method = collection.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .FirstOrDefault(candidate => candidate.Name == methodName && candidate.GetParameters().Length == arguments.Length);
-        if (method is null)
+        Type collectionType = collection.GetType();
+        IEnumerable<MethodInfo> candidates = collectionType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Concat(collectionType.GetInterfaces().SelectMany(interfaceType => interfaceType.GetMethods()))
+            .Where(candidate => candidate.Name == methodName && candidate.GetParameters().Length == arguments.Length);
+
+        foreach (MethodInfo method in candidates)
         {
-            return false;
+            ParameterInfo[] parameters = method.GetParameters();
+            object?[] coerced = new object?[arguments.Length];
+            bool compatible = true;
+            for (int index = 0; index < arguments.Length; index++)
+            {
+                try
+                {
+                    if (arguments[index] is null
+                        && parameters[index].ParameterType.IsValueType
+                        && Nullable.GetUnderlyingType(parameters[index].ParameterType) is null)
+                    {
+                        compatible = false;
+                        break;
+                    }
+
+                    coerced[index] = CoerceValue(arguments[index], parameters[index].ParameterType);
+                }
+                catch (Exception) when (arguments[index] is not null)
+                {
+                    compatible = false;
+                    break;
+                }
+            }
+
+            if (!compatible)
+            {
+                continue;
+            }
+
+            method.Invoke(collection, coerced);
+            return true;
         }
 
-        ParameterInfo[] parameters = method.GetParameters();
-        object?[] coerced = new object?[arguments.Length];
-        for (int index = 0; index < arguments.Length; index++)
-        {
-            coerced[index] = CoerceValue(arguments[index], parameters[index].ParameterType);
-        }
-        method.Invoke(collection, coerced);
-        return true;
+        return false;
     }
 
     private static object? CoerceValue(object? value, Type targetType)
