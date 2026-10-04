@@ -80,14 +80,8 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
             Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
             File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} VSIX: {message}\r\n");
         }
-        catch (IOException)
-        {
-            // Multiple designer processes write to diagnostic traces.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Diagnostic logging must not interrupt designer activation.
-        }
+        catch (IOException) { } // Multiple designer processes write to diagnostic traces.
+        catch (UnauthorizedAccessException) { } // Diagnostic logging must not interrupt designer activation.
     }
 
     private static string CreateDiagnosticTracePath()
