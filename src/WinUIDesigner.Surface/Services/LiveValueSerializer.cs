@@ -42,10 +42,14 @@ internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
     }
 
     public static string SerializeProperty(string name, Type declaringType)
-        => $"{name}:{GetSerializedTypeName(declaringType)}";
+    {
+        return $"{name}:{GetSerializedTypeName(declaringType)}";
+    }
 
     public static string GetSerializedTypeName(Type type)
-        => RuntimeTypeNameSerializer.Serialize(type);
+    {
+        return RuntimeTypeNameSerializer.Serialize(type);
+    }
 
     private static bool ShouldUseHandle(Type type, object value)
     {

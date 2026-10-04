@@ -434,7 +434,9 @@ internal sealed class XamlActionService : IDisposable
     }
 
     private object RequireObject(long handle)
-        => ResolveObject(handle) ?? throw new KeyNotFoundException($"No live object is registered for handle {handle}.");
+    {
+        return ResolveObject(handle) ?? throw new KeyNotFoundException($"No live object is registered for handle {handle}.");
+    }
 
     private ResponseWithError InvokeOnDispatcher(Func<ResponseWithError> callback)
     {
@@ -445,7 +447,8 @@ internal sealed class XamlActionService : IDisposable
     private static ResponseWithError Success => new() { HResult = 0 };
 
     private static ResponseWithError Failure(Exception exception, XamlAction? action = null)
-        => new()
+    {
+        return new()
         {
             HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
             Error = action is null ? exception.ToString() : ActionErrorJsonSerializer.Serialize(new List<ActionError>
@@ -453,6 +456,7 @@ internal sealed class XamlActionService : IDisposable
                 new() { XamlAction = action, Error = exception.ToString() },
             }),
         };
+    }
 
     public void Dispose()
     {

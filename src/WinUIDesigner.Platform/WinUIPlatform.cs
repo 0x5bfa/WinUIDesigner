@@ -135,14 +135,18 @@ public sealed class WinUIPlatform : XamlPlatform
     }
 
     private static object ConvertHorizontalAlignment(string value)
-        => Enum.TryParse(value, ignoreCase: true, out System.Windows.HorizontalAlignment alignment)
-            ? alignment
-            : System.Windows.HorizontalAlignment.Stretch;
+    {
+        return Enum.TryParse(value, ignoreCase: true, out System.Windows.HorizontalAlignment alignment)
+                ? alignment
+                : System.Windows.HorizontalAlignment.Stretch;
+    }
 
     private static object ConvertVerticalAlignment(string value)
-        => Enum.TryParse(value, ignoreCase: true, out System.Windows.VerticalAlignment alignment)
-            ? alignment
-            : System.Windows.VerticalAlignment.Stretch;
+    {
+        return Enum.TryParse(value, ignoreCase: true, out System.Windows.VerticalAlignment alignment)
+                ? alignment
+                : System.Windows.VerticalAlignment.Stretch;
+    }
 
     protected override IGeometry CreateIsolatedSurfaceGeometry()
     {

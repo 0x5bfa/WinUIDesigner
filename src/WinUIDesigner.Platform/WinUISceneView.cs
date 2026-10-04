@@ -332,14 +332,18 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         }
 
         private bool ShouldForwardInput(System.Windows.RoutedEventArgs args)
+        {
             // Events from real adorner children already belong to the VS designer;
             // bridge only the blank overlay events that otherwise have no WPF target.
-            => inputBridgeRoot is not null
+            return inputBridgeRoot is not null
                 && (ReferenceEquals(args.OriginalSource, inputBridgeRoot)
                     || ReferenceEquals(args.OriginalSource, inputBridgeAdornerLayer));
+        }
 
         private bool IsArtboardMouseCaptureWithin()
-            => imageHost.SceneView.Artboard.IsMouseCaptureWithin;
+        {
+            return imageHost.SceneView.Artboard.IsMouseCaptureWithin;
+        }
 
         private void InputBridge_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs args)
         {

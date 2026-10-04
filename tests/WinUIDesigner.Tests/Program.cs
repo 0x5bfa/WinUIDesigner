@@ -191,10 +191,25 @@ sealed class Overloads
     public Overloads() { }
     public Overloads(int value) => Value = value;
     public Overloads(string value) => Value = value.Length;
-    public string Select(object value) => "object";
-    public string Select(string value) => "string";
-    public string Select(int value) => "int";
-    public static string Factory() => "factory";
+    public string Select(object value)
+    {
+        return "object";
+    }
+
+    public string Select(string value)
+    {
+        return "string";
+    }
+
+    public string Select(int value)
+    {
+        return "int";
+    }
+
+    public static string Factory()
+    {
+        return "factory";
+    }
 }
 
 public static class SerializationTypes

@@ -58,8 +58,14 @@ internal static class WinUIStandardToolboxItems
         "Microsoft.UI.Xaml.Shapes.Rectangle",
     }).ToArray());
 
-    public static string GetItemId(string typeName) => typeName + ", " + AssemblyIdentity;
+    public static string GetItemId(string typeName)
+    {
+        return typeName + ", " + AssemblyIdentity;
+    }
 
-    public static bool ContainsItem(string itemId) => TypeNames.Any(type =>
+    public static bool ContainsItem(string itemId)
+    {
+        return TypeNames.Any(type =>
         string.Equals(GetItemId(type), itemId, StringComparison.Ordinal));
+    }
 }

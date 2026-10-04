@@ -26,7 +26,10 @@ internal static class XamlRuntimeUtilities
     private static readonly ConditionalWeakTable<FrameworkElement, object> NameScopeRoots = new();
 
     public static void RegisterNameScope(FrameworkElement root)
-        => NameScopeRoots.GetValue(root, _ => new object());
+    {
+        NameScopeRoots.GetValue(root, _ => new object());
+    }
+
     public static Type? ResolveType(string? serializedTypeName)
     {
         if (string.IsNullOrWhiteSpace(serializedTypeName))
@@ -65,7 +68,9 @@ internal static class XamlRuntimeUtilities
     }
 
     public static bool IsFallbackControlType(string typeName)
-        => typeName is "XSurfUwp.Fallback.FallbackControl" or "XSurfUwp.Fallback.LayoutFaultFallbackControl";
+    {
+        return typeName is "XSurfUwp.Fallback.FallbackControl" or "XSurfUwp.Fallback.LayoutFaultFallbackControl";
+    }
 
     public static object? ConvertString(string? serializedTypeName, string? value, bool isEnum = false)
     {
@@ -283,12 +288,16 @@ internal static class XamlRuntimeUtilities
     }
 
     public static object? ParseXaml(string xaml)
-        => XamlReader.Load(xaml);
+    {
+        return XamlReader.Load(xaml);
+    }
 
     public static object CreateImplicitDictionaryKey(string key, bool isType)
-        => isType
-            ? ResolveType(key) ?? throw new TypeLoadException($"Unable to resolve implicit dictionary key type '{key}'.")
-            : key;
+    {
+        return isType
+                ? ResolveType(key) ?? throw new TypeLoadException($"Unable to resolve implicit dictionary key type '{key}'.")
+                : key;
+    }
 
     public static void MeasureElement(object target)
     {
@@ -909,5 +918,7 @@ internal static class XamlRuntimeUtilities
     }
 
     private static string NormalizeWinUITypeName(string value)
-        => value.Replace("Windows.UI.Xaml", "Microsoft.UI.Xaml", StringComparison.Ordinal);
+    {
+        return value.Replace("Windows.UI.Xaml", "Microsoft.UI.Xaml", StringComparison.Ordinal);
+    }
 }

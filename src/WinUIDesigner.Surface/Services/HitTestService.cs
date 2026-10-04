@@ -223,10 +223,12 @@ internal sealed class HitTestService : IDisposable
     }
 
     private static bool Intersects(Windows.Foundation.Rect left, Windows.Foundation.Rect right)
-        => left.X <= right.X + right.Width &&
-           left.X + left.Width >= right.X &&
-           left.Y <= right.Y + right.Height &&
-           left.Y + left.Height >= right.Y;
+    {
+        return left.X <= right.X + right.Width &&
+               left.X + left.Width >= right.X &&
+               left.Y <= right.Y + right.Height &&
+               left.Y + left.Height >= right.Y;
+    }
 
     private static bool IsVisibleInTree(UIElement element)
     {
@@ -238,11 +240,16 @@ internal sealed class HitTestService : IDisposable
     private readonly record struct HitCandidate(UIElement Element, bool IsVisible);
 
     private static string? GetDesignerTypeName(Type type)
-        => type.FullName;
+    {
+        return type.FullName;
+    }
 
     private static HitResponse Empty => new() { Hits = new List<LiveValueHitEntry>() };
 
-    public void Dispose() => protocolHandler.UnregisterMessageObserver(registrationId);
+    public void Dispose()
+    {
+        protocolHandler.UnregisterMessageObserver(registrationId);
+    }
 
     [DataContract]
     private sealed class HitTestRequestContract

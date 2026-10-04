@@ -36,7 +36,9 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
     public const string PackageGuidString = "4b134b27-b9ee-4f30-a267-cf19aa49f896";
 
     int IVsToolboxItemProvider.GetItemContent(string itemId, ushort format, out IntPtr global)
-        => toolboxItemProvider.GetItemContent(itemId, format, out global);
+    {
+        return toolboxItemProvider.GetItemContent(itemId, format, out global);
+    }
 
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {

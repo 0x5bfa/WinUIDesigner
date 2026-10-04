@@ -28,7 +28,9 @@ internal sealed class ObjectIdentityRegistry
     }
 
     public int GetDocumentId(object value)
-        => owners.TryGetValue(value, out var ids) ? ids.FirstOrDefault() : 0;
+    {
+        return owners.TryGetValue(value, out var ids) ? ids.FirstOrDefault() : 0;
+    }
 
     public void Track(object value)
     {
@@ -138,13 +140,19 @@ internal sealed class ObjectIdentityRegistry
     }
 
     public SourceInfo? GetSourceInfo(object value)
-        => sourceInfo.TryGetValue(value, out SourceInfo? info) ? CloneSourceInfo(info) : null;
+    {
+        return sourceInfo.TryGetValue(value, out SourceInfo? info) ? CloneSourceInfo(info) : null;
+    }
 
     public bool TryGetObject(long handle, out object? value)
-        => handleToObject.TryGetValue(handle, out value);
+    {
+        return handleToObject.TryGetValue(handle, out value);
+    }
 
     public bool TryGetHandle(object value, out long handle)
-        => objectToHandle.TryGetValue(value, out handle);
+    {
+        return objectToHandle.TryGetValue(value, out handle);
+    }
 
     public void RemoveHandle(long handle)
     {
@@ -165,7 +173,8 @@ internal sealed class ObjectIdentityRegistry
     }
 
     private static SourceInfo CloneSourceInfo(SourceInfo info)
-        => new()
+    {
+        return new()
         {
             FileName = info.FileName,
             LineNumber = info.LineNumber,
@@ -173,4 +182,5 @@ internal sealed class ObjectIdentityRegistry
             MarkupHandle = info.MarkupHandle,
             ChangeVersion = info.ChangeVersion,
         };
+    }
 }

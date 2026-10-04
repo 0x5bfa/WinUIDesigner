@@ -109,8 +109,10 @@ internal static class ProjectRuntimeResolver
     }
 
     public static Type? ResolveType(string fullName)
-        => Types.TryGetValue(fullName, out string? name) && Assemblies.TryGetValue(name, out string? file)
-            ? AssemblyLoadContext.Default.LoadFromAssemblyPath(file).GetType(fullName) : null;
+    {
+        return Types.TryGetValue(fullName, out string? name) && Assemblies.TryGetValue(name, out string? file)
+                ? AssemblyLoadContext.Default.LoadFromAssemblyPath(file).GetType(fullName) : null;
+    }
 
     private static void EnsureProviders()
     {

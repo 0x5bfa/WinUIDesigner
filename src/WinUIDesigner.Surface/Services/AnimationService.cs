@@ -140,7 +140,9 @@ internal sealed class AnimationService : IDisposable
     private static ResponseWithError Success => new() { HResult = 0 };
 
     private static ResponseWithError Failure(string message)
-        => new() { HResult = -2147467259, Error = message };
+    {
+        return new() { HResult = -2147467259, Error = message };
+    }
 
     public void Dispose()
     {

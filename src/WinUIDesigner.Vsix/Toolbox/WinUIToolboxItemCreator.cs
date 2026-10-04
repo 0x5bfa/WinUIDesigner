@@ -45,7 +45,9 @@ public sealed class WinUIToolboxItemCreator : IToolboxItemCreator, IToolboxItemC
     }
 
     public (string typeName, string assemblyName) GetCreationTypeInfo(IDataObject dataObject)
-        => ToolDataObject.CreationTypeInfoFromData(dataObject, ClipboardFormat);
+    {
+        return ToolDataObject.CreationTypeInfoFromData(dataObject, ClipboardFormat);
+    }
 
     public IDataObject CreateToolboxItem(string typeName, AssemblyName assemblyName,
         IEnumerable<KeyValuePair<string, string>> itemProperties, IEnumerable<KeyValuePair<string, string>> extraInfo)

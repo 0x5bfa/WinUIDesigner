@@ -107,7 +107,9 @@ internal sealed class DesignerSurface : IDisposable
     }
 
     public bool WaitForUnfreezeComposition(int millisecondsTimeout)
-        => unfreezeCompositionCompleted.Wait(millisecondsTimeout);
+    {
+        return unfreezeCompositionCompleted.Wait(millisecondsTimeout);
+    }
 
     public Rect GetDocumentBounds()
     {
@@ -389,7 +391,9 @@ internal sealed class DesignerSurface : IDisposable
     }
 
     private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
-        => PublishDpi(sender);
+    {
+        PublishDpi(sender);
+    }
 
     private void PublishDpi(XamlRoot root)
     {

@@ -93,12 +93,15 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
         }
     }
 
-    private static bool IsFrameworkControl(string name) => name is
+    private static bool IsFrameworkControl(string name)
+    {
+        return name is
         "Microsoft.UI.Xaml.Controls.Control" or "Microsoft.UI.Xaml.Controls.ContentControl" or
         "Microsoft.UI.Xaml.Controls.UserControl" or "Microsoft.UI.Xaml.Controls.Button" or
         "Microsoft.UI.Xaml.Controls.TextBox" or "Microsoft.UI.Xaml.Controls.Panel" or
         "Microsoft.UI.Xaml.Controls.ItemsControl" or "Microsoft.UI.Xaml.Controls.ListView" or
         "Microsoft.UI.Xaml.Controls.GridView" or "Microsoft.UI.Xaml.Controls.Border";
+    }
 
     public IToolboxItemInfo? GetItemInfo(IToolboxType type, ToolboxItemDiscoveryContext context)
     {
@@ -162,12 +165,15 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
                 new KeyValuePair<string, string>("ToolboxTabName", "WinUI 3"),
             };
         }
-        public string GetPropertyValue(string name) => name switch
+        public string GetPropertyValue(string name)
         {
-            "DirectoryId" => path,
-            "AssemblyId" => assembly,
-            "TargetPlatformId" => "Windows",
-            _ => string.Empty,
-        };
+            return name switch
+            {
+                "DirectoryId" => path,
+                "AssemblyId" => assembly,
+                "TargetPlatformId" => "Windows",
+                _ => string.Empty,
+            };
+        }
     }
 }

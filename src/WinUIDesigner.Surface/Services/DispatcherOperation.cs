@@ -13,7 +13,9 @@ internal static class DispatcherOperation
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
     public static T Invoke<T>(DispatcherQueue queue, Func<T> callback, CancellationToken cancellationToken)
-        => InvokeAsync(queue, callback, cancellationToken).GetAwaiter().GetResult();
+    {
+        return InvokeAsync(queue, callback, cancellationToken).GetAwaiter().GetResult();
+    }
 
     public static async Task<T> InvokeAsync<T>(DispatcherQueue queue, Func<T> callback, CancellationToken cancellationToken)
     {

@@ -593,38 +593,46 @@ internal sealed class SurfaceService : IDisposable
     }
 
     private Task<ResponseWithError> HandleSetPanZoomTransformAsync(SetPanZoomTransformRequestInfo request)
-        => InvokeSurfaceAsync(request.DocumentId, surface => surface.SetPanZoomTransform(request.OffsetX, request.OffsetY, request.Scale), "SetPanZoomTransform (518)");
+    {
+        return InvokeSurfaceAsync(request.DocumentId, surface => surface.SetPanZoomTransform(request.OffsetX, request.OffsetY, request.Scale), "SetPanZoomTransform (518)");
+    }
 
     private Task<ResponseWithError> HandleSetArtboardColorsAsync(SetArtboardColorsRequestInfo request)
-        => InvokeSurfaceAsync(request.DocumentId, surface =>
-        {
-            if (TryParseColor(request.CheckerboardColor1, out Windows.UI.Color color1)
-                && TryParseColor(request.CheckerboardColor2, out Windows.UI.Color color2))
+    {
+        return InvokeSurfaceAsync(request.DocumentId, surface =>
             {
-                surface.SetCheckerboardColors(color1, color2);
-            }
-        }, "SetArtboardColors (519)");
+                if (TryParseColor(request.CheckerboardColor1, out Windows.UI.Color color1)
+                    && TryParseColor(request.CheckerboardColor2, out Windows.UI.Color color2))
+                {
+                    surface.SetCheckerboardColors(color1, color2);
+                }
+            }, "SetArtboardColors (519)");
+    }
 
     private Task<ResponseWithError> HandleConfigureAppResourcesAsync(AppResourcesRequest request)
-        => InvokeOnDispatcher(() =>
-        {
-            hasXamlControlsResources = request.HasXamlControlsResources;
-            appRequestedTheme = Enum.TryParse(request.RequestedTheme, true, out ElementTheme theme)
-                ? theme : ElementTheme.Default;
-            LoadAppResourcesIfNeeded();
-            foreach (DesignerSurface surface in surfaces.Values)
+    {
+        return InvokeOnDispatcher(() =>
             {
-                surface.SetRequestedTheme(appRequestedTheme);
-            }
-            return Success;
-        }, CreateResponseFailure);
+                hasXamlControlsResources = request.HasXamlControlsResources;
+                appRequestedTheme = Enum.TryParse(request.RequestedTheme, true, out ElementTheme theme)
+                    ? theme : ElementTheme.Default;
+                LoadAppResourcesIfNeeded();
+                foreach (DesignerSurface surface in surfaces.Values)
+                {
+                    surface.SetRequestedTheme(appRequestedTheme);
+                }
+                return Success;
+            }, CreateResponseFailure);
+    }
 
     private Task<ResponseWithError> HandleSetDeviceSizeAsync(SetDeviceSizeRequestInfo request)
-        => InvokeSurfaceAsync(request.DocumentId, surface =>
-        {
-            surface.SetDeviceSize(request.Width, request.Height);
-            PublishSurfaceBounds(request.DocumentId, surface);
-        }, "SetDeviceSize (520)");
+    {
+        return InvokeSurfaceAsync(request.DocumentId, surface =>
+            {
+                surface.SetDeviceSize(request.Width, request.Height);
+                PublishSurfaceBounds(request.DocumentId, surface);
+            }, "SetDeviceSize (520)");
+    }
 
     private void HandleSetFreezeState(SetFreezeStateInfo request)
     {
@@ -679,14 +687,16 @@ internal sealed class SurfaceService : IDisposable
     }
 
     private Task<ResponseWithError> HandleSetSurfacePositionAsync(SetSurfacePositionRequestInfo request)
-        => InvokeSurfaceAsync(request.DocumentId, surface =>
-        {
-            surface.SetSurfacePosition(new IntPtr(request.ParentWindow), request.Width, request.Height);
-            LoadAppResourcesIfNeeded();
-            long rootHandle = objectIdentity.GetHandle(surface.Content);
-            PublishVisualTreeMutation(surface.Content, VisualMutationType.Add);
-            PublishSurfaceBounds(request.DocumentId, surface);
-        }, "SetSurfacePosition (548)");
+    {
+        return InvokeSurfaceAsync(request.DocumentId, surface =>
+            {
+                surface.SetSurfacePosition(new IntPtr(request.ParentWindow), request.Width, request.Height);
+                LoadAppResourcesIfNeeded();
+                long rootHandle = objectIdentity.GetHandle(surface.Content);
+                PublishVisualTreeMutation(surface.Content, VisualMutationType.Add);
+                PublishSurfaceBounds(request.DocumentId, surface);
+            }, "SetSurfacePosition (548)");
+    }
 
     private void LoadAppResourcesIfNeeded()
     {
@@ -837,7 +847,9 @@ internal sealed class SurfaceService : IDisposable
         public double Height { get; set; }
 
         public static RectContract FromRect(Rect rect)
-            => new() { X = rect.X, Y = rect.Y, Width = rect.Width, Height = rect.Height };
+        {
+            return new() { X = rect.X, Y = rect.Y, Width = rect.Width, Height = rect.Height };
+        }
     }
 
     private readonly record struct SurfaceBoundsSnapshot(Rect ContentBounds, Rect DocumentBounds);
@@ -1007,15 +1019,21 @@ internal sealed class SurfaceService : IDisposable
     }
 
     private static string? GetDesignerTypeName(Type type)
-        => type.FullName;
+    {
+        return type.FullName;
+    }
 
     private static ResponseWithError Success => new() { HResult = 0 };
 
     private static ResponseWithError CreateResponseFailure(Exception exception)
-        => new() { HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception), Error = exception.ToString() };
+    {
+        return new() { HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception), Error = exception.ToString() };
+    }
 
     private static CreateSurfaceResponseInfo CreateFailure(Exception exception)
-        => new() { HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception), Error = exception.ToString() };
+    {
+        return new() { HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception), Error = exception.ToString() };
+    }
 
     public void Dispose()
     {

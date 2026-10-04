@@ -26,13 +26,20 @@ public sealed partial class SurfaceApplication : Application, IXamlMetadataProvi
             ?? throw new InvalidOperationException("The generated XAML metadata provider was not found."));
 
     IXamlType? IXamlMetadataProvider.GetXamlType(Type type)
-        => GeneratedMetadata.GetXamlType(type) ?? ProjectRuntimeResolver.GetXamlType(type.FullName!);
+    {
+        return GeneratedMetadata.GetXamlType(type) ?? ProjectRuntimeResolver.GetXamlType(type.FullName!);
+    }
 
     IXamlType? IXamlMetadataProvider.GetXamlType(string name)
-        => GeneratedMetadata.GetXamlType(name) ?? ProjectRuntimeResolver.GetXamlType(name);
+    {
+        return GeneratedMetadata.GetXamlType(name) ?? ProjectRuntimeResolver.GetXamlType(name);
+    }
 
     XmlnsDefinition[] IXamlMetadataProvider.GetXmlnsDefinitions()
-        => GeneratedMetadata.GetXmlnsDefinitions().Concat(ProjectRuntimeResolver.GetXmlnsDefinitions()).ToArray();
+    {
+        return GeneratedMetadata.GetXmlnsDefinitions().Concat(ProjectRuntimeResolver.GetXmlnsDefinitions()).ToArray();
+    }
+
     private readonly int hostProcessId;
     private readonly string tapPath;
     private readonly string bridgeInitializationData;
