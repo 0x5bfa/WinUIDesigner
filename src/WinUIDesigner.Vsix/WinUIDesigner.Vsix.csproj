@@ -1,16 +1,13 @@
 <!--  Copyright (c) 0x5BFA. All rights reserved. Licensed under MIT License.  -->
-<Project>
-
-	<Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>net472</TargetFramework>
 		<AssemblyName>WinUIDesigner</AssemblyName>
 		<RootNamespace>WinUIDesigner.Vsix</RootNamespace>
 		<GeneratePkgDefFile>true</GeneratePkgDefFile>
-		<UseCodebase>true</UseCodebase>
-		<IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>
-		<IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
+		<VSSDKBuildToolsAutoSetup>true</VSSDKBuildToolsAutoSetup>
+		<VsixDeployOnDebug>true</VsixDeployOnDebug>
 		<StartAction>Program</StartAction>
 		<StartProgram>$(VsInstallRoot)\Common7\IDE\devenv.exe</StartProgram>
 		<StartArguments>/rootsuffix Exp</StartArguments>
@@ -18,12 +15,15 @@
 		<WinUISurfaceOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\bin\$(Configuration)\$(WinUISurfaceTargetFramework)</WinUISurfaceOutputDir>
 		<WinUIPlatformOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.Platform\bin\$(Configuration)\net472</WinUIPlatformOutputDir>
 		<WinUIDesignerHostOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.DesignerHost\bin\$(Configuration)\net472</WinUIDesignerHostOutputDir>
-		<GetVsixSourceItemsDependsOn>$(GetVsixSourceItemsDependsOn);IncludeWinUIDesignerManagedPayload;IncludeWinUISurfacePayload;IncludeMarketplaceLicense;IncludeMarketplaceBranding</GetVsixSourceItemsDependsOn>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2094" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.9.820" PrivateAssets="all" />
 		<PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.4" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectCapability Include="CreateVsixContainer" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -63,15 +63,6 @@
 			<HintPath>$(VsInstallRoot)\Common7\IDE\PrivateAssemblies\Microsoft.VisualStudio.DesignTools.SurfaceDesigner.dll</HintPath>
 			<Private>false</Private>
 		</Reference>
-	</ItemGroup>
-
-	<ItemGroup>
-		<ProjectReference Include="..\WinUIDesigner.Platform\WinUIDesigner.Platform.csproj" />
-		<ProjectReference Include="..\WinUIDesigner.DesignerHost\WinUIDesigner.DesignerHost.csproj" />
-	</ItemGroup>
-	<ItemGroup>
-		<Reference Include="PresentationCore" />
-		<Reference Include="System.Drawing" />
 		<Reference Include="Microsoft.VisualStudio.DesignTools.DesignerContract">
 			<HintPath>$(VsInstallRoot)\Common7\IDE\PrivateAssemblies\Microsoft.VisualStudio.DesignTools.DesignerContract.dll</HintPath>
 			<Private>false</Private>
@@ -84,6 +75,13 @@
 			<HintPath>$(VsInstallRoot)\Common7\IDE\PrivateAssemblies\Microsoft.VisualStudio.DesignTools.Utility.dll</HintPath>
 			<Private>false</Private>
 		</Reference>
+		<Reference Include="PresentationCore" />
+		<Reference Include="System.Drawing" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\WinUIDesigner.Platform\WinUIDesigner.Platform.csproj" />
+		<ProjectReference Include="..\WinUIDesigner.DesignerHost\WinUIDesigner.DesignerHost.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -96,44 +94,24 @@
 		<EmbeddedResource Update="VSPackage.resx">
 			<LogicalName>VSPackage.resources</LogicalName>
 		</EmbeddedResource>
+		<VSIXSourceItem Include="$(WinUIPlatformOutputDir)\WinUIDesigner.Platform.dll" />
+		<VSIXSourceItem Include="$(WinUIDesignerHostOutputDir)\WinUIDesigner.DesignerHost.dll" />
+		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\..\..\LICENSE">
+			<TargetPath>LICENSE.txt</TargetPath>
+		</VSIXSourceItem>
+		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\assets\logo-90.png">
+			<TargetPath>Images\WinUIDesignerIcon.png</TargetPath>
+		</VSIXSourceItem>
+		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\assets\preview.png">
+			<TargetPath>Images\WinUIDesignerPreview.png</TargetPath>
+		</VSIXSourceItem>
 	</ItemGroup>
 
-	<Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
-	<Import Project="$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets" Condition="Exists('$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets')" />
-
-	<Target Name="IncludeWinUIDesignerManagedPayload">
-		<ItemGroup>
-			<VSIXSourceItem Include="$(WinUIPlatformOutputDir)\WinUIDesigner.Platform.dll" />
-			<VSIXSourceItem Include="$(WinUIDesignerHostOutputDir)\WinUIDesigner.DesignerHost.dll" />
-		</ItemGroup>
-	</Target>
-
-	<Target Name="IncludeWinUISurfacePayload">
-		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\WinUIDesigner.Surface.csproj" Targets="Build" Properties="Configuration=$(Configuration)" />
+	<Target Name="StageWinUISurfacePayload" BeforeTargets="GetVsixSourceItems">
 		<ItemGroup>
 			<VSIXSourceItem Include="$(WinUISurfaceOutputDir)\**\*" Exclude="$(WinUISurfaceOutputDir)\**\*.pdb;$(WinUISurfaceOutputDir)\**\Microsoft.VisualStudio.*.dll">
 				<VSIXSubPath>Surface\%(RecursiveDir)</VSIXSubPath>
 			</VSIXSourceItem>
 		</ItemGroup>
 	</Target>
-
-	<Target Name="IncludeMarketplaceLicense">
-		<ItemGroup>
-			<VSIXSourceItem Include="$(MSBuildProjectDirectory)\..\..\LICENSE">
-				<TargetPath>LICENSE.txt</TargetPath>
-			</VSIXSourceItem>
-		</ItemGroup>
-	</Target>
-
-	<Target Name="IncludeMarketplaceBranding">
-		<ItemGroup>
-			<VSIXSourceItem Include="$(MSBuildProjectDirectory)\assets\logo-90.png">
-				<TargetPath>Images\WinUIDesignerIcon.png</TargetPath>
-			</VSIXSourceItem>
-			<VSIXSourceItem Include="$(MSBuildProjectDirectory)\assets\preview.png">
-				<TargetPath>Images\WinUIDesignerPreview.png</TargetPath>
-			</VSIXSourceItem>
-		</ItemGroup>
-	</Target>
-
 </Project>

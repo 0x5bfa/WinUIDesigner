@@ -4,7 +4,10 @@
     <Project Path="src/WinUIDesigner.DiagnosticsTap/WinUIDesigner.DiagnosticsTap.vcxproj" Id="d3d3130b-bb92-4ae7-93a5-716b19939913" />
     <Project Path="src/WinUIDesigner.Platform/WinUIDesigner.Platform.csproj" />
     <Project Path="src/WinUIDesigner.Surface/WinUIDesigner.Surface.csproj" />
-    <Project Path="src/WinUIDesigner.Vsix/WinUIDesigner.Vsix.csproj" />
+    <Project Path="src/WinUIDesigner.Vsix/WinUIDesigner.Vsix.csproj">
+      <BuildDependency Project="src/WinUIDesigner.Surface/WinUIDesigner.Surface.csproj" />
+      <Deploy Solution="Debug|Any CPU" />
+    </Project>
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/WinUIDesigner.Tests/WinUIDesigner.Tests.csproj" />
