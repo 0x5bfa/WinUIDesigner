@@ -9,7 +9,7 @@
   "overview": "overview.md",
   "priceCategory": "free",
   "publisher": "0x5BFA",
-  "private": true,
+  "private": false,
   "qna": true,
   "repo": "https://github.com/0x5bfa/WinUIDesigner"
 }
