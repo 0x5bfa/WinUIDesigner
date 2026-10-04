@@ -35,7 +35,7 @@ jobs:
 
       - name: Publish to Visual Studio Marketplace
         shell: pwsh
-        working-directory: ${{ github.workspace }}\src\WinUIDesigner.Vsix
+        working-directory: ${{ github.workspace }}\src\WinUIDesigner.Vsix\Resources
         env:
           VS_MARKETPLACE_PAT: ${{ secrets.VS_MARKETPLACE_PAT }}
         run: |
@@ -44,6 +44,6 @@ jobs:
           $publisher = Join-Path $vsInstallRoot 'VSSDK\VisualStudioIntegration\Tools\Bin\VsixPublisher.exe'
 
           & $publisher publish `
-            -payload '.\bin\Release\net472\WinUIDesigner.vsix' `
+            -payload '..\bin\Release\net472\WinUIDesigner.vsix' `
             -publishManifest '.\publishManifest.json' `
             -personalAccessToken $env:VS_MARKETPLACE_PAT

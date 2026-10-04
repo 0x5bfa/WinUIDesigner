@@ -5,6 +5,6 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
   <data name="ToolboxBitmap_WinUIControl" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>assets/toolbox-control.bmp;System.Drawing.Bitmap, System.Drawing</value>
+    <value>toolbox-control.bmp;System.Drawing.Bitmap, System.Drawing</value>
   </data>
 </root>

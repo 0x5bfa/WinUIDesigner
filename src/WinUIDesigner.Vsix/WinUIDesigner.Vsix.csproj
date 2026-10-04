@@ -91,7 +91,7 @@
 
 	<ItemGroup>
 		<None Include="source.extension.vsixmanifest" />
-		<EmbeddedResource Update="VSPackage.resx">
+		<EmbeddedResource Update="Resources\VSPackage.resx">
 			<LogicalName>VSPackage.resources</LogicalName>
 		</EmbeddedResource>
 		<VSIXSourceItem Include="$(WinUIPlatformOutputDir)\WinUIDesigner.Platform.dll" />
@@ -99,10 +99,10 @@
 		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\..\..\LICENSE">
 			<TargetPath>LICENSE.txt</TargetPath>
 		</VSIXSourceItem>
-		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\assets\logo-90.png">
+		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\Resources\logo-90.png">
 			<TargetPath>Images\WinUIDesignerIcon.png</TargetPath>
 		</VSIXSourceItem>
-		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\assets\preview.png">
+		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\Resources\preview.png">
 			<TargetPath>Images\WinUIDesignerPreview.png</TargetPath>
 		</VSIXSourceItem>
 	</ItemGroup>
