@@ -125,4 +125,13 @@
 		</VSIXSourceItem>
 	</ItemGroup>
 
+	<Target Name="PublishWinUIDesignerSurface"
+	        BeforeTargets="GetVsixSourceItems"
+	        Condition="'$(CreateVsixContainer)' != 'false' and '$(DesignTimeBuild)' != 'true'">
+		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\WinUIDesigner.Surface.csproj"
+		         Targets="Publish"
+		         Properties="RuntimeIdentifier=win-x64"
+		         BuildInParallel="false" />
+	</Target>
+
 </Project>
