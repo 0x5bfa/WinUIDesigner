@@ -18,6 +18,7 @@
 		<PublishSingleFile>true</PublishSingleFile>
 		<DisableEmbeddedXbf>false</DisableEmbeddedXbf>
 		<DiagnosticsTapOutputDir>..\WinUIDesigner.DiagnosticsTap\bin\x64\$(Configuration)</DiagnosticsTapOutputDir>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<ItemGroup>

@@ -15,7 +15,11 @@ internal static class MessageFrameReader
     {
         byte[] prefix = new byte[4];
         int first = read(prefix, 0, prefix.Length);
-        if (first == 0) return null;
+        if (first == 0)
+        {
+            return null;
+        }
+
         Fill(read, prefix, first);
         int length = BitConverter.ToInt32(prefix);
         if (length < 12 || length > MaximumLength)
@@ -26,6 +30,7 @@ internal static class MessageFrameReader
         byte[] frame = new byte[checked(length + 4)];
         prefix.CopyTo(frame, 0);
         Fill(read, frame, 4);
+
         return frame;
     }
 
@@ -34,7 +39,11 @@ internal static class MessageFrameReader
         while (offset < buffer.Length)
         {
             int count = read(buffer, offset, buffer.Length - offset);
-            if (count <= 0) throw new EndOfStreamException("The designer pipe closed in the middle of a message.");
+            if (count <= 0)
+            {
+                throw new EndOfStreamException("The designer pipe closed in the middle of a message.");
+            }
+
             offset += count;
         }
     }

@@ -13,11 +13,16 @@ namespace WinUIDesigner.Surface.Services;
 internal sealed class ObjectIdentityRegistry
 {
     private readonly Dictionary<object, long> objectToHandle = new(ReferenceEqualityComparer.Instance);
+
     private readonly Dictionary<long, object> handleToObject = new();
+
     private readonly Dictionary<object, SourceInfo> sourceInfo = new(ReferenceEqualityComparer.Instance);
+
     private long nextHandle = 1;
     private int currentDocument;
+
     private readonly Dictionary<int, HashSet<object>> documents = new();
+
     private readonly Dictionary<object, HashSet<int>> owners = new(ReferenceEqualityComparer.Instance);
 
     public IDisposable EnterDocument(int documentId)
@@ -34,42 +39,78 @@ internal sealed class ObjectIdentityRegistry
 
     public void Track(object value)
     {
-        if (currentDocument == 0) return;
+        if (currentDocument == 0)
+        {
+            return;
+        }
+
         if (!documents.TryGetValue(currentDocument, out var objects))
+        {
             documents[currentDocument] = objects = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        }
+
         objects.Add(value);
+
         if (!owners.TryGetValue(value, out var ids))
+        {
             owners[value] = ids = new HashSet<int>();
+        }
+
         ids.Add(currentDocument);
     }
 
     public HashSet<object> ReleaseDocument(int documentId)
     {
         var released = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        if (!documents.Remove(documentId, out var objects)) return released;
+        if (!documents.Remove(documentId, out var objects))
+        {
+            return released;
+        }
+
         foreach (object value in objects)
         {
-            if (!owners.TryGetValue(value, out var ids)) continue;
+            if (!owners.TryGetValue(value, out var ids))
+            {
+                continue;
+            }
+
             ids.Remove(documentId);
-            if (ids.Count != 0) continue;
+            if (ids.Count != 0)
+            {
+                continue;
+            }
+
             owners.Remove(value);
             RemoveObject(value);
             released.Add(value);
         }
+
         return released;
     }
 
     public void Clear()
     {
-        objectToHandle.Clear(); handleToObject.Clear(); sourceInfo.Clear();
-        documents.Clear(); owners.Clear(); currentDocument = 0;
+        objectToHandle.Clear();
+        handleToObject.Clear();
+        sourceInfo.Clear();
+
+        documents.Clear();
+        owners.Clear();
+        currentDocument = 0;
+
         // Never reuse a handle that the frontend may still have cached.
     }
 
     private sealed class DocumentScope(Action restore) : IDisposable
     {
         private Action? restoreAction = restore;
-        public void Dispose() { var action = restoreAction; restoreAction = null; action?.Invoke(); }
+
+        public void Dispose()
+        {
+            var action = restoreAction;
+            restoreAction = null;
+            action?.Invoke();
+        }
     }
 
     public long GetHandle(object value)
@@ -156,7 +197,10 @@ internal sealed class ObjectIdentityRegistry
 
     public void RemoveHandle(long handle)
     {
-        if (handleToObject.TryGetValue(handle, out object? value)) RemoveObject(value);
+        if (handleToObject.TryGetValue(handle, out object? value))
+        {
+            RemoveObject(value);
+        }
     }
 
     public void RemoveObject(object value)
@@ -167,9 +211,17 @@ internal sealed class ObjectIdentityRegistry
         }
 
         sourceInfo.Remove(value);
+
         if (owners.Remove(value, out var ids))
+        {
             foreach (int id in ids)
-                if (documents.TryGetValue(id, out var objects)) objects.Remove(value);
+            {
+                if (documents.TryGetValue(id, out var objects))
+                {
+                    objects.Remove(value);
+                }
+            }
+        }
     }
 
     private static SourceInfo CloneSourceInfo(SourceInfo info)

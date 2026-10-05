@@ -25,9 +25,13 @@ internal static class Program
     private static int Main(string[] args)
     {
         RegisterVisualStudioAssemblyResolver();
+
         ProjectRuntimeResolver.Initialize(ContentDirectory);
+
         WriteDiagnosticTrace($"Main entered with {args.Length} arguments.");
+
         Assembly surfaceAssembly = typeof(Program).Assembly;
+
         WriteDiagnosticTrace($"Surface assembly='{surfaceAssembly.Location}'; content directory='{ContentDirectory}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
 
         if (args.Length != 4 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
@@ -43,10 +47,17 @@ internal static class Program
         try
         {
             if (!long.TryParse(args[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out long dpiContext))
+            {
                 throw new ArgumentException("Invalid DPI awareness context.");
+            }
+
             if (SetThreadDpiAwarenessContext((nint)(dpiContext == 0 ? -4 : dpiContext)) == 0)
+            {
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            }
+
             WinRT.ComWrappersSupport.InitializeComWrappers();
+
             WriteDiagnosticTrace("CsWinRT COM wrappers initialized; starting Microsoft.UI.Xaml.Application.");
 
             Application.Start(_ =>
@@ -148,7 +159,8 @@ internal static class Program
         // In single-file mode, AppContext.BaseDirectory can point to the bundle
         // extraction folder. Project assemblies, PRI files, and prepared XAML live
         // beside the shadow-copied WinUISurface.exe instead.
-        string? executablePath = Environment.ProcessPath;
+        var executablePath = Environment.ProcessPath;
+
         return !string.IsNullOrWhiteSpace(executablePath)
             ? Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory
             : AppContext.BaseDirectory;

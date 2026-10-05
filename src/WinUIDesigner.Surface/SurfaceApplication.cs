@@ -22,8 +22,13 @@ public sealed partial class SurfaceApplication : Application, IXamlMetadataProvi
     // The XAML compiler adds this provider after its first compilation pass.
     // Resolve it at runtime so the explicit interface also compiles during pass one.
     private IXamlMetadataProvider GeneratedMetadata
-        => (IXamlMetadataProvider)(GetType().GetProperty("_AppProvider", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(this)
-            ?? throw new InvalidOperationException("The generated XAML metadata provider was not found."));
+    {
+        get
+        {
+            return (IXamlMetadataProvider)(GetType().GetProperty("_AppProvider", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(this)
+                ?? throw new InvalidOperationException("The generated XAML metadata provider was not found."));
+        }
+    }
 
     IXamlType? IXamlMetadataProvider.GetXamlType(Type type)
     {
@@ -76,22 +81,28 @@ public sealed partial class SurfaceApplication : Application, IXamlMetadataProvi
                 IsArtboardException = true,
             });
         };
+
         Program.WriteDiagnosticTrace($"Microsoft.UI.Xaml.Application initialized; DispatcherQueue acquired; TAP='{tapPath}'.");
 
-        dataBridge = new SurfacePipeDataBridge(bridgeInitializationData);
-        protocolHandler = new ProtocolHandler(dataBridge, tokenSource: null, shouldStart: false);
+        dataBridge = new(bridgeInitializationData);
+        protocolHandler = new(dataBridge, tokenSource: null, shouldStart: false);
         protocolHandler.OnUnhandledException += (_, exception) =>
         {
             Program.WriteDiagnosticTrace($"Asynchronous protocol request failed: {exception}");
+
             protocolHandler.PostMessage(529, new UnhandledExceptionResponse
             {
                 Message = exception.Message, CallStack = exception.ToString(), IsArtboardException = true,
             });
         };
-        objectIdentity = new ObjectIdentityRegistry();
-        surfaceService = new SurfaceService(protocolHandler, dispatcherQueue, objectIdentity);
+
+        objectIdentity = new();
+        surfaceService = new(protocolHandler, dispatcherQueue, objectIdentity);
+
         Program.WriteDiagnosticTrace("PipeDataBridge, ProtocolHandler, and minimal SurfaceService initialized; message 516 registered before protocol start.");
+
         protocolHandler.Start();
+
         Program.WriteDiagnosticTrace("ProtocolHandler started.");
 
         _ = Task.Run(WatchHostProcess);
@@ -104,6 +115,7 @@ public sealed partial class SurfaceApplication : Application, IXamlMetadataProvi
         try
         {
             using Process hostProcess = Process.GetProcessById(hostProcessId);
+
             while (protocolHandler is { IsShutdown: false } && !hostProcess.WaitForExit(250))
             {
             }

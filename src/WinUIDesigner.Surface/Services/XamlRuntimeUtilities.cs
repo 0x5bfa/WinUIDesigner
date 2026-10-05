@@ -221,20 +221,41 @@ internal static class XamlRuntimeUtilities
         }
 
         PropertyInfo? property = (declaringType ?? targetType)?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
-        if (property?.GetCustomAttribute<DefaultValueAttribute>() is { } attribute) return attribute.Value;
+        if (property?.GetCustomAttribute<DefaultValueAttribute>() is { } attribute)
+        {
+            return attribute.Value;
+        }
+
         return property?.PropertyType.IsValueType == true ? Activator.CreateInstance(property.PropertyType) : null;
     }
 
     public static object? GetBaseValue(DependencyObject target, DependencyProperty property)
     {
         if (target is FrameworkElement element && element.GetBindingExpression(property) is { } expression)
+        {
             return expression.ParentBinding;
+        }
+
         object local = target.ReadLocalValue(property);
-        if (!ReferenceEquals(local, DependencyProperty.UnsetValue)) return local;
+        if (!ReferenceEquals(local, DependencyProperty.UnsetValue))
+        {
+            return local;
+        }
+
         if (target is FrameworkElement styled)
+        {
             for (Style? style = styled.Style; style is not null; style = style.BasedOn)
+            {
                 foreach (SetterBase setterBase in style.Setters)
-                    if (setterBase is Setter setter && ReferenceEquals(setter.Property, property)) return setter.Value;
+                {
+                    if (setterBase is Setter setter && ReferenceEquals(setter.Property, property))
+                    {
+                        return setter.Value;
+                    }
+                }
+            }
+        }
+
         return target.GetValue(property);
     }
 
@@ -244,11 +265,24 @@ internal static class XamlRuntimeUtilities
         if (dependencyProperty is not null && target is DependencyObject dependencyObject)
         {
             if (XSurfUwp.DT.IsSizeShadowProperty(dependencyProperty))
+            {
                 return XSurfUwp.DT.GetUnderlyingSizeShadowValue(dependencyObject, dependencyProperty);
+            }
+
             if (target is FrameworkElement element)
+            {
                 for (Style? style = element.Style; style is not null; style = style.BasedOn)
+                {
                     foreach (SetterBase setterBase in style.Setters)
-                        if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty)) return setter.Value;
+                    {
+                        if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty))
+                        {
+                            return setter.Value;
+                        }
+                    }
+                }
+            }
+
             // A value query must never clear and recreate a binding on the live object.
             return GetDefaultValue(fullPropertyName, target.GetType().AssemblyQualifiedName);
         }
@@ -372,7 +406,11 @@ internal static class XamlRuntimeUtilities
         if (lookupContext is FrameworkElement frameworkElement)
         {
             FrameworkElement owner = FindVisualRoot(frameworkElement);
-            if (NameChanges.TryGetValue(owner, out var changes) && changes.TryGetValue(elementName, out var changed)) return changed;
+            if (NameChanges.TryGetValue(owner, out var changes) && changes.TryGetValue(elementName, out var changed))
+            {
+                return changed;
+            }
+
             object? named = frameworkElement.FindName(elementName);
             if (named is not null)
             {
@@ -394,11 +432,21 @@ internal static class XamlRuntimeUtilities
 
         FrameworkElement scopeOwner = FindVisualRoot(element);
         if (!string.IsNullOrEmpty(newName) && FindElement(scopeOwner, newName) is { } existing && !ReferenceEquals(existing, element))
+        {
             throw new InvalidOperationException($"The name '{newName}' is already registered in this scope.");
+        }
+
         var changes = NameChanges.GetOrCreateValue(scopeOwner);
-        if (!string.IsNullOrEmpty(oldName)) changes[oldName] = null;
+        if (!string.IsNullOrEmpty(oldName))
+        {
+            changes[oldName] = null;
+        }
+
         element.Name = newName ?? string.Empty;
-        if (!string.IsNullOrEmpty(newName)) changes[newName] = element;
+        if (!string.IsNullOrEmpty(newName))
+        {
+            changes[newName] = element;
+        }
     }
 
     public static object? InvokeMethod(
@@ -709,9 +757,14 @@ internal static class XamlRuntimeUtilities
         FrameworkElement current = element;
         while (VisualTreeHelper.GetParent(current) is FrameworkElement parent)
         {
-            if (NameScopeRoots.TryGetValue(current, out _)) break;
+            if (NameScopeRoots.TryGetValue(current, out _))
+            {
+                break;
+            }
+
             current = parent;
         }
+
         return current;
     }
 
@@ -723,13 +776,23 @@ internal static class XamlRuntimeUtilities
         foreach (string propertyName in new[] { "Children", "Content", "Child" })
         {
             object? value = root.GetType().GetProperty(propertyName)?.GetValue(root);
-            if (value is DependencyObject single) children.Add(single);
+            if (value is DependencyObject single)
+            {
+                children.Add(single);
+            }
             else if (value is IEnumerable collection)
+            {
                 children.AddRange(collection.OfType<DependencyObject>());
+            }
         }
+
         foreach (DependencyObject child in children)
         {
-            if (child is FrameworkElement boundary && NameScopeRoots.TryGetValue(boundary, out _)) continue;
+            if (child is FrameworkElement boundary && NameScopeRoots.TryGetValue(boundary, out _))
+            {
+                continue;
+            }
+
             if (child is FrameworkElement { Name: var name } && string.Equals(name, elementName, StringComparison.Ordinal))
             {
                 return child;

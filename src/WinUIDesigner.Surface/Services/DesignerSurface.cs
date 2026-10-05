@@ -398,7 +398,11 @@ internal sealed class DesignerSurface : IDisposable
     private void PublishDpi(XamlRoot root)
     {
         double dpi = root.RasterizationScale * 96;
-        if (publishedDpi == dpi) return;
+        if (publishedDpi == dpi)
+        {
+            return;
+        }
+
         publishedDpi = dpi;
         DpiChanged?.Invoke(dpi);
     }
@@ -418,7 +422,11 @@ internal sealed class DesignerSurface : IDisposable
         }
         IsFrozen = false;
         viewportRoot.LayoutUpdated -= OnLayoutUpdated;
-        if (viewportRoot.XamlRoot is { } root) root.Changed -= OnXamlRootChanged;
+        if (viewportRoot.XamlRoot is { } root)
+        {
+            root.Changed -= OnXamlRootChanged;
+        }
+
         if (compositionRenderingHandler is not null)
         {
             CompositionTarget.Rendering -= compositionRenderingHandler;

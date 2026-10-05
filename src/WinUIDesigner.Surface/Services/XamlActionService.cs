@@ -54,9 +54,19 @@ internal sealed class XamlActionService : IDisposable
             foreach (XamlAction action in actions)
             {
                 if (action is SetDispatcherAction dispatcher && objectIdentity.TryGetObject(dispatcher.DispatcherObjectHandle, out object? target) && target is not null)
+                {
                     documentId = objectIdentity.GetDocumentId(target);
-                if (action is SetSurfaceContentAction content) documentId = content.DocumentId;
-                if (documentId != 0) break;
+                }
+
+                if (action is SetSurfaceContentAction content)
+                {
+                    documentId = content.DocumentId;
+                }
+
+                if (documentId != 0)
+                {
+                    break;
+                }
             }
             using var documentScope = objectIdentity.EnterDocument(documentId);
             // Keep the wire order: later actions can refer to objects or names created
@@ -83,8 +93,14 @@ internal sealed class XamlActionService : IDisposable
             // Synchronize the surviving changes, then report the exact failed
             // action using the shared error contract. Raw exception text is not
             // valid ActionError JSON and prevents frontend error processing.
-            try { surfaceService.CompleteActionBatch(); }
-            catch (Exception layoutError) { Program.WriteDiagnosticTrace($"Layout after failed action: {layoutError}"); }
+            try
+            {
+                surfaceService.CompleteActionBatch();
+            }
+            catch (Exception layoutError)
+            {
+                Program.WriteDiagnosticTrace($"Layout after failed action: {layoutError}");
+            }
             return Failure(ex, failedAction);
         }
     }
@@ -120,12 +136,19 @@ internal sealed class XamlActionService : IDisposable
             {
             Execute(action, (id, value) =>
             {
-                if (id != document.DocumentId) throw new InvalidOperationException("The construction action targets another document.");
+                if (id != document.DocumentId)
+                {
+                    throw new InvalidOperationException("The construction action targets another document.");
+                }
+
                 root = value;
             });
             TrackActionObjects();
             }
-            catch (Exception ex) { throw new DocumentConstructionException(ex, action); }
+            catch (Exception ex)
+            {
+                throw new DocumentConstructionException(ex, action);
+            }
         }
         return root ?? throw new InvalidOperationException($"No root was constructed for document {document.DocumentId}.");
     }
@@ -145,7 +168,13 @@ internal sealed class XamlActionService : IDisposable
         var released = objectIdentity.ReleaseDocument(documentId);
         resourceScopes.RemoveObjects(released);
         foreach (long key in new List<long>(actionObjects.Keys))
-            if (actionObjects[key] is object value && released.Contains(value)) { actionObjects.Remove(key); trackedActionObjects.Remove(key); }
+        {
+            if (actionObjects[key] is object value && released.Contains(value))
+            {
+                actionObjects.Remove(key);
+                trackedActionObjects.Remove(key);
+            }
+        }
     }
 
     private void Execute(XamlAction action, Action<int, object?>? setSurfaceContentOverride = null)
@@ -408,13 +437,21 @@ internal sealed class XamlActionService : IDisposable
     {
         if (actionObjects.TryGetValue(handle, out object? value))
         {
-            if (value is not null) objectIdentity.Track(value);
+            if (value is not null)
+            {
+                objectIdentity.Track(value);
+            }
+
             return value;
         }
 
         if (objectIdentity.TryGetObject(handle, out value))
         {
-            if (value is not null) objectIdentity.Track(value);
+            if (value is not null)
+            {
+                objectIdentity.Track(value);
+            }
+
             return value;
         }
 
@@ -440,8 +477,14 @@ internal sealed class XamlActionService : IDisposable
 
     private ResponseWithError InvokeOnDispatcher(Func<ResponseWithError> callback)
     {
-        try { return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken); }
-        catch (Exception ex) { return Failure(ex); }
+        try
+        {
+            return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return Failure(ex);
+        }
     }
 
     private static ResponseWithError Success => new() { HResult = 0 };

@@ -136,15 +136,26 @@ internal sealed class PropertyService : IDisposable
             {
                 foreach (PropertyInfo attached in owner.GetProperties(BindingFlags.Public | BindingFlags.Static))
                 {
-                    if (!attached.Name.EndsWith("Property", StringComparison.Ordinal) || attached.PropertyType != typeof(DependencyProperty)) continue;
+                    if (!attached.Name.EndsWith("Property", StringComparison.Ordinal) || attached.PropertyType != typeof(DependencyProperty))
+                    {
+                        continue;
+                    }
+
                     string name = attached.Name[..^8];
-                    if (owner.GetMethod("Get" + name, BindingFlags.Public | BindingFlags.Static) is null) continue;
+                    if (owner.GetMethod("Get" + name, BindingFlags.Public | BindingFlags.Static) is null)
+                    {
+                        continue;
+                    }
+
                     try
                     {
                         if (attached.GetValue(null) is DependencyProperty dp)
                             AddDependencyProperty(properties, element, name, owner, dp);
                     }
-                    catch (Exception ex) { Program.WriteDiagnosticTrace($"Attached property '{owner.FullName}.{name}' could not be read: {ex.Message}"); }
+                    catch (Exception ex)
+                    {
+                        Program.WriteDiagnosticTrace($"Attached property '{owner.FullName}.{name}' could not be read: {ex.Message}");
+                    }
                 }
             }
             try
@@ -405,7 +416,10 @@ internal sealed class PropertyService : IDisposable
 
     private T InvokeOnDispatcher<T>(Func<T> callback, Func<T> failure, long handle = 0)
     {
-        try { return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken); }
+        try
+        {
+            return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken);
+        }
         catch (Exception ex)
         {
             Program.WriteDiagnosticTrace($"Property request failed: {ex}");

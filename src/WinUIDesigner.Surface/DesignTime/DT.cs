@@ -10,24 +10,35 @@ namespace XSurfUwp;
 // receives only the currently selected value used to lay out the preview.
 public static class DT
 {
-    private static readonly ConditionalWeakTable<FrameworkElement, Style> SuppressedStyles = new();
+    private static readonly ConditionalWeakTable<FrameworkElement, Style> SuppressedStyles = [];
+
     public static readonly DependencyProperty ShouldDisableImplicitStyleProperty = DependencyProperty.RegisterAttached(
         "ShouldDisableImplicitStyle", typeof(bool), typeof(DT), new PropertyMetadata(false, (owner, args) =>
         {
             if (owner is not FrameworkElement element) return;
             if ((bool)args.NewValue)
             {
-                if (!ReferenceEquals(element.ReadLocalValue(FrameworkElement.StyleProperty), DependencyProperty.UnsetValue)) return;
-                var style = new Style { TargetType = element.GetType() };
-                SuppressedStyles.Remove(element); SuppressedStyles.Add(element, style);
+                if (!ReferenceEquals(element.ReadLocalValue(FrameworkElement.StyleProperty), DependencyProperty.UnsetValue))
+                {
+                    return;
+                }
+
+                var style = new Style() { TargetType = element.GetType() };
+                SuppressedStyles.Remove(element);
+                SuppressedStyles.Add(element, style);
                 element.Style = style;
             }
             else if (SuppressedStyles.TryGetValue(element, out Style? style))
             {
-                if (ReferenceEquals(element.Style, style)) element.ClearValue(FrameworkElement.StyleProperty);
+                if (ReferenceEquals(element.Style, style))
+                {
+                    element.ClearValue(FrameworkElement.StyleProperty);
+                }
+
                 SuppressedStyles.Remove(element);
             }
         }));
+
     public static void SetShouldDisableImplicitStyle(DependencyObject owner, bool value)
     {
         owner.SetValue(ShouldDisableImplicitStyleProperty, value);
@@ -39,40 +50,22 @@ public static class DT
     }
 
     public static readonly DependencyProperty RootWidthProperty = DependencyProperty.RegisterAttached(
-        "RootWidth",
-        typeof(double),
-        typeof(DT),
-        new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
+        "RootWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
 
     public static readonly DependencyProperty DesignWidthProperty = DependencyProperty.RegisterAttached(
-        "DesignWidth",
-        typeof(double),
-        typeof(DT),
-        new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
+        "DesignWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
 
     public static readonly DependencyProperty RuntimeWidthProperty = DependencyProperty.RegisterAttached(
-        "RuntimeWidth",
-        typeof(double),
-        typeof(DT),
-        new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
+        "RuntimeWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
 
     public static readonly DependencyProperty RootHeightProperty = DependencyProperty.RegisterAttached(
-        "RootHeight",
-        typeof(double),
-        typeof(DT),
-        new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
+        "RootHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
 
     public static readonly DependencyProperty DesignHeightProperty = DependencyProperty.RegisterAttached(
-        "DesignHeight",
-        typeof(double),
-        typeof(DT),
-        new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
+        "DesignHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
 
     public static readonly DependencyProperty RuntimeHeightProperty = DependencyProperty.RegisterAttached(
-        "RuntimeHeight",
-        typeof(double),
-        typeof(DT),
-        new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
+        "RuntimeHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
 
     public static void SetRootWidth(DependencyObject dependencyObject, double value)
     {
@@ -136,22 +129,12 @@ public static class DT
 
     private static void WidthPropertyChangedCallback(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
     {
-        UpdateWidthOrHeight(
-                dependencyObject,
-                FrameworkElement.WidthProperty,
-                RootWidthProperty,
-                DesignWidthProperty,
-                RuntimeWidthProperty);
+        UpdateWidthOrHeight(dependencyObject, FrameworkElement.WidthProperty, RootWidthProperty, DesignWidthProperty, RuntimeWidthProperty);
     }
 
     private static void HeightPropertyChangedCallback(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
     {
-        UpdateWidthOrHeight(
-                dependencyObject,
-                FrameworkElement.HeightProperty,
-                RootHeightProperty,
-                DesignHeightProperty,
-                RuntimeHeightProperty);
+        UpdateWidthOrHeight(dependencyObject, FrameworkElement.HeightProperty, RootHeightProperty, DesignHeightProperty, RuntimeHeightProperty);
     }
 
     private static void UpdateWidthOrHeight(
@@ -192,28 +175,28 @@ public static class DT
 
     internal static bool IsSizeShadowProperty(DependencyProperty dependencyProperty)
     {
-        return ReferenceEquals(dependencyProperty, RootWidthProperty)
-                || ReferenceEquals(dependencyProperty, DesignWidthProperty)
-                || ReferenceEquals(dependencyProperty, RuntimeWidthProperty)
-                || ReferenceEquals(dependencyProperty, RootHeightProperty)
-                || ReferenceEquals(dependencyProperty, DesignHeightProperty)
-                || ReferenceEquals(dependencyProperty, RuntimeHeightProperty);
+        return ReferenceEquals(dependencyProperty, RootWidthProperty) ||
+            ReferenceEquals(dependencyProperty, DesignWidthProperty) ||
+            ReferenceEquals(dependencyProperty, RuntimeWidthProperty) ||
+            ReferenceEquals(dependencyProperty, RootHeightProperty) ||
+            ReferenceEquals(dependencyProperty, DesignHeightProperty) ||
+            ReferenceEquals(dependencyProperty, RuntimeHeightProperty);
     }
 
     internal static bool IsSizePropertyShadowed(DependencyObject dependencyObject, DependencyProperty dependencyProperty)
     {
         if (ReferenceEquals(dependencyProperty, FrameworkElement.WidthProperty))
         {
-            return HasValue(dependencyObject, DesignWidthProperty)
-                || HasValue(dependencyObject, RuntimeWidthProperty)
-                || HasValue(dependencyObject, RootWidthProperty);
+            return HasValue(dependencyObject, DesignWidthProperty) ||
+                HasValue(dependencyObject, RuntimeWidthProperty) ||
+                HasValue(dependencyObject, RootWidthProperty);
         }
 
         if (ReferenceEquals(dependencyProperty, FrameworkElement.HeightProperty))
         {
-            return HasValue(dependencyObject, DesignHeightProperty)
-                || HasValue(dependencyObject, RuntimeHeightProperty)
-                || HasValue(dependencyObject, RootHeightProperty);
+            return HasValue(dependencyObject, DesignHeightProperty) ||
+                HasValue(dependencyObject, RuntimeHeightProperty) ||
+                HasValue(dependencyObject, RootHeightProperty);
         }
 
         return false;
@@ -228,12 +211,14 @@ public static class DT
 
         if (dependencyObject.GetValue(FrameworkElement.StyleProperty) is Style style)
         {
-            for (Style? current = style; current is not null; current = current.BasedOn)
-            foreach (SetterBase setterBase in current.Setters)
+            for (var current = style; current is not null; current = current.BasedOn)
             {
-                if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty))
+                foreach (SetterBase setterBase in current.Setters)
                 {
-                    return setter.Value;
+                    if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty))
+                    {
+                        return setter.Value;
+                    }
                 }
             }
         }
@@ -243,7 +228,7 @@ public static class DT
 
     private static object ReadPropertyValue(DependencyObject dependencyObject, DependencyProperty dependencyProperty)
     {
-        object value = dependencyObject.ReadLocalValue(dependencyProperty);
+        var value = dependencyObject.ReadLocalValue(dependencyProperty);
         if (!ReferenceEquals(value, DependencyProperty.UnsetValue))
         {
             return value;
@@ -251,12 +236,14 @@ public static class DT
 
         if (dependencyObject.GetValue(FrameworkElement.StyleProperty) is Style style)
         {
-            for (Style? current = style; current is not null; current = current.BasedOn)
-            foreach (SetterBase setterBase in current.Setters)
+            for (var current = style; current is not null; current = current.BasedOn)
             {
-                if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty))
+                foreach (SetterBase setterBase in current.Setters)
                 {
-                    return setter.Value;
+                    if (setterBase is Setter setter && ReferenceEquals(setter.Property, dependencyProperty))
+                    {
+                        return setter.Value;
+                    }
                 }
             }
         }

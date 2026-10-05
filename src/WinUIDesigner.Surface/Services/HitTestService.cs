@@ -31,7 +31,10 @@ internal sealed class HitTestService : IDisposable
         // by deserializing the same DataContract JSON shape into local DTOs.
         registrationId = protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>(526, request =>
         {
-            try { return HandleHit(request); }
+            try
+            {
+                return HandleHit(request);
+            }
             catch (Exception ex)
             {
                 Program.WriteDiagnosticTrace($"HitTest (526) failed for root {request.RootHandle}: {ex}");
@@ -233,7 +236,13 @@ internal sealed class HitTestService : IDisposable
     private static bool IsVisibleInTree(UIElement element)
     {
         for (UIElement? current = element; current is not null; current = VisualTreeHelper.GetParent(current) as UIElement)
-            if (current.Visibility != Visibility.Visible || !current.IsHitTestVisible) return false;
+        {
+            if (current.Visibility != Visibility.Visible || !current.IsHitTestVisible)
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 

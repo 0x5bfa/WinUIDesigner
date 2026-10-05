@@ -9,6 +9,6 @@ namespace WinUIDesigner.Surface;
 internal sealed class DocumentConstructionException(Exception cause, XamlAction action)
     : Exception("A document construction action failed.", cause)
 {
-    public string SerializedErrors { get; } = ActionErrorJsonSerializer.Serialize(
-        new[] { new ActionError { XamlAction = action, Error = cause.ToString() } });
+    public string SerializedErrors { get; } =
+        ActionErrorJsonSerializer.Serialize([new ActionError { XamlAction = action, Error = cause.ToString() }]);
 }

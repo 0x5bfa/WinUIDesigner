@@ -14,7 +14,7 @@ namespace WinUIDesigner.Surface;
 
 // Adapt VS's inherited anonymous-pipe handles to RuntimeHost's IDataBridge framing;
 // this wraps the host-provided connection rather than negotiating a new endpoint.
-internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
+internal sealed partial class SurfacePipeDataBridge : IDataBridge, IDisposable
 {
     private readonly SurfaceAnonymousPipe readPipe;
     private readonly SurfaceAnonymousPipe writePipe;
@@ -31,10 +31,9 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
     {
         // The host serializes read event/pipe and write event/pipe handles for each
         // direction. This process takes ownership of all eight inherited handles.
-        IntPtr[] handles = initializationData
-            .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(value => (IntPtr)(long)ulong.Parse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture))
-            .ToArray();
+        IntPtr[] handles = [.. initializationData
+            .Split([' '], StringSplitOptions.RemoveEmptyEntries)
+            .Select(value => (IntPtr)(long)ulong.Parse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture))];
 
         if (handles.Length != 8)
         {
@@ -55,16 +54,33 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
 
     public byte[] ReadMessage()
     {
-        if (closed) return null!;
+        if (closed)
+        {
+            return null!;
+        }
+
         byte[]? buffer;
-        try { buffer = MessageFrameReader.Read(readPipe.Read); }
-        catch { Close(); throw; }
-        if (buffer is null) { Close(); return null!; }
+        try
+        {
+            buffer = MessageFrameReader.Read(readPipe.Read);
+        }
+        catch
+        {
+            Close();
+            throw;
+        }
+
+        if (buffer is null)
+        {
+            Close();
+            return null!;
+        }
 
         if (isFirstMessage)
         {
             isFirstMessage = false;
             FirstMessageEvent.Set();
+
             Program.WriteDiagnosticTrace("First protocol message received from Visual Studio.");
         }
 
@@ -79,6 +95,7 @@ internal sealed class SurfacePipeDataBridge : IDataBridge, IDisposable
     public bool VerifyConnected(CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+
         return !closed;
     }
 
@@ -168,6 +185,7 @@ internal sealed class SurfaceAnonymousPipe : IDisposable
         int count = Math.Min(maxBytesToRead, totalBytesAvailable);
         int result = readPipe.Read(buffer, offset, count);
         readEvent.Set();
+
         return result;
     }
 

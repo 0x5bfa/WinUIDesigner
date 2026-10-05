@@ -133,8 +133,14 @@ internal sealed class AnimationService : IDisposable
 
     private ResponseWithError InvokeOnDispatcher(Func<ResponseWithError> callback)
     {
-        try { return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken); }
-        catch (Exception ex) { return new ResponseWithError { HResult = ex.HResult, Error = ex.ToString() }; }
+        try
+        {
+            return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return new ResponseWithError { HResult = ex.HResult, Error = ex.ToString() };
+        }
     }
 
     private static ResponseWithError Success => new() { HResult = 0 };

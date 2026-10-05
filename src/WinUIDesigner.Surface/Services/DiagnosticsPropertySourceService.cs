@@ -17,6 +17,7 @@ internal sealed class DiagnosticsPropertySourceService
     private const int S_OK = 0;
     private const int E_PENDING = unchecked((int)0x8000000A);
     private const int NativeVisualStateSource = 14;
+
     private int initializationStarted;
     private volatile bool nativeUnavailable;
     private long retryAfter;
@@ -49,7 +50,10 @@ internal sealed class DiagnosticsPropertySourceService
                 nativeUnavailable = true;
                 Program.WriteDiagnosticTrace($"WinUI diagnostics TAP initialization unavailable: {ex}");
             }
-            finally { Interlocked.Exchange(ref initializationStarted, 0); }
+            finally
+            {
+                Interlocked.Exchange(ref initializationStarted, 0);
+            }
         });
     }
 
@@ -60,8 +64,11 @@ internal sealed class DiagnosticsPropertySourceService
         {
             return false;
         }
+
         if (Environment.TickCount64 >= Interlocked.Read(ref retryAfter) && Interlocked.Read(ref retryAfter) != 0)
+        {
             StartInitialization();
+        }
 
         nint inspectable = 0;
         try

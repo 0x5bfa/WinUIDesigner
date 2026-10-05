@@ -90,9 +90,18 @@ internal sealed class SurfaceService : IDisposable
             if (!await constructionGate.WaitAsync(TimeSpan.FromSeconds(30), protocolHandler.CancellationToken).ConfigureAwait(false))
                 throw new TimeoutException("Another document construction did not finish within 30 seconds.");
         }
-        catch (Exception ex) { return CreateFailure(ex); }
-        try { return await CreateSurfaceCoreAsync(requestInfo).ConfigureAwait(false); }
-        finally { constructionGate.Release(); }
+        catch (Exception ex)
+        {
+            return CreateFailure(ex);
+        }
+        try
+        {
+            return await CreateSurfaceCoreAsync(requestInfo).ConfigureAwait(false);
+        }
+        finally
+        {
+            constructionGate.Release();
+        }
     }
 
     private async Task<CreateSurfaceResponseInfo> CreateSurfaceCoreAsync(CreateSurfaceRequestInfo requestInfo)
@@ -102,20 +111,38 @@ internal sealed class SurfaceService : IDisposable
         {
             if (document is null || document.DocumentId == 0)
                 throw new ArgumentException("A nonzero document ID is required.");
-            await InvokeOnDispatcher(() => { CloseSurfaceDocument(document.DocumentId); return true; }, ex => throw ex).ConfigureAwait(false);
+            await InvokeOnDispatcher(() =>
+            {
+                CloseSurfaceDocument(document.DocumentId);
+                return true;
+            }, ex => throw ex).ConfigureAwait(false);
+
             foreach (CreateDocumentInfo? resourceDocument in new[] { requestInfo.Application, requestInfo.DesignTimeResources })
             {
-                if (resourceDocument is null) continue;
+                if (resourceDocument is null)
+                {
+                    continue;
+                }
+
                 bool cached = await InvokeOnDispatcher(() => resourceDocuments.ContainsKey(resourceDocument.DocumentId), ex => throw ex).ConfigureAwait(false);
                 if (cached)
                 {
-                    await InvokeOnDispatcher(() => { TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId); return true; }, ex => throw ex).ConfigureAwait(false);
+                    await InvokeOnDispatcher(() =>
+                    {
+                        TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId);
+                        return true;
+                    }, ex => throw ex).ConfigureAwait(false);
+
                     continue;
                 }
                 // A resource build can fail before its dictionary is installed.
                 // Record ownership first so the failure path also releases the
                 // partially constructed nonvisual objects and action handles.
-                await InvokeOnDispatcher(() => { TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId); return true; }, ex => throw ex).ConfigureAwait(false);
+                await InvokeOnDispatcher(() =>
+                {
+                    TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId);
+                    return true;
+                }, ex => throw ex).ConfigureAwait(false);
                 var resources = await BuildDocumentAsync(resourceDocument, resources: true).ConfigureAwait(false);
                 await InvokeOnDispatcher(() =>
                 {
@@ -144,7 +171,15 @@ internal sealed class SurfaceService : IDisposable
                 {
                     DocumentId = document?.DocumentId ?? 0, Message = ex.Message, CallStack = ex.ToString(), IsArtboardException = true,
                 });
-            await InvokeOnDispatcher(() => { if (document is not null) CloseSurfaceDocument(document.DocumentId); return true; }, _ => false).ConfigureAwait(false);
+            await InvokeOnDispatcher(() =>
+            {
+                if (document is not null)
+                {
+                    CloseSurfaceDocument(document.DocumentId);
+                }
+
+                return true;
+            }, _ => false).ConfigureAwait(false);
             return CreateFailure(ex);
         }
     }
@@ -160,7 +195,11 @@ internal sealed class SurfaceService : IDisposable
                 {
                     using var scope = objectIdentity.EnterDocument(document.DocumentId);
                     string xaml = TryReadPreparedXaml(document) ?? document.InitialXamlContent;
-                    if (string.IsNullOrWhiteSpace(xaml)) throw new InvalidOperationException("The prepared document has no XAML.");
+                    if (string.IsNullOrWhiteSpace(xaml))
+                    {
+                        throw new InvalidOperationException("The prepared document has no XAML.");
+                    }
+
                     string runtimeXaml = resources ? ExtractResourceXaml(xaml) : xaml;
                     object root = XamlReader.Load(SanitizePreparedXaml(runtimeXaml));
                     objectIdentity.Track(root);
@@ -185,7 +224,11 @@ internal sealed class SurfaceService : IDisposable
             throw new InvalidOperationException($"No construction actions were returned for document {document.DocumentId}.", parseFailure);
         return await InvokeOnDispatcher(() =>
         {
-            if (!resources) return (xamlActionService.BuildDocument(actionsDocument), (string?)null);
+            if (!resources)
+            {
+                return (xamlActionService.BuildDocument(actionsDocument), (string?)null);
+            }
+
             // Isolate action-built App resources from the designer's own dictionary.
             ResourceDictionary previous = Application.Current.Resources;
             Application.Current.Resources = new ResourceDictionary();
@@ -209,12 +252,22 @@ internal sealed class SurfaceService : IDisposable
     {
         XDocument document = XDocument.Parse(xaml);
         XElement root = document.Root ?? throw new InvalidOperationException("The resource document is empty.");
-        if (root.Name.LocalName != "Application") return xaml;
+        if (root.Name.LocalName != "Application")
+        {
+            return xaml;
+        }
+
         XElement? property = root.Elements().FirstOrDefault(value => value.Name.LocalName == "Application.Resources");
         XElement dictionary = property?.Elements().FirstOrDefault(value => value.Name.LocalName == "ResourceDictionary")
             ?? new XElement(root.Name.Namespace + "ResourceDictionary", property?.Elements() ?? []);
         foreach (XAttribute declaration in root.Attributes().Where(value => value.IsNamespaceDeclaration))
-            if (dictionary.Attribute(declaration.Name) is null) dictionary.Add(new XAttribute(declaration));
+        {
+            if (dictionary.Attribute(declaration.Name) is null)
+            {
+                dictionary.Add(new XAttribute(declaration));
+            }
+        }
+
         return dictionary.ToString();
     }
 
@@ -225,15 +278,24 @@ internal sealed class SurfaceService : IDisposable
         if (resourceDocuments.Remove(documentId, out var closedResource))
         {
             Application.Current.Resources.MergedDictionaries.Remove(closedResource);
-            foreach (var ids in documentResources.Values) ids.Remove(documentId);
+            foreach (var ids in documentResources.Values)
+            {
+                ids.Remove(documentId);
+            }
         }
         if (documentResources.Remove(documentId, out var resourceIds))
         {
             foreach (int resourceId in resourceIds)
             {
-                if (documentResources.Values.Any(ids => ids.Contains(resourceId))) continue;
+                if (documentResources.Values.Any(ids => ids.Contains(resourceId)))
+                {
+                    continue;
+                }
+
                 if (resourceDocuments.Remove(resourceId, out var dictionary))
+                {
                     Application.Current.Resources.MergedDictionaries.Remove(dictionary);
+                }
                 xamlActionService.ReleaseDocument(resourceId);
             }
         }
@@ -272,7 +334,11 @@ internal sealed class SurfaceService : IDisposable
 
             _ = dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
             {
-                if (!surfaces.TryGetValue(documentId, out var current) || !ReferenceEquals(current, surface)) return;
+                if (!surfaces.TryGetValue(documentId, out var current) || !ReferenceEquals(current, surface))
+                {
+                    return;
+                }
+
                 using var scope = objectIdentity.EnterDocument(documentId);
                 PublishVisualTreeMutation(root, VisualMutationType.Add);
                 protocolHandler.PostMessage(OnApplicationEventMessage, new OnApplicationEventResponse { EventName = "OnIdle" });
@@ -347,7 +413,11 @@ internal sealed class SurfaceService : IDisposable
     private static void AppendRuntimeElements(DependencyObject element, List<DependencyObject> elements, HashSet<object>? visited = null)
     {
         visited ??= new HashSet<object>(ReferenceEqualityComparer.Instance);
-        if (!visited.Add(element)) return;
+        if (!visited.Add(element))
+        {
+            return;
+        }
+
         elements.Add(element);
 
         // Walk the object graph produced from source XAML instead of the rendered
@@ -579,7 +649,10 @@ internal sealed class SurfaceService : IDisposable
             if (!await constructionGate.WaitAsync(TimeSpan.FromSeconds(30), protocolHandler.CancellationToken).ConfigureAwait(false))
                 throw new TimeoutException("The document construction did not finish before close.");
         }
-        catch (Exception ex) { return CreateResponseFailure(ex); }
+        catch (Exception ex)
+        {
+            return CreateResponseFailure(ex);
+        }
         try
         {
             return await InvokeOnDispatcher(() =>
@@ -739,13 +812,24 @@ internal sealed class SurfaceService : IDisposable
 
     private async Task<T> InvokeOnDispatcher<T>(Func<T> callback, Func<Exception, T> failureFactory)
     {
-        try { return await DispatcherOperation.InvokeAsync(dispatcherQueue, callback, protocolHandler.CancellationToken).ConfigureAwait(false); }
-        catch (Exception ex) { Program.WriteDiagnosticTrace($"Surface operation failed: {ex}"); return failureFactory(ex); }
+        try
+        {
+            return await DispatcherOperation.InvokeAsync(dispatcherQueue, callback, protocolHandler.CancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Program.WriteDiagnosticTrace($"Surface operation failed: {ex}");
+            return failureFactory(ex);
+        }
     }
 
     private void InvokeOnDispatcher(Action callback)
     {
-        DispatcherOperation.Invoke(dispatcherQueue, () => { callback(); return true; }, protocolHandler.CancellationToken);
+        DispatcherOperation.Invoke(dispatcherQueue, () =>
+        {
+            callback();
+            return true;
+        }, protocolHandler.CancellationToken);
     }
 
     private static bool TryParseColor(string? value, out Windows.UI.Color color)
@@ -919,7 +1003,11 @@ internal sealed class SurfaceService : IDisposable
                     Relation = new ParentChildRelation { Parent = entry.ParentHandle, Child = entry.Handle, ChildIndex = entry.ChildIndex },
                     VisualMutationType = VisualMutationType.Remove,
                 }).ToList();
-            if (mutations.Count != 0) protocolHandler.PostMessage(9, new MutationList { Mutations = mutations });
+            if (mutations.Count != 0)
+            {
+                protocolHandler.PostMessage(9, new MutationList { Mutations = mutations });
+            }
+
             // Keep detached object handles alive until document close: Undo can
             // reconnect an existing proxy. Visual-tree deletion is not object release.
         }
@@ -1053,8 +1141,11 @@ internal sealed class SurfaceService : IDisposable
         surfaces.Clear();
         foreach (var dictionary in resourceDocuments.Values)
             Application.Current.Resources.MergedDictionaries.Remove(dictionary);
-        resourceDocuments.Clear(); documentResources.Clear();
-        publishedSurfaceBounds.Clear(); publishedVisualTreeTopologies.Clear();
+        resourceDocuments.Clear();
+        documentResources.Clear();
+
+        publishedSurfaceBounds.Clear();
+        publishedVisualTreeTopologies.Clear();
         objectIdentity.Clear();
     }
 }

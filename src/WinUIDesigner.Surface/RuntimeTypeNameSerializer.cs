@@ -14,8 +14,10 @@ namespace WinUIDesigner.Surface;
 internal static class RuntimeTypeNameSerializer
 {
     private static readonly Assembly CoreLibraryAssembly = typeof(object).Assembly;
+
     private static readonly string SystemRuntimeAssemblyFullName =
         $"System.Runtime, Version={CoreLibraryAssembly.GetName().Version}, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a";
+
     private static readonly Type[] CollectionContracts =
     [
         typeof(IDictionary<,>), typeof(IList<>), typeof(ICollection<>),
@@ -26,6 +28,7 @@ internal static class RuntimeTypeNameSerializer
     public static string Serialize(Type type)
     {
         type = GetContractType(type);
+
         return $"{GetTypeName(type)}, {GetAssemblyName(type)}";
     }
 
@@ -34,16 +37,21 @@ internal static class RuntimeTypeNameSerializer
         if (type.Assembly.GetName().Name != "WinRT.Runtime" || type.IsInterface)
             return type;
 
-        Type[] interfaces = type.GetInterfaces();
+        var interfaces = type.GetInterfaces();
+
         foreach (Type contract in CollectionContracts)
         {
-            Type? match = interfaces
-                .Where(candidate => candidate == contract
-                    || candidate.IsGenericType && candidate.GetGenericTypeDefinition() == contract)
+            var match = interfaces
+                .Where(candidate => candidate == contract || candidate.IsGenericType && candidate.GetGenericTypeDefinition() == contract)
                 .OrderBy(candidate => candidate.FullName, StringComparer.Ordinal)
                 .FirstOrDefault();
-            if (match is not null) return match;
+
+            if (match is not null)
+            {
+                return match;
+            }
         }
+
         return type;
     }
 
@@ -51,30 +59,42 @@ internal static class RuntimeTypeNameSerializer
     {
         if (type.IsArray)
         {
-            string suffix = type.IsSZArray ? "[]"
-                : type.GetArrayRank() == 1 ? "[*]" : "[" + new string(',', type.GetArrayRank() - 1) + "]";
+            var suffix = type.IsSZArray
+                ? "[]"
+                : type.GetArrayRank() == 1
+                    ? "[*]"
+                    : "[" + new string(',', type.GetArrayRank() - 1) + "]";
+
             return GetTypeName(type.GetElementType()!) + suffix;
         }
+
         if (type.IsGenericType && !type.IsGenericTypeDefinition)
         {
-            string definition = type.GetGenericTypeDefinition().FullName!;
-            string arguments = string.Join(",", type.GetGenericArguments().Select(argument => $"[{Serialize(argument)}]"));
+            var definition = type.GetGenericTypeDefinition().FullName!;
+            var arguments = string.Join(",", type.GetGenericArguments().Select(argument => $"[{Serialize(argument)}]"));
+
             return $"{definition}[{arguments}]";
         }
+
         return type.FullName ?? type.Name;
     }
 
     private static string GetAssemblyName(Type type)
     {
-        if (type.IsArray) return GetAssemblyName(type.GetElementType()!);
+        if (type.IsArray)
+        {
+            return GetAssemblyName(type.GetElementType()!);
+        }
+
         // These framework contracts live in System.Runtime in the reference pack.
         // Preserve other assemblies rather than assuming every CoreLib type is
         // exported by that facade (List/Dictionary, for example, are not).
-        if (type.Assembly == CoreLibraryAssembly
-            && (type.IsPublic && !type.IsGenericType
-                || type.IsInterface
-                || type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>)))
+        if (type.Assembly == CoreLibraryAssembly &&
+            (type.IsPublic && !type.IsGenericType || type.IsInterface || type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>)))
+        {
             return SystemRuntimeAssemblyFullName;
+        }
+
         return type.Assembly.FullName!;
     }
 }

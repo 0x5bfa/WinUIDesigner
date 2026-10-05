@@ -11,15 +11,16 @@ internal static class RuntimeMemberResolver
 {
     public static MethodInfo? FindMethod(Type type, string name, Type[] parameters, bool isStatic)
     {
-        return type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy
-                | (isStatic ? BindingFlags.Static : BindingFlags.Instance))
-                .SingleOrDefault(method => method.Name == name && !method.ContainsGenericParameters
-                    && method.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(parameters));
+        return type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy | (isStatic ? BindingFlags.Static : BindingFlags.Instance))
+            .SingleOrDefault(method =>
+                method.Name == name &&
+                !method.ContainsGenericParameters &&
+                method.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(parameters));
     }
 
     public static ConstructorInfo? FindConstructor(Type type, Type[] parameters)
     {
         return type.GetConstructors().SingleOrDefault(constructor =>
-                constructor.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(parameters));
+            constructor.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(parameters));
     }
 }

@@ -153,7 +153,10 @@ internal sealed class SnapLineService : IDisposable
 
     private T InvokeOnDispatcher<T>(Func<T> action, T fallback)
     {
-        try { return DispatcherOperation.Invoke(dispatcherQueue, action, protocolHandler.CancellationToken); }
+        try
+        {
+            return DispatcherOperation.Invoke(dispatcherQueue, action, protocolHandler.CancellationToken);
+        }
         catch (Exception ex)
         {
             Program.WriteDiagnosticTrace($"Snap request failed: {ex}");
