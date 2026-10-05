@@ -19,15 +19,16 @@ namespace WinUIDesigner.Surface;
 internal static class Program
 {
     private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
+    internal static string ContentDirectory { get; } = GetContentDirectory();
 
     [STAThread]
     private static int Main(string[] args)
     {
         RegisterVisualStudioAssemblyResolver();
-        ProjectRuntimeResolver.Initialize(AppContext.BaseDirectory);
+        ProjectRuntimeResolver.Initialize(ContentDirectory);
         WriteDiagnosticTrace($"Main entered with {args.Length} arguments.");
         Assembly surfaceAssembly = typeof(Program).Assembly;
-        WriteDiagnosticTrace($"Surface assembly='{surfaceAssembly.Location}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
+        WriteDiagnosticTrace($"Surface assembly='{surfaceAssembly.Location}'; content directory='{ContentDirectory}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
 
         if (args.Length != 4 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
         {
@@ -140,5 +141,16 @@ internal static class Program
             "WinUIDesigner",
             "Logs",
             $"WinUIDesigner-{Environment.ProcessId}.log");
+    }
+
+    private static string GetContentDirectory()
+    {
+        // In single-file mode, AppContext.BaseDirectory can point to the bundle
+        // extraction folder. Project assemblies, PRI files, and prepared XAML live
+        // beside the shadow-copied WinUISurface.exe instead.
+        string? executablePath = Environment.ProcessPath;
+        return !string.IsNullOrWhiteSpace(executablePath)
+            ? Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory
+            : AppContext.BaseDirectory;
     }
 }

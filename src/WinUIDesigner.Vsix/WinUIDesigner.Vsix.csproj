@@ -1,4 +1,4 @@
-<!--  Copyright (c) 0x5BFA. All rights reserved. Licensed under MIT License.  -->
+﻿<!--  Copyright (c) 0x5BFA. All rights reserved. Licensed under MIT License.  -->
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
@@ -11,7 +11,6 @@
 		<StartAction>Program</StartAction>
 		<StartProgram>$(VsInstallRoot)\Common7\IDE\devenv.exe</StartProgram>
 		<StartArguments>/rootsuffix Exp</StartArguments>
-		<WinUISurfaceOutputDir>..\WinUIDesigner.Surface\bin\$(Configuration)\$(WinUIDesignerSurfaceTargetFramework)</WinUISurfaceOutputDir>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -109,20 +108,20 @@
 
 	<ItemGroup>
 		<None Include="source.extension.vsixmanifest" />
+		<VSIXSourceItem Include="..\..\LICENSE">
+			<TargetPath>LICENSE.txt</TargetPath>
+		</VSIXSourceItem>
 		<EmbeddedResource Update="Resources\VSPackage.resx">
 			<LogicalName>VSPackage.resources</LogicalName>
 		</EmbeddedResource>
-		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\..\..\LICENSE">
-			<TargetPath>LICENSE.txt</TargetPath>
+		<VSIXSourceItem Include="Resources\logo-90.png">
+			<TargetPath>WinUIDesignerIcon.png</TargetPath>
 		</VSIXSourceItem>
-		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\Resources\logo-90.png">
-			<TargetPath>Images\WinUIDesignerIcon.png</TargetPath>
+		<VSIXSourceItem Include="Resources\preview.png">
+			<TargetPath>WinUIDesignerPreview.png</TargetPath>
 		</VSIXSourceItem>
-		<VSIXSourceItem Include="$(MSBuildProjectDirectory)\Resources\preview.png">
-			<TargetPath>Images\WinUIDesignerPreview.png</TargetPath>
-		</VSIXSourceItem>
-		<VSIXSourceItem Include="$(WinUISurfaceOutputDir)\**\*" Exclude="$(WinUISurfaceOutputDir)\**\*.pdb;$(WinUISurfaceOutputDir)\**\Microsoft.VisualStudio.*.dll">
-			<VSIXSubPath>Surface\%(RecursiveDir)</VSIXSubPath>
+		<VSIXSourceItem Include="..\WinUIDesigner.Surface\bin\$(Configuration)\$(WinUIDesignerSurfaceTargetFramework)\win-x64\publish\WinUISurface.exe">
+			<TargetPath>WinUISurface.exe</TargetPath>
 		</VSIXSourceItem>
 	</ItemGroup>
 

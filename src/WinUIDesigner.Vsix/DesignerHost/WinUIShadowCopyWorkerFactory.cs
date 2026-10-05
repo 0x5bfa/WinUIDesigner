@@ -20,6 +20,10 @@ namespace WinUIDesigner.DesignerHost;
 // so reject other project kinds before using the Core worker implementation.
 internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
 {
+    // Microsoft.WindowsAppSDK 2.5.1 resolves to this Microsoft.WinUI file version.
+    // The assembly is bundled inside WinUISurface.exe for VSIX single-file deployment.
+    private const string VerifiedWinUIRuntimeFileVersion = "3.0.0.2609";
+
     public IHostShadowCopyWorker CreateWorker(
         SurfaceProcessInfo surfaceProcessInfo,
         IHostProject hostProject,
@@ -37,23 +41,23 @@ internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
             throw new NotSupportedException($"WinUI Designer requires a managed x64 project. Runtime={surfaceProcessInfo.PlatformIdentifier?.TargetRuntime}, architecture={surfaceProcessInfo.RuntimeArchitecture}.");
         }
 
-        var payloadWinUI = Path.Combine(Path.GetDirectoryName(typeof(WinUIShadowCopyWorkerFactory).Assembly.Location)!, "Surface", "Microsoft.WinUI.dll");
+        var extensionDirectory = Path.GetDirectoryName(typeof(WinUIShadowCopyWorkerFactory).Assembly.Location)!;
+        var payloadSurface = Path.Combine(extensionDirectory, "WinUISurface.exe");
         var projectWinUI = hostProject.References.Select(reference => reference.Path)
             .FirstOrDefault(reference => string.Equals(Path.GetFileName(reference), "Microsoft.WinUI.dll", StringComparison.OrdinalIgnoreCase));
 
-        if (!File.Exists(payloadWinUI))
+        if (!File.Exists(payloadSurface))
         {
-            throw new FileNotFoundException("The designer WinUI runtime was not installed.", payloadWinUI);
+            throw new FileNotFoundException("The single-file designer WinUI runtime was not installed.", payloadSurface);
         }
 
         if (projectWinUI is not null && File.Exists(projectWinUI))
         {
-            var expected = FileVersionInfo.GetVersionInfo(payloadWinUI).FileVersion;
             var actual = FileVersionInfo.GetVersionInfo(projectWinUI).FileVersion;
 
-            if (expected != actual)
+            if (!string.Equals(VerifiedWinUIRuntimeFileVersion, actual, StringComparison.Ordinal))
             {
-                throw new NotSupportedException($"The project WinUI runtime ({actual}) differs from the verified designer runtime ({expected}). Use Microsoft.WindowsAppSDK 2.5.1 for this designer build.");
+                throw new NotSupportedException($"The project WinUI runtime ({actual}) differs from the verified designer runtime ({VerifiedWinUIRuntimeFileVersion}). Use Microsoft.WindowsAppSDK 2.5.1 for this designer build.");
             }
         }
 
@@ -82,20 +86,14 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo,ã
         var assemblyDirectory = Path.GetDirectoryName(typeof(WinUICoreShadowCopyWorker).Assembly.Location)
             ?? throw new InvalidOperationException("Unable to locate the WinUIDesigner VSIX assembly.");
 
-        var payloadDirectory = Path.Combine(assemblyDirectory, "Surface");
-        if (!Directory.Exists(payloadDirectory))
+        var payloadSurface = Path.Combine(assemblyDirectory, SurfaceExecutableName);
+        if (!File.Exists(payloadSurface))
         {
-            throw new DirectoryNotFoundException($"WinUI surface payload was not found: {payloadDirectory}");
+            throw new FileNotFoundException($"WinUI surface payload was not found: {payloadSurface}", payloadSurface);
         }
 
-        foreach (string file in Directory.EnumerateFiles(payloadDirectory, "*", SearchOption.AllDirectories))
-        {
-            cancelToken.ThrowIfCancellationRequested();
-
-            var relativePath = file.Substring(payloadDirectory.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-            SurfaceInfo.ShadowCacheContent.AddItem(file, relativePath, forceCopyNow: true);
-        }
+        cancelToken.ThrowIfCancellationRequested();
+        SurfaceInfo.ShadowCacheContent.AddItem(payloadSurface, SurfaceExecutableName, forceCopyNow: true);
 
         // WPF's Core worker copies assemblies, but WinUI control libraries also
         // carry compiled templates in a sibling PRI. Keep each library's index

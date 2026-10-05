@@ -507,7 +507,7 @@ internal sealed class SurfaceService : IDisposable
             else if (string.Equals(uri.Scheme, "ms-appx", StringComparison.OrdinalIgnoreCase))
             {
                 path = Path.Combine(
-                    AppContext.BaseDirectory,
+                    Program.ContentDirectory,
                     Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
             }
         }

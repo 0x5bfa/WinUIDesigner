@@ -13,11 +13,21 @@
 		<WindowsPackageType>None</WindowsPackageType>
 		<SelfContained>true</SelfContained>
 		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+		<EnableMsixTooling>true</EnableMsixTooling>
+		<IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+		<PublishSingleFile>true</PublishSingleFile>
+		<DisableEmbeddedXbf>false</DisableEmbeddedXbf>
 		<DiagnosticsTapOutputDir>..\WinUIDesigner.DiagnosticsTap\bin\x64\$(Configuration)</DiagnosticsTapOutputDir>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+		<Content Include="$(DiagnosticsTapOutputDir)\WinUIDesigner.DiagnosticsTap.dll">
+			<Visible>false</Visible>
+			<Link>WinUIDesigner.DiagnosticsTap.dll</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+		</Content>
 	</ItemGroup>
 
 	<ItemGroup>
@@ -42,9 +52,5 @@
 			<Private>false</Private>
 		</Reference>
 	</ItemGroup>
-
-	<Target Name="CopyDiagnosticsTap" AfterTargets="Build">
-		<Copy SourceFiles="$(DiagnosticsTapOutputDir)\WinUIDesigner.DiagnosticsTap.dll" DestinationFolder="$(TargetDir)" />
-	</Target>
 
 </Project>

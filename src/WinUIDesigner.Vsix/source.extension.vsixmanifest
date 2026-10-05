@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="0x5BFA.WinUIDesigner" Version="1.1.0" Language="en-US" Publisher="0x5BFA" />
+    <Identity Id="0x5BFA.WinUIDesigner" Version="1.1.2" Language="en-US" Publisher="0x5BFA" />
     <DisplayName>WinUI 3 XAML Designer</DisplayName>
     <Description xml:space="preserve">WinUI 3 XAML designer integration for Visual Studio.</Description>
     <License>LICENSE.txt</License>
-    <Icon>Images\WinUIDesignerIcon.png</Icon>
-    <PreviewImage>Images\WinUIDesignerPreview.png</PreviewImage>
+    <Icon>WinUIDesignerIcon.png</Icon>
+    <PreviewImage>WinUIDesignerPreview.png</PreviewImage>
     <Tags>XAML, WinUI, Designer</Tags>
     <Preview>true</Preview>
   </Metadata>
