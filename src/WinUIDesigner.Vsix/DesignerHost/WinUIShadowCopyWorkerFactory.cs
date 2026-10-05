@@ -75,7 +75,7 @@ internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
         _ = base.CopySurfaceProcessPayload(cancelToken);
 
         string assemblyDirectory = Path.GetDirectoryName(typeof(WinUICoreShadowCopyWorker).Assembly.Location)
-            ?? throw new InvalidOperationException("Unable to locate WinUIDesigner.DesignerHost.");
+            ?? throw new InvalidOperationException("Unable to locate the WinUIDesigner VSIX assembly.");
         string payloadDirectory = Path.Combine(assemblyDirectory, "Surface");
         if (!Directory.Exists(payloadDirectory))
         {
