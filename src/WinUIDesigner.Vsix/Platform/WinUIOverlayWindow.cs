@@ -13,8 +13,7 @@ internal static class WinUIOverlayWindow
     {
         // The shared designer can also use a top-level overlay. Its own screen
         // positioning remains authoritative; only correct the child HWND variant.
-        if ((GetWindowLong(overlay, -16) & 0x40000000) == 0
-            || GetParent(overlay) != GetParent(host))
+        if ((GetWindowLong(overlay, -16) & 0x40000000) == 0 || GetParent(overlay) != GetParent(host))
         {
             return;
         }
@@ -34,6 +33,5 @@ internal static class WinUIOverlayWindow
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter,
-        int x, int y, int width, int height, uint flags);
+    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 }

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.VisualStudio.Shell;
 
-namespace WinUIDesigner.Vsix.Toolbox;
+namespace WinUIDesigner.Toolbox;
 
 [AttributeUsage(AttributeTargets.Class)]
 internal sealed class ProvideStaticWinUIToolboxItemsAttribute : RegistrationAttribute
@@ -25,9 +25,11 @@ internal sealed class ProvideStaticWinUIToolboxItemsAttribute : RegistrationAttr
     {
         yield return new ProvideStaticToolboxGroupAttribute("WinUI 3", WinUIStandardToolboxItems.GroupId) { Index = 2100 };
         int index = 1;
+
         foreach (string typeName in WinUIStandardToolboxItems.TypeNames)
         {
             string name = typeName.Substring(typeName.LastIndexOf('.') + 1);
+
             yield return new ProvideStaticToolboxItemAttribute(WinUIStandardToolboxItems.GroupId,
                 name, WinUIStandardToolboxItems.GetItemId(typeName), WinUIStandardToolboxItems.ClipboardFormat,
                 typeName, "@ToolboxBitmap_WinUIControl", 0xFF00FF) { Index = index++ };

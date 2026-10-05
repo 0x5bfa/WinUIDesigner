@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace WinUIDesigner.Vsix.Toolbox;
+namespace WinUIDesigner.Toolbox;
 
 internal static class WinUIStandardToolboxItems
 {

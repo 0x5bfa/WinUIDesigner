@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Mono.Cecil;
-using WinUIDesigner.Vsix.Toolbox;
+using WinUIDesigner.Toolbox;
 
 internal static class Program
 {

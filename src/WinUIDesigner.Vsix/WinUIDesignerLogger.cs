@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
-namespace WinUIDesigner.Vsix;
+namespace WinUIDesigner;
 
 internal static class WinUIDesignerLogger
 {

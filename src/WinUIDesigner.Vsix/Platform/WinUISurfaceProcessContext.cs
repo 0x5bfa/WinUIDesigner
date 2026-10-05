@@ -11,13 +11,8 @@ namespace WinUIDesigner.Platform;
 
 // Reuse UWP's process lifecycle and protocol; WinUI only replaces the instance
 // manager that prepares documents and coordinates app-level preview resources.
-internal sealed class WinUISurfaceProcessContext : UwpSurfaceProcessContext
+internal sealed class WinUISurfaceProcessContext(IProjectContext project) : UwpSurfaceProcessContext(project)
 {
-    public WinUISurfaceProcessContext(IProjectContext project)
-        : base(project)
-    {
-    }
-
     protected override DesignerInstanceManager CreateDesignerInstanceManager(
         ISurfaceProcessMarkupProvider markupProvider,
         ISurfaceProcessContext surfaceProcessContext,

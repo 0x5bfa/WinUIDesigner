@@ -1,13 +1,10 @@
 // Copyright (c) 0x5BFA. All rights reserved.
 // Licensed under MIT License.
 
-using System;
 using System.Runtime.Versioning;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Metadata;
 using Microsoft.VisualStudio.DesignTools.Utility;
-
-using WinUIDesigner.Vsix;
 
 namespace WinUIDesigner.Platform;
 
@@ -30,6 +27,7 @@ public sealed class WinUIPlatformCreator : PlatformCreatorBase
     protected override PlatformBase CreatePlatformInternal(IPlatformReferenceAssemblyResolver referenceAssemblyResolver)
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatformCreator.CreatePlatformInternal reached.");
+
         return new WinUIPlatform(referenceAssemblyResolver);
     }
 }

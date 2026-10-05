@@ -13,37 +13,31 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Pipeline;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
-using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents;
-
-using WinUIDesigner.Vsix;
 
 namespace WinUIDesigner.Platform;
 
-internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
+internal sealed class WinUIDesignerInstanceManager(
+    ISurfaceProcessMarkupProvider markupProvider,
+    ISurfaceProcessContext surfaceProcessContext,
+    IInstanceBuilderPlatform platform,
+    IProtocolHandler protocolHandler)
+    : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler)
 {
     // Configure app resources before the surface parses a document that may use them.
     private const int ConfigureAppResourcesMessage = 6001;
-    private readonly IProtocolHandler protocolHandler;
-
-    public WinUIDesignerInstanceManager(
-        ISurfaceProcessMarkupProvider markupProvider,
-        ISurfaceProcessContext surfaceProcessContext,
-        IInstanceBuilderPlatform platform,
-        IProtocolHandler protocolHandler)
-        : base(markupProvider, surfaceProcessContext, platform, protocolHandler)
-    {
-        this.protocolHandler = protocolHandler;
-    }
+    private readonly IProtocolHandler protocolHandler = protocolHandler;
 
     protected override LiveMarkupLinkResult TryLinkDocumentNode(ILiveNode liveNode, bool canDelay)
     {
         LiveMarkupLinkResult result = base.TryLinkDocumentNode(liveNode, canDelay);
         SourceInfo? source = liveNode.SourceInfo;
+
         WinUIDesignerLogger.LogTrace("Platform",
             $"Live markup link: handle={liveNode.Handle}, type={liveNode.TypeFullName}, " +
             $"file={source?.FileName ?? "<null>"}, line={source?.LineNumber ?? 0}, column={source?.ColumnNumber ?? 0}, " +
             $"markup={source?.MarkupHandle ?? 0}, changeVersion={source?.ChangeVersion ?? 0}, canDelay={canDelay}, " +
             $"result={result}." );
+
         return result;
     }
 
@@ -56,22 +50,30 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
         {
             // The shared instance builder does not expose WinUI App.xaml resources
             // to the out-of-process surface, so send the supported subset first.
-            string? projectPath = targetDocument.Document.DocumentContext?.Project?.ProjectPath;
-            string? projectDirectory = Path.GetDirectoryName(projectPath);
-            string? appXamlPath = projectDirectory is null ? null : Path.Combine(projectDirectory, "App.xaml");
-            XDocument? appXaml = appXamlPath is not null && File.Exists(appXamlPath)
-                ? XDocument.Load(appXamlPath) : null;
-            bool hasXamlControlsResources = appXaml is not null &&
+            var projectPath = targetDocument.Document.DocumentContext?.Project?.ProjectPath;
+            var projectDirectory = Path.GetDirectoryName(projectPath);
+            var appXamlPath = projectDirectory is null ? null : Path.Combine(projectDirectory, "App.xaml");
+
+            var appXaml = appXamlPath is not null && File.Exists(appXamlPath) ? XDocument.Load(appXamlPath) : null;
+
+            var hasXamlControlsResources = appXaml is not null &&
                 appXaml.Descendants()
                     .Any(element => element.Name.LocalName == "XamlControlsResources" &&
                         element.Name.NamespaceName == "using:Microsoft.UI.Xaml.Controls");
-            string? requestedTheme = (string?)appXaml?.Root?.Attribute("RequestedTheme");
+
+            var requestedTheme = (string?)appXaml?.Root?.Attribute("RequestedTheme");
 
             ResponseWithError response = await protocolHandler.SendMessageAsync<ResponseWithError>(
                 ConfigureAppResourcesMessage,
                 new AppResourcesRequest { HasXamlControlsResources = hasXamlControlsResources, RequestedTheme = requestedTheme }).ConfigureAwait(false);
-            if (response.HResult < 0) throw new InvalidOperationException(response.Error);
-            WinUIDesignerLogger.LogTrace("Platform",
+
+            if (response.HResult < 0)
+            {
+                throw new InvalidOperationException(response.Error);
+            }
+
+            WinUIDesignerLogger.LogTrace(
+                "Platform",
                 $"App.xaml resources configured: XamlControlsResources={hasXamlControlsResources}, RequestedTheme={requestedTheme ?? "Default"}, result=0x{response.HResult:X8}.");
         }
         catch (Exception ex)
@@ -83,7 +85,7 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
         bool includeInstanceBuildingActions = SurfaceProcessContext.ResetParseLoadDocumentFailure(targetDocument.DocumentId);
         includeInstanceBuildingActions |= SurfaceProcessContext.InstanceBuildingFailures.HasFailures;
 
-        var request = new CreateSurfaceRequestInfo
+        var request = new CreateSurfaceRequestInfo()
         {
             Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions),
         };
@@ -91,10 +93,13 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
         if (MarkupProvider is WinUISurfaceProcessMarkupProvider provider)
         {
             string? appDirectory = Path.GetDirectoryName(targetDocument.Document.DocumentContext?.Project?.ProjectPath);
+
             if (provider.AppXaml is null && appDirectory is not null && File.Exists(Path.Combine(appDirectory, "App.xaml")))
                 provider.PrepareApplicationDocumentsForLoading(ignoreAppXbf: true);
+
             if (provider.AppXaml is { } application)
                 request.Application = MakeCreateDocumentInfo(application, includeInstanceBuildingActions);
+
             if (provider.DesignTimeResources is { } resources)
                 request.DesignTimeResources = MakeCreateDocumentInfo(resources, includeInstanceBuildingActions);
         }

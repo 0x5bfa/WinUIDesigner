@@ -15,7 +15,7 @@ using MonoMod.RuntimeDetour;
 using WinUIDesigner.DesignerHost;
 using WinUIDesigner.Platform;
 
-namespace WinUIDesigner.Vsix;
+namespace WinUIDesigner;
 
 internal static class WinUIPlatformRegistration
 {
@@ -29,20 +29,30 @@ internal static class WinUIPlatformRegistration
 
     private static Hook? getPlatformCreatorHook;
     private static PlatformConfiguration? modifiedConfiguration;
-    private static readonly Dictionary<string, string?> OriginalBindings = new();
+    private static readonly Dictionary<string, string?> OriginalBindings = [];
 
     public static void Apply()
     {
-        if (getPlatformCreatorHook is not null) return;
+        if (getPlatformCreatorHook is not null)
+        {
+            return;
+        }
+
         string version = FileVersionInfo.GetVersionInfo(typeof(PlatformService).Assembly.Location).FileVersion ?? string.Empty;
+
         if (!version.StartsWith("18.9.", StringComparison.Ordinal) || IntPtr.Size != 8)
+        {
             throw new NotSupportedException($"WinUI Designer requires the verified Visual Studio 18.9 x64 contracts. Found {version}.");
+        }
+
         // Validate all private entry points before changing process-wide registration.
         _ = typeof(Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views.UwpSceneView).GetField("imageHost", BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingFieldException("UwpSceneView.imageHost");
+
         MethodInfo method = typeof(PlatformService).GetMethod(
-            nameof(PlatformService.GetPlatformCreator), BindingFlags.Public | BindingFlags.Instance, null, new[] { typeof(PlatformIdentifier) }, null)
+            nameof(PlatformService.GetPlatformCreator), BindingFlags.Public | BindingFlags.Instance, null, [typeof(PlatformIdentifier)], null)
             ?? throw new MissingMethodException(typeof(PlatformService).FullName, nameof(PlatformService.GetPlatformCreator));
+
         // Use the frontend's existing WinUI configuration. Adding another one can
         // make otherwise identical project contexts resolve to competing creators.
         PlatformConfiguration configuration = PlatformConfigurationService
@@ -51,38 +61,54 @@ internal static class WinUIPlatformRegistration
             ?? throw new InvalidOperationException("Visual Studio's desktop WinUI PlatformConfiguration was not found.");
 
         foreach (string key in new[] { "PlatformCreatorAssembly", "PlatformCreatorType", "HostPlatformAssembly", "HostPlatformType", "ToolboxPage" })
+        {
             OriginalBindings[key] = configuration.Properties.TryGetValue(key, out string? value) ? value : null;
+        }
+
         modifiedConfiguration = configuration;
+
         try
         {
-        configuration.Properties["PlatformCreatorAssembly"] = typeof(WinUIPlatformCreator).Assembly.FullName;
-        configuration.Properties["PlatformCreatorType"] = typeof(WinUIPlatformCreator).FullName;
-        configuration.Properties["HostPlatformAssembly"] = typeof(WinUIHostPlatform).Assembly.Location;
-        configuration.Properties["HostPlatformType"] = typeof(WinUIHostPlatform).FullName;
-        configuration.Properties["ToolboxPage"] = typeof(Toolbox.WinUIToolboxItemDiscovery).GUID.ToString("B");
+            configuration.Properties["PlatformCreatorAssembly"] = typeof(WinUIPlatformCreator).Assembly.FullName;
+            configuration.Properties["PlatformCreatorType"] = typeof(WinUIPlatformCreator).FullName;
+            configuration.Properties["HostPlatformAssembly"] = typeof(WinUIHostPlatform).Assembly.Location;
+            configuration.Properties["HostPlatformType"] = typeof(WinUIHostPlatform).FullName;
+            configuration.Properties["ToolboxPage"] = typeof(Toolbox.WinUIToolboxItemDiscovery).GUID.ToString("B");
 
-        WinUIDesignerLogger.LogInformation("VSIX", $"Injected WinUI designer bindings into '{configuration.Specification}'.");
+            WinUIDesignerLogger.LogInformation("VSIX", $"Injected WinUI designer bindings into '{configuration.Specification}'.");
 
-        // PlatformService does not consult the configured creator for this runtime
-        // in the current VS build. Detour its exact overload as a narrow fallback.
-        getPlatformCreatorHook ??= new Hook(method, GetPlatformCreatorHook);
-        WinUIDesignerLogger.LogInformation("VSIX", "Installed PlatformService.GetPlatformCreator fallback hook.");
+            // PlatformService does not consult the configured creator for this runtime
+            // in the current VS build. Detour its exact overload as a narrow fallback.
+            getPlatformCreatorHook ??= new Hook(method, GetPlatformCreatorHook);
+            WinUIDesignerLogger.LogInformation("VSIX", "Installed PlatformService.GetPlatformCreator fallback hook.");
         }
-        catch { Dispose(); throw; }
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
 
     public static void Dispose()
     {
         getPlatformCreatorHook?.Dispose();
         getPlatformCreatorHook = null;
+
         if (modifiedConfiguration is not null)
         {
             foreach (var entry in OriginalBindings)
             {
-                if (entry.Value is null) modifiedConfiguration.Properties.Remove(entry.Key);
-                else modifiedConfiguration.Properties[entry.Key] = entry.Value;
+                if (entry.Value is null)
+                {
+                    modifiedConfiguration.Properties.Remove(entry.Key);
+                }
+                else
+                {
+                    modifiedConfiguration.Properties[entry.Key] = entry.Value;
+                }
             }
         }
+
         OriginalBindings.Clear();
         modifiedConfiguration = null;
     }
@@ -92,6 +118,7 @@ internal static class WinUIPlatformRegistration
     private static IPlatformCreator? GetPlatformCreatorHook(GetPlatformCreatorDelegate original, PlatformService instance, PlatformIdentifier platformIdentifier)
     {
         WinUIDesignerLogger.LogDebug("VSIX", $"GetPlatformCreator called for '{platformIdentifier.Identifier}' (XamlRuntime={platformIdentifier.XamlRuntime}).");
+
         if (!string.Equals(platformIdentifier.XamlRuntime, XamlRuntimeNames.WinUI, StringComparison.Ordinal))
         {
             // Leave WPF, UWP, and any future runtime to Visual Studio's own creator.
@@ -100,10 +127,10 @@ internal static class WinUIPlatformRegistration
 
         // Cache one creator per PlatformService. The weak table follows VS service
         // lifetime without retaining closed project/platform-service instances.
-        WinUIPlatformCreator winUICreator = PlatformCreators.GetValue(instance, static platformService => new WinUIPlatformCreator(platformService));
+        var winUICreator = PlatformCreators.GetValue(instance, static platformService => new WinUIPlatformCreator(platformService));
 
         WinUIDesignerLogger.LogDebug("VSIX", $"Supplied WinUIPlatformCreator for '{platformIdentifier.Identifier}'.");
+
         return winUICreator;
     }
-
 }

@@ -7,49 +7,42 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Microsoft.VisualStudio.DesignTools.Designer.Views.ViewObjects;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
-using Microsoft.VisualStudio.DesignTools.SurfaceDesigner;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.ViewModel;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views;
 using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views;
 
-using WinUIDesigner.Vsix;
-
 namespace WinUIDesigner.Platform;
 
 // Retain the shared WPF artboard and tools, but replace the image host with the HWND
 // island host required by the out-of-process WinUI surface.
-internal sealed class WinUISceneView : UwpSceneView
+internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView(viewModel)
 {
-    private static readonly FieldInfo ImageHostField = typeof(UwpSceneView).GetField(
-        "imageHost",
-        BindingFlags.Instance | BindingFlags.NonPublic)
+    private static readonly FieldInfo ImageHostField = typeof(UwpSceneView).GetField("imageHost", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingFieldException(typeof(UwpSceneView).FullName, "imageHost");
-
-    public WinUISceneView(UwpSceneViewModel viewModel)
-        : base(viewModel)
-    {
-    }
 
     protected override Artboard CreateArtboard()
     {
         PlatformSurface = new IsolatedSurface();
 
-        WinUIIsolatedImageHost imageHost = new WinUIIsolatedImageHost(this);
+        var imageHost = new WinUIIsolatedImageHost(this);
+
         ImageHostField.SetValue(this, imageHost);
 
         WinUIDesignerLogger.LogTrace("Platform", "Minimal WinUI isolated image host created.");
         Artboard artboard = new UwpArtboard(PlatformSurface, imageHost, ViewModel);
+
 #if DEBUG
         artboard.AddHandler(
             System.Windows.Input.Mouse.PreviewMouseDownEvent,
             new System.Windows.Input.MouseButtonEventHandler(Artboard_PreviewMouseDown),
             handledEventsToo: true);
 #endif
+
         artboard.Loaded += ArtboardLoaded;
+
         return artboard;
     }
 
@@ -57,6 +50,7 @@ internal sealed class WinUISceneView : UwpSceneView
     private void Artboard_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         WritePointerDiagnostic("Artboard PreviewMouseDown", e);
+
         WinUIDesignerLogger.LogTrace("Platform",
             $"Artboard PreviewMouseDown: source={e.OriginalSource?.GetType().FullName ?? "<null>"}, " +
             $"activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
@@ -76,6 +70,7 @@ internal sealed class WinUISceneView : UwpSceneView
                     $"Artboard presentation source: hwnd=0x{hwndSource.Handle.ToInt64():X}, " +
                     $"root={hwndSource.RootVisual?.GetType().FullName ?? "<null>"}, " +
                     $"artboard={Artboard.ActualWidth}x{Artboard.ActualHeight}, hitTest={Artboard.IsHitTestVisible}, enabled={Artboard.IsEnabled}.");
+
                 hwndSource.AddHook(PresentationSourceHook);
 
                 if (hwndSource.RootVisual is System.Windows.UIElement root)
@@ -92,10 +87,13 @@ internal sealed class WinUISceneView : UwpSceneView
                 $"ArtboardLoaded before update: activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
                 $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
                 $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+
             EnsureActiveViewUpdated();
+
             ViewModel.SchedulePipelineTasks(
                 viewSwitched: true,
                 DocumentPipelineUpdateInfo.CreateFromViewModel(ViewModel, SceneUpdateStates.None));
+
             WinUIDesignerLogger.LogTrace("Platform",
                 $"ArtboardLoaded after update: activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
                 $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
@@ -151,28 +149,22 @@ internal sealed class WinUISceneView : UwpSceneView
 
 }
 
-internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
+internal sealed class WinUIIsolatedImageHost(WinUISceneView view) : IsolatedSurfaceImageHost(view)
 {
-    internal WinUISceneView SceneView { get; }
+    internal WinUISceneView SceneView { get; } = view;
+
 #if DEBUG
     private bool geometryDiagnosticScheduled;
 #endif
 
-    private sealed class WinUIHwndHost : IsolatedHwndHost
+    private sealed class WinUIHwndHost(WinUIIsolatedImageHost host) : IsolatedHwndHost(host)
     {
-        private readonly WinUIIsolatedImageHost imageHost;
+        private readonly WinUIIsolatedImageHost imageHost = host;
         private int parentHwnd;
-        private readonly int surfaceDocumentId;
+        private readonly int surfaceDocumentId = host.SurfaceDocument.DocumentId;
         private int mutationObserverRegistrationId;
         private System.Windows.Controls.Canvas? inputBridgeRoot;
         private System.Windows.UIElement? inputBridgeAdornerLayer;
-
-        public WinUIHwndHost(WinUIIsolatedImageHost host)
-            : base(host)
-        {
-            imageHost = host;
-            surfaceDocumentId = host.SurfaceDocument.DocumentId;
-        }
 
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
@@ -209,6 +201,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         protected override void InitializeSurfaceHwnd(IntPtr parentHwnd)
         {
             this.parentHwnd = parentHwnd.ToInt32();
+
             WinUIDesignerLogger.LogTrace("Platform",
                 $"WinUI artboard HWND initialized: parent=0x{parentHwnd.ToInt64():X}, document={surfaceDocumentId}.");
         }
@@ -230,34 +223,37 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                                 $"Frontend mutation received: count={mutations.Mutations?.Count ?? 0}, " +
                                 $"liveRootChildren={liveRoot.Children.Count()}, " +
                                 $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
+
                             imageHost.ScheduleGeometryDiagnostic();
 #endif
                         }));
                     });
                 }
 
-                pipeline.ProtocolHandler.PostMessage(548, new SetSurfacePositionRequestInfo
+                pipeline.ProtocolHandler.PostMessage(548, new SetSurfacePositionRequestInfo()
                 {
                     DocumentId = surfaceDocumentId,
                     ParentWindow = parentHwnd,
                     Width = width,
                     Height = height,
                 });
-                WinUIDesignerLogger.LogTrace("Platform",
+
+                WinUIDesignerLogger.LogTrace(
+                    "Platform",
                     $"SetSurfacePosition (548) posted: document={surfaceDocumentId}, parent=0x{parentHwnd:X}, size={width}x{height}.");
             }
         }
 
         private void InstallInputBridge()
         {
-            if (inputBridgeRoot is not null
-                || ExtensibilityLayerHwndSource?.HwndSource?.RootVisual is not System.Windows.Controls.Canvas root)
+            if (inputBridgeRoot is not null || ExtensibilityLayerHwndSource?.HwndSource?.RootVisual is not System.Windows.Controls.Canvas root)
             {
                 return;
             }
 
             inputBridgeRoot = root;
             inputBridgeAdornerLayer = root.Children.Count == 1 ? root.Children[0] : null;
+
             // The child HwndSource used by the VS designer is per-pixel transparent.
             // A fully transparent root is skipped by Win32 hit testing, so mouse input
             // falls through to the host HwndSource instead of reaching this bridge.
@@ -328,6 +324,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
             root.RemoveHandler(
                 System.Windows.Input.Mouse.QueryCursorEvent,
                 new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor));
+
             root.Background = null;
             inputBridgeAdornerLayer = null;
             inputBridgeRoot = null;
@@ -337,9 +334,8 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         {
             // Events from real adorner children already belong to the VS designer;
             // bridge only the blank overlay events that otherwise have no WPF target.
-            return inputBridgeRoot is not null
-                && (ReferenceEquals(args.OriginalSource, inputBridgeRoot)
-                    || ReferenceEquals(args.OriginalSource, inputBridgeAdornerLayer));
+            return inputBridgeRoot is not null &&
+                (ReferenceEquals(args.OriginalSource, inputBridgeRoot) || ReferenceEquals(args.OriginalSource, inputBridgeAdornerLayer));
         }
 
         private bool IsArtboardMouseCaptureWithin()
@@ -350,6 +346,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         private void InputBridge_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs args)
         {
             imageHost.SceneView.WritePointerDiagnostic("Input bridge MouseDown", args);
+
             WinUIDesignerLogger.LogTrace("Platform",
                 $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, forward={ShouldForwardInput(args)}.");
             WinUIDesignerLogger.LogTrace("Platform",
@@ -362,19 +359,18 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                 return;
             }
 
-            var forwarded = new System.Windows.Input.MouseButtonEventArgs(
-                args.MouseDevice,
-                args.Timestamp,
-                args.ChangedButton,
-                args.StylusDevice)
+            var forwarded = new System.Windows.Input.MouseButtonEventArgs(args.MouseDevice, args.Timestamp, args.ChangedButton, args.StylusDevice)
             {
                 RoutedEvent = System.Windows.Input.Mouse.MouseDownEvent,
                 Source = imageHost.SceneView.Artboard,
             };
+
             imageHost.SceneView.Artboard.RaiseEvent(forwarded);
+
             WinUIDesignerLogger.LogTrace("Platform",
                 $"Input bridge MouseDown forwarded: handled={forwarded.Handled}, " +
                 $"activeBehavior={imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+
             args.Handled = forwarded.Handled;
         }
 
@@ -397,15 +393,12 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                 return;
             }
 
-            var forwarded = new System.Windows.Input.MouseButtonEventArgs(
-                args.MouseDevice,
-                args.Timestamp,
-                args.ChangedButton,
-                args.StylusDevice)
+            var forwarded = new System.Windows.Input.MouseButtonEventArgs(args.MouseDevice, args.Timestamp, args.ChangedButton, args.StylusDevice)
             {
                 RoutedEvent = System.Windows.Input.Mouse.MouseUpEvent,
                 Source = imageHost.SceneView.Artboard,
             };
+
             imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Handled = forwarded.Handled;
         }
@@ -438,6 +431,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                 RoutedEvent = System.Windows.Input.Mouse.MouseWheelEvent,
                 Source = imageHost.SceneView.Artboard,
             };
+
             imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Handled = forwarded.Handled;
         }
@@ -454,6 +448,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                 RoutedEvent = System.Windows.Input.Mouse.QueryCursorEvent,
                 Source = imageHost.SceneView.Artboard,
             };
+
             imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Cursor = forwarded.Cursor;
             args.Handled = forwarded.Handled;
@@ -466,6 +461,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                 RoutedEvent = routedEvent,
                 Source = imageHost.SceneView.Artboard,
             };
+
             imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Handled = forwarded.Handled;
         }
@@ -481,6 +477,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         }
 
         geometryDiagnosticScheduled = true;
+
         var timer = new System.Windows.Threading.DispatcherTimer(
             TimeSpan.FromSeconds(1),
             System.Windows.Threading.DispatcherPriority.ApplicationIdle,
@@ -492,41 +489,44 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                 LogSelectionHitTests();
             },
             System.Windows.Threading.Dispatcher.CurrentDispatcher);
+
         timer.Start();
     }
 
     private void LogSelectionHitTests()
     {
         System.Windows.Media.GeneralTransform contentToArtboard = SceneView.Artboard.CalculateTransformFromContentToArtboard();
+
         double[] xs = [400, 600, 800];
         double[] ys = [200, 400, 600];
+
         foreach (double x in xs)
         {
             foreach (double y in ys)
             {
                 var contentPoint = new System.Windows.Point(x, y);
-                System.Windows.Point artboardPoint = contentToArtboard.Transform(contentPoint);
-                SceneNode? hit = SceneView.GetSelectableElementAtPoint(artboardPoint, SelectionFor3D.None, selectedOnly: false);
-                string typeName = hit?.Type.FullName ?? "<none>";
-                string bounds = hit is { IsViewObjectValid: true }
-                    ? SceneView.GetActualBounds(hit.ViewTargetElement).ToString()
-                    : "<invalid>";
-                string hitDetails = "";
+                var artboardPoint = contentToArtboard.Transform(contentPoint);
+                var hit = SceneView.GetSelectableElementAtPoint(artboardPoint, SelectionFor3D.None, selectedOnly: false);
+                var typeName = hit?.Type.FullName ?? "<none>";
+                var bounds = hit is { IsViewObjectValid: true } ? SceneView.GetActualBounds(hit.ViewTargetElement).ToString() : "<invalid>";
+                var hitDetails = "";
+
                 if (hit is { IsViewObjectValid: true })
                 {
                     var hitView = hit.ViewTargetElement;
                     var knownProperties = hit.ProjectContext.Metadata.PlatformMetadata.KnownProperties;
-                    string boundsInParent = SceneView.GetActualBoundsInParent(hitView).ToString();
-                    LiveObject? horizontalAlignment = hitView.LiveObject.GetValue(knownProperties.FrameworkElementHorizontalAlignment);
-                    LiveObject? verticalAlignment = hitView.LiveObject.GetValue(knownProperties.FrameworkElementVerticalAlignment);
-                    LiveObject? layoutSlot = hitView.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.LayoutSlotProperty);
-                    LiveObject? transformToParent = hitView.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.TransformToParentProperty);
+                    var boundsInParent = SceneView.GetActualBoundsInParent(hitView).ToString();
+                    var horizontalAlignment = hitView.LiveObject.GetValue(knownProperties.FrameworkElementHorizontalAlignment);
+                    var verticalAlignment = hitView.LiveObject.GetValue(knownProperties.FrameworkElementVerticalAlignment);
+                    var layoutSlot = hitView.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.LayoutSlotProperty);
+                    var transformToParent = hitView.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.TransformToParentProperty);
                     hitDetails =
                         $", parent={hitView.VisualParent?.LiveObject?.Type?.FullName ?? "<null>"}, " +
                         $"boundsInParent={boundsInParent}, visualChildren={hitView.VisualChildrenCount}, " +
                         $"horizontalAlignment={horizontalAlignment?.Value ?? "<null>"}, verticalAlignment={verticalAlignment?.Value ?? "<null>"}, " +
                         $"layoutSlot={layoutSlot?.Value ?? "<null>"}, transformToParent={transformToParent?.Value ?? "<null>"}";
                 }
+
                 WinUIDesignerLogger.LogTrace("Platform",
                     $"Frontend selection hit: content={contentPoint}, artboard={artboardPoint}, type={typeName}, bounds={bounds}{hitDetails}.");
             }
@@ -545,43 +545,44 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
             if (node.IsViewObjectValid)
             {
                 var viewObject = node.ViewTargetElement;
-                System.Windows.Rect bounds = SceneView.GetActualBounds(viewObject);
-                System.Windows.Rect boundsInParent = SceneView.GetActualBoundsInParent(viewObject);
-                string expectedActualWidth = "<unavailable>";
-                string expectedActualHeight = "<unavailable>";
-                string expectedHorizontalAlignment = "<unavailable>";
-                string expectedVerticalAlignment = "<unavailable>";
-                string expectedLayoutSlot = "<unavailable>";
-                string expectedTransformToParent = "<unavailable>";
+                var bounds = SceneView.GetActualBounds(viewObject);
+                var boundsInParent = SceneView.GetActualBoundsInParent(viewObject);
+                var expectedActualWidth = "<unavailable>";
+                var expectedActualHeight = "<unavailable>";
+                var expectedHorizontalAlignment = "<unavailable>";
+                var expectedVerticalAlignment = "<unavailable>";
+                var expectedLayoutSlot = "<unavailable>";
+                var expectedTransformToParent = "<unavailable>";
+
                 try
                 {
-                var metadata = node.ProjectContext.Metadata;
-                var instanceBuilderPlatform = new Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.SurfaceIsolation.UwpDesignerInstanceBuilderPlatform(node.ProjectContext);
-                var actualWidthProperty = metadata.ResolveProperty(metadata.PlatformMetadata.KnownProperties.FrameworkElementActualWidth);
-                var actualHeightProperty = metadata.ResolveProperty(metadata.PlatformMetadata.KnownProperties.FrameworkElementActualHeight);
-                var horizontalAlignmentProperty = metadata.ResolveProperty(metadata.PlatformMetadata.KnownProperties.FrameworkElementHorizontalAlignment);
-                var verticalAlignmentProperty = metadata.ResolveProperty(metadata.PlatformMetadata.KnownProperties.FrameworkElementVerticalAlignment);
-                var layoutSlotProperty = metadata.ResolveProperty(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.LayoutSlotProperty);
-                var transformToParentProperty = metadata.ResolveProperty(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.TransformToParentProperty);
-                expectedActualWidth = instanceBuilderPlatform.SerializeProperty(actualWidthProperty);
-                expectedActualHeight = instanceBuilderPlatform.SerializeProperty(actualHeightProperty);
-                expectedHorizontalAlignment = instanceBuilderPlatform.SerializeProperty(horizontalAlignmentProperty);
-                expectedVerticalAlignment = instanceBuilderPlatform.SerializeProperty(verticalAlignmentProperty);
-                expectedLayoutSlot = instanceBuilderPlatform.SerializeProperty(layoutSlotProperty);
-                expectedTransformToParent = instanceBuilderPlatform.SerializeProperty(transformToParentProperty);
+                    var metadata = node.ProjectContext.Metadata;
+                    var instanceBuilderPlatform = new Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.SurfaceIsolation.UwpDesignerInstanceBuilderPlatform(node.ProjectContext);
+                    var actualWidthProperty = metadata.ResolveProperty(metadata.PlatformMetadata.KnownProperties.FrameworkElementActualWidth);
+                    var actualHeightProperty = metadata.ResolveProperty(metadata.PlatformMetadata.KnownProperties.FrameworkElementActualHeight);
+                    var horizontalAlignmentProperty = metadata.ResolveProperty(metadata.PlatformMetadata.KnownProperties.FrameworkElementHorizontalAlignment);
+                    var verticalAlignmentProperty = metadata.ResolveProperty(metadata.PlatformMetadata.KnownProperties.FrameworkElementVerticalAlignment);
+                    var layoutSlotProperty = metadata.ResolveProperty(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.LayoutSlotProperty);
+                    var transformToParentProperty = metadata.ResolveProperty(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.TransformToParentProperty);
+                    expectedActualWidth = instanceBuilderPlatform.SerializeProperty(actualWidthProperty);
+                    expectedActualHeight = instanceBuilderPlatform.SerializeProperty(actualHeightProperty);
+                    expectedHorizontalAlignment = instanceBuilderPlatform.SerializeProperty(horizontalAlignmentProperty);
+                    expectedVerticalAlignment = instanceBuilderPlatform.SerializeProperty(verticalAlignmentProperty);
+                    expectedLayoutSlot = instanceBuilderPlatform.SerializeProperty(layoutSlotProperty);
+                    expectedTransformToParent = instanceBuilderPlatform.SerializeProperty(transformToParentProperty);
 
-                LiveObject? actualWidth = viewObject.LiveObject.GetValue(metadata.PlatformMetadata.KnownProperties.FrameworkElementActualWidth);
-                LiveObject? actualHeight = viewObject.LiveObject.GetValue(metadata.PlatformMetadata.KnownProperties.FrameworkElementActualHeight);
-                LiveObject? horizontalAlignment = viewObject.LiveObject.GetValue(metadata.PlatformMetadata.KnownProperties.FrameworkElementHorizontalAlignment);
-                LiveObject? verticalAlignment = viewObject.LiveObject.GetValue(metadata.PlatformMetadata.KnownProperties.FrameworkElementVerticalAlignment);
-                LiveObject? layoutSlot = viewObject.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.LayoutSlotProperty);
-                LiveObject? transformToParent = viewObject.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.TransformToParentProperty);
-                expectedActualWidth += $" -> valueType={instanceBuilderPlatform.SerializeType(actualWidthProperty.PropertyType)}, live={actualWidth?.Value ?? "<null>"}";
-                expectedActualHeight += $" -> valueType={instanceBuilderPlatform.SerializeType(actualHeightProperty.PropertyType)}, live={actualHeight?.Value ?? "<null>"}";
-                expectedHorizontalAlignment += $" -> valueType={instanceBuilderPlatform.SerializeType(horizontalAlignmentProperty.PropertyType)}, live={horizontalAlignment?.Value ?? "<null>"}";
-                expectedVerticalAlignment += $" -> valueType={instanceBuilderPlatform.SerializeType(verticalAlignmentProperty.PropertyType)}, live={verticalAlignment?.Value ?? "<null>"}";
-                expectedLayoutSlot += $" -> valueType={instanceBuilderPlatform.SerializeType(layoutSlotProperty.PropertyType)}, live={layoutSlot?.Value ?? "<null>"}";
-                expectedTransformToParent += $" -> valueType={instanceBuilderPlatform.SerializeType(transformToParentProperty.PropertyType)}, live={transformToParent?.Value ?? "<null>"}";
+                    var actualWidth = viewObject.LiveObject.GetValue(metadata.PlatformMetadata.KnownProperties.FrameworkElementActualWidth);
+                    var actualHeight = viewObject.LiveObject.GetValue(metadata.PlatformMetadata.KnownProperties.FrameworkElementActualHeight);
+                    var horizontalAlignment = viewObject.LiveObject.GetValue(metadata.PlatformMetadata.KnownProperties.FrameworkElementHorizontalAlignment);
+                    var verticalAlignment = viewObject.LiveObject.GetValue(metadata.PlatformMetadata.KnownProperties.FrameworkElementVerticalAlignment);
+                    var layoutSlot = viewObject.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.LayoutSlotProperty);
+                    var transformToParent = viewObject.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.TransformToParentProperty);
+                    expectedActualWidth += $" -> valueType={instanceBuilderPlatform.SerializeType(actualWidthProperty.PropertyType)}, live={actualWidth?.Value ?? "<null>"}";
+                    expectedActualHeight += $" -> valueType={instanceBuilderPlatform.SerializeType(actualHeightProperty.PropertyType)}, live={actualHeight?.Value ?? "<null>"}";
+                    expectedHorizontalAlignment += $" -> valueType={instanceBuilderPlatform.SerializeType(horizontalAlignmentProperty.PropertyType)}, live={horizontalAlignment?.Value ?? "<null>"}";
+                    expectedVerticalAlignment += $" -> valueType={instanceBuilderPlatform.SerializeType(verticalAlignmentProperty.PropertyType)}, live={verticalAlignment?.Value ?? "<null>"}";
+                    expectedLayoutSlot += $" -> valueType={instanceBuilderPlatform.SerializeType(layoutSlotProperty.PropertyType)}, live={layoutSlot?.Value ?? "<null>"}";
+                    expectedTransformToParent += $" -> valueType={instanceBuilderPlatform.SerializeType(transformToParentProperty.PropertyType)}, live={transformToParent?.Value ?? "<null>"}";
                 }
                 catch (Exception ex)
                 {
@@ -612,17 +613,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
     }
 #endif
 
-    public WinUIIsolatedImageHost(WinUISceneView view)
-        : base(view)
-    {
-        SceneView = view;
-    }
-
-    public override bool IsViewStateSupported(
-        int width,
-        int height,
-        DisplayOrientation displayOrientation,
-        DeviceScaleFactor scale)
+    public override bool IsViewStateSupported(int width, int height, DisplayOrientation displayOrientation, DeviceScaleFactor scale)
     {
         return true;
     }

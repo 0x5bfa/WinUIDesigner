@@ -1,16 +1,17 @@
 // Copyright (c) 0x5BFA. All rights reserved.
 // Licensed under MIT License.
 
+using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.DesignTools.Utility;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.VisualStudio;
-using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
-using WinUIDesigner.Vsix.Toolbox;
+using WinUIDesigner.Toolbox;
 
-namespace WinUIDesigner.Vsix;
+namespace WinUIDesigner;
 
 /// <summary>
 /// Register the WinUI runtime with VS's XAML editor, then install the platform
@@ -19,7 +20,7 @@ namespace WinUIDesigner.Vsix;
 /// </summary>
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
 [Guid(PackageGuidString)]
-[ProvideXamlRuntimeDesigner("WinUI")]
+[ProvideXamlRuntimeDesigner(XamlRuntimeNames.WinUI)]
 [ProvideStaticWinUIToolboxItems]
 [ProvideToolboxItemDiscovery("WinUI 3", "WinUIComponents", typeof(WinUIToolboxItemDiscovery), typeof(WinUIToolboxItemCreator), new[] { ".NETCoreApp" }, AppDomainCreatorType = typeof(WinUIToolboxAppDomainControl))]
 [ProvideAutoLoad(VSConstants.UICONTEXT.NoSolution_string, PackageAutoLoadFlags.BackgroundLoad)]
@@ -67,5 +68,4 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 
         base.Dispose(disposing);
     }
-
 }

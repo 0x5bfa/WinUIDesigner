@@ -1,16 +1,11 @@
 // Copyright (c) 0x5BFA. All rights reserved.
 // Licensed under MIT License.
 
-using System;
-using Microsoft.VisualStudio.DesignTools.RuntimeHost.Pipeline;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.UI.PropertyInspector;
-using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.UI.PropertyInspector;
 using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Documents;
-
-using WinUIDesigner.Vsix;
 
 namespace WinUIDesigner.Platform;
 
@@ -27,20 +22,25 @@ public sealed class WinUIProjectContext : XamlProjectContext
     protected override void InitializeProject()
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.InitializeProject reached.");
+
         base.InitializeProject();
+
         WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.InitializeProject completed.");
     }
 
     protected override void CreateProjectMetadata()
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.CreateProjectMetadata reached.");
+
         base.CreateProjectMetadata();
+
         WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.CreateProjectMetadata completed.");
     }
 
     protected override IPropertyInspectorContext CreatePropertyInspectorContext()
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.CreatePropertyInspectorContext reached.");
+
         return new UwpPropertyInspectorContext(this);
     }
 
@@ -48,14 +48,13 @@ public sealed class WinUIProjectContext : XamlProjectContext
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.CreateSurfaceProcessContextCore reached.");
 
-        WinUISurfaceProcessContext? context = applicationSurfaceContext as WinUISurfaceProcessContext;
-        if (context is null)
+        if (applicationSurfaceContext is not WinUISurfaceProcessContext context)
         {
             context = new WinUISurfaceProcessContext(this);
+
             WinUIDesignerLogger.LogTrace("Platform", "WinUISurfaceProcessContext bridge instantiated.");
         }
 
         return context;
     }
-
 }

@@ -9,34 +9,43 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Microsoft.VisualStudio.Shell.Interop;
 
-using WinUIDesigner.Vsix;
-
-namespace WinUIDesigner.Vsix.Toolbox;
+namespace WinUIDesigner.Toolbox;
 
 internal sealed class WinUIStaticToolboxItemProvider : IVsToolboxItemProvider
 {
     public int GetItemContent(string itemId, ushort format, out IntPtr global)
     {
         global = IntPtr.Zero;
-        if (format != DataFormats.GetDataFormat(WinUIStandardToolboxItems.ClipboardFormat).Id
-            || !WinUIStandardToolboxItems.ContainsItem(itemId)) return VSConstants.E_INVALIDARG;
+
+        if (format != DataFormats.GetDataFormat(WinUIStandardToolboxItems.ClipboardFormat).Id ||
+            !WinUIStandardToolboxItems.ContainsItem(itemId))
+        {
+            return VSConstants.E_INVALIDARG;
+        }
 
         string typeName = itemId.Substring(0, itemId.IndexOf(','));
-        var properties = ToolEncoder.GetToolProperties(typeName, false,
-            new AssemblyName(WinUIStandardToolboxItems.AssemblyIdentity), "[CreationTool]");
+        var properties = ToolEncoder.GetToolProperties(typeName, false, new AssemblyName(WinUIStandardToolboxItems.AssemblyIdentity), "[CreationTool]");
+
         // The shared UWP/WinUI format alone does not distinguish the two runtimes.
         // IsToolSupported checks the project's SDK capabilities before accepting it.
         properties["CreationTypeSdkAppliesTo"] = "WinUI";
         properties["TargetPlatform"] = "Windows, Version=10.0";
+
         byte[] bytes = ToolEncoder.Encode(properties);
+
         IntPtr allocation = GlobalAlloc(0x0002, new UIntPtr((uint)bytes.Length));
-        if (allocation == IntPtr.Zero) return VSConstants.E_OUTOFMEMORY;
+        if (allocation == IntPtr.Zero)
+        {
+            return VSConstants.E_OUTOFMEMORY;
+        }
+
         IntPtr address = GlobalLock(allocation);
         if (address == IntPtr.Zero)
         {
             GlobalFree(allocation);
             return VSConstants.E_OUTOFMEMORY;
         }
+
         try
         {
             Marshal.Copy(bytes, 0, address, bytes.Length);
@@ -47,9 +56,12 @@ internal sealed class WinUIStaticToolboxItemProvider : IVsToolboxItemProvider
             GlobalFree(allocation);
             throw;
         }
+
         GlobalUnlock(allocation);
         global = allocation; // Ownership passes to the Toolbox; it calls GlobalFree.
+
         WinUIDesignerLogger.LogDebug("Toolbox", $"Static item content: {typeName}.");
+
         return VSConstants.S_OK;
     }
 

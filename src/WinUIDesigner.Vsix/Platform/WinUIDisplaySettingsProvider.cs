@@ -9,8 +9,6 @@ using Microsoft.VisualStudio.DesignTools.Utility.IO;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.UI.PlatformPane;
 using Microsoft.Win32;
 
-using WinUIDesigner.Vsix;
-
 namespace WinUIDesigner.Platform;
 
 // Retain the UWP SDK device parser, ordering, qualifiers and default settings.
@@ -21,18 +19,29 @@ internal sealed class WinUIDisplaySettingsProvider(IPlatformService platformServ
 {
     protected override string[] GetXmlFilesFromDirectory()
     {
-        string[] files = base.GetXmlFilesFromDirectory();
-        if (files is { Length: > 0 }) return files;
+        var files = base.GetXmlFilesFromDirectory();
+        if (files is { Length: > 0 })
+        {
+            return files;
+        }
 
-        using RegistryKey localMachine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
-        using RegistryKey? installedRoots = localMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Kits\Installed Roots");
-        if (installedRoots?.GetValue("KitsRoot10") is not string sdkRoot) return files;
+        using var localMachine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
+        using var installedRoots = localMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Kits\Installed Roots");
+        if (installedRoots?.GetValue("KitsRoot10") is not string sdkRoot)
+        {
+            return files;
+        }
 
-        string devicesDirectory = LocalizationHelper.FindFolderForCulture(
+        var devicesDirectory = LocalizationHelper.FindFolderForCulture(
             CultureInfo.CreateSpecificCulture("en-US"), Path.Combine(sdkRoot, @"DesignTime\UAP\Devices"), useLcidFormat: true);
-        if (string.IsNullOrEmpty(devicesDirectory) || !Directory.Exists(devicesDirectory)) return files;
+
+        if (string.IsNullOrEmpty(devicesDirectory) || !Directory.Exists(devicesDirectory))
+        {
+            return files;
+        }
 
         WinUIDesignerLogger.LogTrace("Platform", $"UWP device definitions loaded from '{devicesDirectory}'.");
+
         return AccessHelper.AccessService.DirectoryGetFiles(devicesDirectory, "*.xml");
     }
 }

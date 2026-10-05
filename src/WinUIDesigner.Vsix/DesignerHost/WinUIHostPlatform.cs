@@ -11,8 +11,6 @@ using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Microsoft.VisualStudio.DesignTools.WpfDesignerHost;
 
-using WinUIDesigner.Vsix;
-
 namespace WinUIDesigner.DesignerHost;
 
 // Reuse VS's WPF/.NET host services for process lifetime and IPC, while supplying
@@ -37,18 +35,30 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         CancellationToken cancelToken)
     {
         cancelToken.ThrowIfCancellationRequested();
+
         using Process currentProcess = Process.GetCurrentProcess();
-        string initializationData = dataBridge.Serialize(currentProcess.Id);
+        var initializationData = dataBridge.Serialize(currentProcess.Id);
 
         WinUIDesignerLogger.LogInformation("Host", $"Surface activation reached: '{path}'.");
+
         Process surfaceProcess = StartSurfaceProcess(path, tapPath, initializationData);
+
         if (cancelToken.IsCancellationRequested)
         {
-            try { surfaceProcess.Kill(); }
-            finally { surfaceProcess.Dispose(); }
+            try
+            {
+                surfaceProcess.Kill();
+            }
+            finally
+            {
+                surfaceProcess.Dispose();
+            }
+
             cancelToken.ThrowIfCancellationRequested();
         }
+
         WinUIDesignerLogger.LogInformation("Host", $"WinUISurface.exe started (PID={surfaceProcess.Id}); pipe initialization data passed.");
+
         return new Win32SurfaceProcess(surfaceProcess, surfaceProcessId);
     }
 
@@ -60,7 +70,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         using Process currentProcess = Process.GetCurrentProcess();
         // Keep this argument order in sync with Surface.Program.Main: VS host PID,
         // diagnostics TAP path, serialized pipe handles, then the inherited flag.
-        string arguments = string.Format(
+        var arguments = string.Format(
             CultureInfo.InvariantCulture,
             "{0} {1} {2} {3}",
             currentProcess.Id,
@@ -68,9 +78,9 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             WpfHostPlatform.ShellEscape(initializationData),
             GetThreadDpiAwarenessContext().ToInt64());
 
-        var process = new Process
+        var process = new Process()
         {
-            StartInfo = new ProcessStartInfo(path, arguments)
+            StartInfo = new(path, arguments)
             {
                 UseShellExecute = false,
                 RedirectStandardError = true,
@@ -79,7 +89,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             EnableRaisingEvents = true,
         };
 
-        string? visualStudioInstallRoot = GetVisualStudioInstallRoot();
+        var visualStudioInstallRoot = GetVisualStudioInstallRoot();
         if (!string.IsNullOrWhiteSpace(visualStudioInstallRoot))
         {
             process.StartInfo.EnvironmentVariables["WINUIDESIGNER_VS_INSTALL_ROOT"] = visualStudioInstallRoot;
@@ -97,7 +107,8 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             try
             {
                 int exitCode = process.ExitCode;
-                string exitMessage = $"WinUISurface.exe exited (PID={process.Id}, ExitCode={exitCode}).";
+                var exitMessage = $"WinUISurface.exe exited (PID={process.Id}, ExitCode={exitCode}).";
+
                 if (exitCode == 0)
                 {
                     WinUIDesignerLogger.LogInformation("Host", exitMessage);
@@ -120,7 +131,9 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         }
 
         process.Dispose();
+
         WinUIDesignerLogger.LogError("Host", $"Failed to start WinUISurface.exe at '{path}'.");
+
         throw new InvalidProgramException(path);
     }
 
@@ -128,14 +141,12 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
     {
         // The isolated Surface process is outside devenv's probing paths. Pass the
         // discovered VS root so it can resolve the private Designer contract DLLs.
-        string? ideDirectory = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
-        string? commonDirectory = ideDirectory is null ? null : Directory.GetParent(ideDirectory)?.FullName;
-        string? installRoot = commonDirectory is null ? null : Directory.GetParent(commonDirectory)?.FullName;
+        var ideDirectory = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+        var commonDirectory = ideDirectory is null ? null : Directory.GetParent(ideDirectory)?.FullName;
+        var installRoot = commonDirectory is null ? null : Directory.GetParent(commonDirectory)?.FullName;
 
-        return installRoot is not null && Directory.Exists(
-            Path.Combine(installRoot, "Common7", "IDE", "PrivateAssemblies"))
+        return installRoot is not null && Directory.Exists(Path.Combine(installRoot, "Common7", "IDE", "PrivateAssemblies"))
             ? installRoot
             : null;
     }
-
 }

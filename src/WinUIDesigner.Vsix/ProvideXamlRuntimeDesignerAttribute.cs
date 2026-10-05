@@ -4,7 +4,7 @@
 using System;
 using Microsoft.VisualStudio.Shell;
 
-namespace WinUIDesigner.Vsix;
+namespace WinUIDesigner;
 
 /// <summary>
 /// Connect this XAML runtime name to the editor factory VS uses for its designer tab.

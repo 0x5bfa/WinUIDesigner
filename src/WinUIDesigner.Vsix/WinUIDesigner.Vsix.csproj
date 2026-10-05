@@ -4,7 +4,7 @@
 	<PropertyGroup>
 		<TargetFramework>net472</TargetFramework>
 		<AssemblyName>WinUIDesigner</AssemblyName>
-		<RootNamespace>WinUIDesigner.Vsix</RootNamespace>
+		<RootNamespace>WinUIDesigner</RootNamespace>
 		<GeneratePkgDefFile>true</GeneratePkgDefFile>
 		<GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
 		<VSSDKBuildToolsAutoSetup>true</VSSDKBuildToolsAutoSetup>
