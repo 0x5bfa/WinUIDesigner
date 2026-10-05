@@ -83,7 +83,7 @@ internal static class Program
         }
 
         string projectionPath = args.Length > 0 ? args[0] : Path.GetFullPath(
-            "src/WinUIDesigner.Surface/bin/Release/net10.0-windows10.0.19041.0/Microsoft.WinUI.dll");
+            "src/WinUIDesigner.Surface/bin/Release/net10.0-windows10.0.26100.0/Microsoft.WinUI.dll");
         using (AssemblyDefinition projection = AssemblyDefinition.ReadAssembly(projectionPath))
         {
             Check(projection.Name.FullName == WinUIStandardToolboxItems.AssemblyIdentity, "catalog assembly identity must match the projection");

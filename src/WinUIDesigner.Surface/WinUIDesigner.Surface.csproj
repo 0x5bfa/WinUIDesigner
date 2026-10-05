@@ -2,7 +2,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+		<TargetFramework>$(WinUIDesignerSurfaceTargetFramework)</TargetFramework>
+		<SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
 		<OutputType>Exe</OutputType>
 		<AssemblyName>WinUISurface</AssemblyName>
 		<RootNamespace>WinUIDesigner.Surface</RootNamespace>
@@ -10,9 +11,9 @@
 		<DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
 		<UseWinUI>true</UseWinUI>
 		<WindowsPackageType>None</WindowsPackageType>
-		<DiagnosticsTapProject>$(MSBuildProjectDirectory)\..\WinUIDesigner.DiagnosticsTap\WinUIDesigner.DiagnosticsTap.vcxproj</DiagnosticsTapProject>
-		<DiagnosticsTapOutputDir>$(MSBuildProjectDirectory)\..\WinUIDesigner.DiagnosticsTap\bin\x64\$(Configuration)</DiagnosticsTapOutputDir>
-		<VisualStudioMSBuild>$(VsInstallRoot)\MSBuild\Current\Bin\MSBuild.exe</VisualStudioMSBuild>
+		<SelfContained>true</SelfContained>
+		<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+		<DiagnosticsTapOutputDir>..\WinUIDesigner.DiagnosticsTap\bin\x64\$(Configuration)</DiagnosticsTapOutputDir>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -42,8 +43,7 @@
 		</Reference>
 	</ItemGroup>
 
-	<Target Name="BuildDiagnosticsTap" AfterTargets="Build">
-		<Exec Command="&quot;$(VisualStudioMSBuild)&quot; &quot;$(DiagnosticsTapProject)&quot; /nologo /t:Build /p:Configuration=$(Configuration) /p:Platform=x64" />
+	<Target Name="CopyDiagnosticsTap" AfterTargets="Build">
 		<Copy SourceFiles="$(DiagnosticsTapOutputDir)\WinUIDesigner.DiagnosticsTap.dll" DestinationFolder="$(TargetDir)" />
 	</Target>
 
