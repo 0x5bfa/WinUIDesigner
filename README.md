@@ -66,7 +66,7 @@ Platform configuration supplies the implementation details used to create the de
 
 These are configuration matching conditions, not a statement of current product support.
 
-For example, the .NET Framework WPF configuration is registered as follows:
+For example, the configurations of .NET Framework WPF and WinUI for desktop .NET are registered as follows:
 
 ```csharp
 RegisterPlatformConfiguration(WpfSpecification, new Dictionary<string, string>
@@ -85,8 +85,6 @@ RegisterPlatformConfiguration(WpfSpecification, new Dictionary<string, string>
 });
 ```
 
-`PlatformCreatorAssembly` and `PlatformCreatorType` are used together by `PlatformService` to create an `IPlatformCreator`. `HostPlatformAssembly` and `HostPlatformType` are used together by `HostPlatformService` to create an `IHostPlatform`. The built-in WinUI configurations do not specify either pair, so those configurations alone cannot create the WinUI designer backend. The separate `XamlDesigner\XamlRuntimes\WinUI` mapping can still enable the design tab; the creator and host entries are needed to supply its platform implementation. That is why this project updates the platform configuration described in [XAML Designer for WinUI](docs/designer-winui.md).
-
 ```c#
 RegisterPlatformConfiguration(winuiSpecification, new Dictionary<string, string>
 {
@@ -100,3 +98,15 @@ RegisterPlatformConfiguration(winuiSpecification, new Dictionary<string, string>
 });
 ```
 
+`PlatformCreatorAssembly` and `PlatformCreatorType` are used together by `PlatformService` to create an `IPlatformCreator`. `HostPlatformAssembly` and `HostPlatformType` are used together by `HostPlatformService` to create an `IHostPlatform`. The built-in WinUI configurations do not specify either pair, so those configurations alone cannot create the WinUI designer backend. The separate `XamlDesigner\XamlRuntimes\WinUI` mapping can still enable the design tab; the creator and host entries are needed to supply its platform implementation. That is why this project updates the platform configuration described in [XAML Designer for WinUI](docs/designer-winui.md).
+
+```mermaid
+flowchart TD
+    P["Target project's platform ID<br/>(e.g. WinUI)"] --> C[Configuration table]
+    C --> D[PlatformService]
+    C --> H[HostPlatformService]
+    D --> PC[Activation of PlatformCreator]
+    PC --> Model[Type models, documents, editor fundamentals]
+    H --> HP[Activation of HostPlatform]
+    HP --> Process[Run designer process]
+```
