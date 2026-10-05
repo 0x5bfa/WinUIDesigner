@@ -25,11 +25,11 @@ The in-process Visual Studio extension. It registers the WinUI XAML runtime, sel
 
 ```mermaid
 flowchart TB
-    VS[Visual Studio XAML Designer] -->|loads extension| VSIX[Registration of platform, host, Toolbox, etc.<br/>&lpar;WinUIDesigner.Vsix&rpar;]
+    VS[Visual Studio XAML Designer] -->|loads extension| VSIX["Registration of platform, host, Toolbox, etc.<br/>&lpar;WinUIDesigner.Vsix&rpar;"]
     VSIX -->|uses shared designer contracts| HOST[Visual Studio Designer Host]
-    HOST -->|starts isolated surface<br/>and passes TAP/pipe data| SURFACE[WinUISurface.exe<br/>&lpar;WinUIDesigner.Surface&rpar;]
+    HOST -->|starts isolated surface<br/>and passes TAP/pipe data| SURFACE["WinUISurface.exe<br/>&lpar;WinUIDesigner.Surface&rpar;"]
     SURFACE <-->|designer protocol over pipes| HOST
-    SURFACE -->|P/Invoke| TAP[native XAML Diagnostics TAP<br/>&lpar;WinUIDesigner.DiagnosticsTap.dll&rpar;]
+    SURFACE -->|P/Invoke| TAP["Native XAML Diagnostics TAP<br/>&lpar;WinUIDesigner.DiagnosticsTap.dll&rpar;"]
     TAP <-->|IXamlDiagnostics / IVisualTreeService| XAML[WinUI 3 XAML runtime]
     SURFACE -->|creates and manipulates| XAML
 ```
