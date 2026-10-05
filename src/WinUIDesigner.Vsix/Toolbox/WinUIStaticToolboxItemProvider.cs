@@ -9,6 +9,8 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Microsoft.VisualStudio.Shell.Interop;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Vsix.Toolbox;
 
 internal sealed class WinUIStaticToolboxItemProvider : IVsToolboxItemProvider
@@ -47,7 +49,7 @@ internal sealed class WinUIStaticToolboxItemProvider : IVsToolboxItemProvider
         }
         GlobalUnlock(allocation);
         global = allocation; // Ownership passes to the Toolbox; it calls GlobalFree.
-        ToolboxTrace.Write($"Static item content: {typeName}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"Static item content: {typeName}.");
         return VSConstants.S_OK;
     }
 

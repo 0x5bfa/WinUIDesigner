@@ -15,6 +15,8 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Platform;
 
 internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
@@ -37,7 +39,7 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
     {
         LiveMarkupLinkResult result = base.TryLinkDocumentNode(liveNode, canDelay);
         SourceInfo? source = liveNode.SourceInfo;
-        WinUIPlatform.WriteDiagnosticTrace(
+        WinUIDesignerLogger.LogTrace("Platform",
             $"Live markup link: handle={liveNode.Handle}, type={liveNode.TypeFullName}, " +
             $"file={source?.FileName ?? "<null>"}, line={source?.LineNumber ?? 0}, column={source?.ColumnNumber ?? 0}, " +
             $"markup={source?.MarkupHandle ?? 0}, changeVersion={source?.ChangeVersion ?? 0}, canDelay={canDelay}, " +
@@ -69,12 +71,12 @@ internal sealed class WinUIDesignerInstanceManager : DesignerInstanceManager
                 ConfigureAppResourcesMessage,
                 new AppResourcesRequest { HasXamlControlsResources = hasXamlControlsResources, RequestedTheme = requestedTheme }).ConfigureAwait(false);
             if (response.HResult < 0) throw new InvalidOperationException(response.Error);
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"App.xaml resources configured: XamlControlsResources={hasXamlControlsResources}, RequestedTheme={requestedTheme ?? "Default"}, result=0x{response.HResult:X8}.");
         }
         catch (Exception ex)
         {
-            WinUIPlatform.WriteDiagnosticTrace($"App.xaml resource configuration failed: {ex}");
+            WinUIDesignerLogger.LogError("Platform", "App.xaml resource configuration failed.", ex);
             throw;
         }
 

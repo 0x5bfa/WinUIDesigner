@@ -11,6 +11,8 @@ using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.Shell;
 using Mono.Cecil;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Vsix.Toolbox;
 
 [Guid("BC1C0860-EB3A-4FA2-A9F2-F6F3840182B3")]
@@ -19,12 +21,12 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
     public IEnumerable<string> AdditionalAssemblyPaths => Array.Empty<string>();
     public WinUIToolboxItemDiscovery()
     {
-        ToolboxTrace.Write("ItemDiscovery constructed without IServiceProvider.");
+        WinUIDesignerLogger.LogDebug("Toolbox", "ItemDiscovery constructed without IServiceProvider.");
     }
 
     public WinUIToolboxItemDiscovery(IServiceProvider serviceProvider)
     {
-        ToolboxTrace.Write($"ItemDiscovery constructed with IServiceProvider={serviceProvider?.GetType().FullName ?? "<null>"}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"ItemDiscovery constructed with IServiceProvider={serviceProvider?.GetType().FullName ?? "<null>"}.");
     }
 
     // Manifest-based discovery can supply names rather than reflection-only Types.
@@ -32,10 +34,10 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
     public IToolboxItemInfo? GetItemInfo(IToolboxTypeByName type, ToolboxItemDiscoveryContext context)
     {
         string? path = type?.AssemblyInfo?.OriginalPath;
-        ToolboxTrace.Write($"DiscoveryByName.GetItemInfo: type={type?.TypeFullName ?? "<null>"}, path={path ?? "<null>"}, context={context}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"DiscoveryByName.GetItemInfo: type={type?.TypeFullName ?? "<null>"}, path={path ?? "<null>"}, context={context}.");
         if (string.IsNullOrEmpty(path) || !File.Exists(path))
         {
-            ToolboxTrace.Write("DiscoveryByName rejected: assembly path is missing.");
+            WinUIDesignerLogger.LogDebug("Toolbox", "DiscoveryByName rejected: assembly path is missing.");
             return null;
         }
 
@@ -47,23 +49,23 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
             TypeDefinition? candidate = assembly.MainModule.GetType(type!.TypeFullName);
             if (candidate is null)
             {
-                ToolboxTrace.Write("DiscoveryByName rejected: type metadata was not found.");
+                WinUIDesignerLogger.LogDebug("Toolbox", "DiscoveryByName rejected: type metadata was not found.");
                 return null;
             }
             if (candidate.IsAbstract || candidate.HasGenericParameters || !(candidate.IsPublic || candidate.IsNestedPublic))
             {
-                ToolboxTrace.Write("DiscoveryByName rejected: type is abstract, generic, or non-public.");
+                WinUIDesignerLogger.LogDebug("Toolbox", "DiscoveryByName rejected: type is abstract, generic, or non-public.");
                 return null;
             }
             if (!candidate.Methods.Any(method => method.IsConstructor && method.IsPublic && !method.IsStatic && !method.HasParameters))
             {
-                ToolboxTrace.Write("DiscoveryByName rejected: public parameterless constructor was not found.");
+                WinUIDesignerLogger.LogDebug("Toolbox", "DiscoveryByName rejected: public parameterless constructor was not found.");
                 return null;
             }
             if (candidate.CustomAttributes.Any(attribute => attribute.AttributeType.FullName == "System.ComponentModel.ToolboxItemAttribute"
                 && attribute.ConstructorArguments.Count > 0 && attribute.ConstructorArguments[0].Value is false))
             {
-                ToolboxTrace.Write("DiscoveryByName rejected: ToolboxItem(false).");
+                WinUIDesignerLogger.LogDebug("Toolbox", "DiscoveryByName rejected: ToolboxItem(false).");
                 return null;
             }
 
@@ -72,23 +74,23 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
             {
                 if (parent.FullName is "Microsoft.UI.Xaml.Controls.Page" or "Microsoft.UI.Xaml.Window")
                 {
-                    ToolboxTrace.Write($"DiscoveryByName rejected: disallowed base type {parent.FullName}.");
+                    WinUIDesignerLogger.LogDebug("Toolbox", $"DiscoveryByName rejected: disallowed base type {parent.FullName}.");
                     return null;
                 }
                 if (parent.FullName == "Microsoft.UI.Xaml.FrameworkElement" || IsFrameworkControl(parent.FullName))
                 {
-                    ToolboxTrace.Write($"DiscoveryByName accepted: type={candidate.FullName}, base={parent.FullName}, assembly={assembly.Name.FullName}.");
+                    WinUIDesignerLogger.LogDebug("Toolbox", $"DiscoveryByName accepted: type={candidate.FullName}, base={parent.FullName}, assembly={assembly.Name.FullName}.");
                     return new WinUIToolboxItemInfo(candidate.Name, path!, assembly.Name.Name);
                 }
                 parent = parent.Resolve()?.BaseType;
             }
 
-            ToolboxTrace.Write("DiscoveryByName rejected: Microsoft.UI.Xaml.FrameworkElement base type was not found.");
+            WinUIDesignerLogger.LogDebug("Toolbox", "DiscoveryByName rejected: Microsoft.UI.Xaml.FrameworkElement base type was not found.");
             return null;
         }
         catch (AssemblyResolutionException exception)
         {
-            ToolboxTrace.Write($"DiscoveryByName failed: {exception}");
+            WinUIDesignerLogger.LogError("Toolbox", "DiscoveryByName failed.", exception);
             return null;
         }
     }
@@ -106,11 +108,11 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
     public IToolboxItemInfo? GetItemInfo(IToolboxType type, ToolboxItemDiscoveryContext context)
     {
         Type? candidate = type?.Type;
-        ToolboxTrace.Write($"Discovery.GetItemInfo: type={candidate?.FullName ?? "<null>"}, path={type?.AssemblyInfo?.OriginalPath ?? "<null>"}, context={context}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"Discovery.GetItemInfo: type={candidate?.FullName ?? "<null>"}, path={type?.AssemblyInfo?.OriginalPath ?? "<null>"}, context={context}.");
         if (candidate is null || candidate.IsAbstract || candidate.ContainsGenericParameters
             || !(candidate.IsPublic || candidate.IsNestedPublic) || candidate.GetConstructor(Type.EmptyTypes) is null)
         {
-            ToolboxTrace.Write("Discovery rejected: type is missing, abstract, generic, non-public, or has no public parameterless constructor.");
+            WinUIDesignerLogger.LogDebug("Toolbox", "Discovery rejected: type is missing, abstract, generic, non-public, or has no public parameterless constructor.");
             return null;
         }
         bool control = false;
@@ -118,29 +120,29 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
         {
             if (parent.FullName is "Microsoft.UI.Xaml.Controls.Page" or "Microsoft.UI.Xaml.Window")
             {
-                ToolboxTrace.Write($"Discovery rejected: disallowed base type {parent.FullName}.");
+                WinUIDesignerLogger.LogDebug("Toolbox", $"Discovery rejected: disallowed base type {parent.FullName}.");
                 return null;
             }
             if (parent.FullName == "Microsoft.UI.Xaml.FrameworkElement") { control = true; break; }
         }
         if (!control)
         {
-            ToolboxTrace.Write("Discovery rejected: Microsoft.UI.Xaml.FrameworkElement base type was not found.");
+            WinUIDesignerLogger.LogDebug("Toolbox", "Discovery rejected: Microsoft.UI.Xaml.FrameworkElement base type was not found.");
             return null;
         }
         if (candidate.GetCustomAttributesData().Any(attribute => attribute.AttributeType.FullName == "System.ComponentModel.ToolboxItemAttribute"
             && attribute.ConstructorArguments.Count > 0 && attribute.ConstructorArguments[0].Value is false))
         {
-            ToolboxTrace.Write("Discovery rejected: ToolboxItem(false).");
+            WinUIDesignerLogger.LogDebug("Toolbox", "Discovery rejected: ToolboxItem(false).");
             return null;
         }
         string? path = type!.AssemblyInfo?.OriginalPath;
         if (string.IsNullOrEmpty(path))
         {
-            ToolboxTrace.Write("Discovery rejected: assembly path is missing.");
+            WinUIDesignerLogger.LogDebug("Toolbox", "Discovery rejected: assembly path is missing.");
             return null;
         }
-        ToolboxTrace.Write($"Discovery accepted: type={candidate.FullName}, assembly={candidate.Assembly.FullName}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"Discovery accepted: type={candidate.FullName}, assembly={candidate.Assembly.FullName}.");
         return new WinUIToolboxItemInfo(candidate.Name, path!, candidate.Assembly.GetName().Name ?? string.Empty);
     }
 

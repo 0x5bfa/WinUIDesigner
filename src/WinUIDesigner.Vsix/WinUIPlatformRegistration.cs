@@ -19,7 +19,6 @@ namespace WinUIDesigner.Vsix;
 
 internal static class WinUIPlatformRegistration
 {
-    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
 
     // Visual Studio ships a desktop WinUI configuration but no creator wired to this vsix.
     // Match its stable prefix while allowing SDK/target-version suffixes.
@@ -62,12 +61,12 @@ internal static class WinUIPlatformRegistration
         configuration.Properties["HostPlatformType"] = typeof(WinUIHostPlatform).FullName;
         configuration.Properties["ToolboxPage"] = typeof(Toolbox.WinUIToolboxItemDiscovery).GUID.ToString("B");
 
-        WriteDiagnosticTrace($"Injected WinUI designer bindings into '{configuration.Specification}'.");
+        WinUIDesignerLogger.LogInformation("VSIX", $"Injected WinUI designer bindings into '{configuration.Specification}'.");
 
         // PlatformService does not consult the configured creator for this runtime
         // in the current VS build. Detour its exact overload as a narrow fallback.
         getPlatformCreatorHook ??= new Hook(method, GetPlatformCreatorHook);
-        WriteDiagnosticTrace("Installed PlatformService.GetPlatformCreator fallback hook.");
+        WinUIDesignerLogger.LogInformation("VSIX", "Installed PlatformService.GetPlatformCreator fallback hook.");
         }
         catch { Dispose(); throw; }
     }
@@ -92,7 +91,7 @@ internal static class WinUIPlatformRegistration
 
     private static IPlatformCreator? GetPlatformCreatorHook(GetPlatformCreatorDelegate original, PlatformService instance, PlatformIdentifier platformIdentifier)
     {
-        WriteDiagnosticTrace($"GetPlatformCreator called for '{platformIdentifier.Identifier}' (XamlRuntime={platformIdentifier.XamlRuntime}).");
+        WinUIDesignerLogger.LogDebug("VSIX", $"GetPlatformCreator called for '{platformIdentifier.Identifier}' (XamlRuntime={platformIdentifier.XamlRuntime}).");
         if (!string.Equals(platformIdentifier.XamlRuntime, XamlRuntimeNames.WinUI, StringComparison.Ordinal))
         {
             // Leave WPF, UWP, and any future runtime to Visual Studio's own creator.
@@ -103,37 +102,8 @@ internal static class WinUIPlatformRegistration
         // lifetime without retaining closed project/platform-service instances.
         WinUIPlatformCreator winUICreator = PlatformCreators.GetValue(instance, static platformService => new WinUIPlatformCreator(platformService));
 
-        WriteDiagnosticTrace($"Supplied WinUIPlatformCreator for '{platformIdentifier.Identifier}'.");
+        WinUIDesignerLogger.LogDebug("VSIX", $"Supplied WinUIPlatformCreator for '{platformIdentifier.Identifier}'.");
         return winUICreator;
     }
 
-    private static void WriteDiagnosticTrace(string message)
-    {
-        Trace.WriteLine($"[WinUIDesigner] {message}");
-
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
-            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} VSIX: {message}\r\n");
-        }
-        catch (IOException)
-        {
-            // Multiple designer processes write to diagnostic traces.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Diagnostic logging must not interrupt designer activation.
-        }
-    }
-
-    private static string CreateDiagnosticTracePath()
-    {
-        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(basePath))
-        {
-            basePath = Path.GetTempPath();
-        }
-
-        return Path.Combine(basePath, "WinUIDesigner", "Logs", $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
-    }
 }

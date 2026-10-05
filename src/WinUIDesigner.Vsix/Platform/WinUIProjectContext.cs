@@ -10,6 +10,8 @@ using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.UI.PropertyInspector;
 using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Documents;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Platform;
 
 // Keep the shared XAML project/document pipeline, substituting the UWP-compatible
@@ -19,38 +21,38 @@ public sealed class WinUIProjectContext : XamlProjectContext
     public WinUIProjectContext(IDesignerContext designerContext, IPlatform platform)
         : base(designerContext, platform)
     {
-        WinUIPlatform.WriteDiagnosticTrace("WinUIProjectContext instantiated.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext instantiated.");
     }
 
     protected override void InitializeProject()
     {
-        WinUIPlatform.WriteDiagnosticTrace("WinUIProjectContext.InitializeProject reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.InitializeProject reached.");
         base.InitializeProject();
-        WinUIPlatform.WriteDiagnosticTrace("WinUIProjectContext.InitializeProject completed.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.InitializeProject completed.");
     }
 
     protected override void CreateProjectMetadata()
     {
-        WinUIPlatform.WriteDiagnosticTrace("WinUIProjectContext.CreateProjectMetadata reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.CreateProjectMetadata reached.");
         base.CreateProjectMetadata();
-        WinUIPlatform.WriteDiagnosticTrace("WinUIProjectContext.CreateProjectMetadata completed.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.CreateProjectMetadata completed.");
     }
 
     protected override IPropertyInspectorContext CreatePropertyInspectorContext()
     {
-        WinUIPlatform.WriteDiagnosticTrace("WinUIProjectContext.CreatePropertyInspectorContext reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.CreatePropertyInspectorContext reached.");
         return new UwpPropertyInspectorContext(this);
     }
 
     protected override SurfaceProcessContext CreateSurfaceProcessContextCore(ISurfaceProcessContext applicationSurfaceContext)
     {
-        WinUIPlatform.WriteDiagnosticTrace("WinUIProjectContext.CreateSurfaceProcessContextCore reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIProjectContext.CreateSurfaceProcessContextCore reached.");
 
         WinUISurfaceProcessContext? context = applicationSurfaceContext as WinUISurfaceProcessContext;
         if (context is null)
         {
             context = new WinUISurfaceProcessContext(this);
-            WinUIPlatform.WriteDiagnosticTrace("WinUISurfaceProcessContext bridge instantiated.");
+            WinUIDesignerLogger.LogTrace("Platform", "WinUISurfaceProcessContext bridge instantiated.");
         }
 
         return context;

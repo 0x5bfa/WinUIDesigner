@@ -15,6 +15,8 @@ using IDataObject = Microsoft.VisualStudio.OLE.Interop.IDataObject;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Vsix.Toolbox;
 
 public sealed class WinUIToolboxItemCreator : IToolboxItemCreator, IToolboxItemCreationTypeInfo
@@ -27,20 +29,20 @@ public sealed class WinUIToolboxItemCreator : IToolboxItemCreator, IToolboxItemC
     public WinUIToolboxItemCreator(IServiceProvider serviceProvider)
     {
         if (serviceProvider is null) throw new ArgumentNullException(nameof(serviceProvider));
-        ToolboxTrace.Write($"ItemCreator constructed with IServiceProvider={serviceProvider.GetType().FullName}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"ItemCreator constructed with IServiceProvider={serviceProvider.GetType().FullName}.");
         ThreadHelperBase.RunOnUIThread(() =>
         {
             platformService = serviceProvider.GetHostService<IHostPlatformService>();
             stringMap = (IVsDataObjectStringMapManager)serviceProvider.GetService(typeof(SVsDataObjectStringMapManager));
         });
-        ToolboxTrace.Write($"ItemCreator initialized. ClipboardFormat={ClipboardFormat}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"ItemCreator initialized. ClipboardFormat={ClipboardFormat}.");
     }
 
     public IInstalledToolboxItemInfo? GetItemInfo(IDataObject dataObject)
     {
         if (dataObject is null) throw new ArgumentNullException(nameof(dataObject));
         ToolDataObject? data = ToolDataObject.FromData(dataObject, ClipboardFormat);
-        ToolboxTrace.Write($"ItemCreator.GetItemInfo: parsed={(data is not null)}, type={data?.CreationTypeName ?? "<null>"}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"ItemCreator.GetItemInfo: parsed={(data is not null)}, type={data?.CreationTypeName ?? "<null>"}.");
         return data is null ? null : new InstalledToolboxItemInfo(data.CreationTypeName.Split(',')[0], data.CreationAssemblyName, Array.Empty<KeyValuePair<string, string>>());
     }
 
@@ -56,7 +58,7 @@ public sealed class WinUIToolboxItemCreator : IToolboxItemCreator, IToolboxItemC
         if (assemblyName is null) throw new ArgumentNullException(nameof(assemblyName));
         if (extraInfo is null) throw new ArgumentNullException(nameof(extraInfo));
         var info = extraInfo.Where(entry => entry.Key != "ToolboxTabName").ToDictionary(entry => entry.Key, entry => entry.Value);
-        ToolboxTrace.Write($"CreateToolboxItem: type={typeName}, assembly={assemblyName.FullName}, extra=[{string.Join(", ", info.Select(entry => entry.Key + "=" + entry.Value))}].");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"CreateToolboxItem: type={typeName}, assembly={assemblyName.FullName}, extra=[{string.Join(", ", info.Select(entry => entry.Key + "=" + entry.Value))}].");
         var assembly = new AssemblyName(assemblyName.FullName);
         if (info.TryGetValue("OriginalPath", out string? path)) assembly.CodeBase = new Uri(path).AbsoluteUri;
         else if (assemblyName.CodeBase is not null) assembly.CodeBase = new Uri(assemblyName.CodeBase).AbsoluteUri;
@@ -81,7 +83,7 @@ public sealed class WinUIToolboxItemCreator : IToolboxItemCreator, IToolboxItemC
         data.SetProperty(HostToolProperty.IsPlatformControl,
             info.TryGetValue("IsPlatformControl", out string? platformControl) && bool.Parse(platformControl));
         IDataObject result = ToolDataObject.ToData(data, stringMap, ClipboardFormat);
-        ToolboxTrace.Write($"CreateToolboxItem completed: type={typeName}, codeBase={assembly.CodeBase ?? "<null>"}.");
+        WinUIDesignerLogger.LogDebug("Toolbox", $"CreateToolboxItem completed: type={typeName}, codeBase={assembly.CodeBase ?? "<null>"}.");
         return result;
     }
 }

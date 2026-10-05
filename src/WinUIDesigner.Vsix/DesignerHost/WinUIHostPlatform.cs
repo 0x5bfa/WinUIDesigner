@@ -11,20 +11,20 @@ using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Microsoft.VisualStudio.DesignTools.WpfDesignerHost;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.DesignerHost;
 
 // Reuse VS's WPF/.NET host services for process lifetime and IPC, while supplying
 // our own WinUI surface executable and payload staging policy.
 public sealed class WinUIHostPlatform : WpfHostPlatform
 {
-    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
-
     protected override IShadowCopyWorkerFactory ShadowCopyWorkerFactory { get; } = new WinUIShadowCopyWorkerFactory();
 
     public WinUIHostPlatform(IServiceProvider serviceProvider, PlatformIdentifier platformIdentifier)
         : base(serviceProvider, platformIdentifier)
     {
-        WriteDiagnosticTrace($"WinUIHostPlatform instantiated for '{platformIdentifier.Identifier}' (XamlRuntime={platformIdentifier.XamlRuntime}).");
+        WinUIDesignerLogger.LogInformation("Host", $"WinUIHostPlatform instantiated for '{platformIdentifier.Identifier}' (XamlRuntime={platformIdentifier.XamlRuntime}).");
     }
 
     protected override ISurfaceProcess ActivateSurface(
@@ -40,7 +40,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         using Process currentProcess = Process.GetCurrentProcess();
         string initializationData = dataBridge.Serialize(currentProcess.Id);
 
-        WriteDiagnosticTrace($"Surface activation reached: '{path}'.");
+        WinUIDesignerLogger.LogInformation("Host", $"Surface activation reached: '{path}'.");
         Process surfaceProcess = StartSurfaceProcess(path, tapPath, initializationData);
         if (cancelToken.IsCancellationRequested)
         {
@@ -48,7 +48,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             finally { surfaceProcess.Dispose(); }
             cancelToken.ThrowIfCancellationRequested();
         }
-        WriteDiagnosticTrace($"WinUISurface.exe started (PID={surfaceProcess.Id}); pipe initialization data passed.");
+        WinUIDesignerLogger.LogInformation("Host", $"WinUISurface.exe started (PID={surfaceProcess.Id}); pipe initialization data passed.");
         return new Win32SurfaceProcess(surfaceProcess, surfaceProcessId);
     }
 
@@ -89,18 +89,27 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
             {
-                WriteDiagnosticTrace($"WinUISurface stderr: {e.Data}");
+                WinUIDesignerLogger.LogWarning("Host", $"WinUISurface stderr: {e.Data}");
             }
         };
         process.Exited += (_, _) =>
         {
             try
             {
-                WriteDiagnosticTrace($"WinUISurface.exe exited (PID={process.Id}, ExitCode={process.ExitCode}).");
+                int exitCode = process.ExitCode;
+                string exitMessage = $"WinUISurface.exe exited (PID={process.Id}, ExitCode={exitCode}).";
+                if (exitCode == 0)
+                {
+                    WinUIDesignerLogger.LogInformation("Host", exitMessage);
+                }
+                else
+                {
+                    WinUIDesignerLogger.LogError("Host", exitMessage);
+                }
             }
             catch (InvalidOperationException)
             {
-                WriteDiagnosticTrace("WinUISurface.exe exited before its exit code could be read.");
+                WinUIDesignerLogger.LogWarning("Host", "WinUISurface.exe exited before its exit code could be read.");
             }
         };
 
@@ -111,6 +120,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         }
 
         process.Dispose();
+        WinUIDesignerLogger.LogError("Host", $"Failed to start WinUISurface.exe at '{path}'.");
         throw new InvalidProgramException(path);
     }
 
@@ -128,37 +138,4 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             : null;
     }
 
-    internal static void WriteDiagnosticTrace(string message)
-    {
-        Trace.WriteLine($"[WinUIDesigner] {message}");
-
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
-            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} Host: {message}\r\n");
-        }
-        catch (IOException)
-        {
-            // Multiple designer processes write to diagnostic traces.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Diagnostic logging must not interrupt designer activation.
-        }
-    }
-
-    private static string CreateDiagnosticTracePath()
-    {
-        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(basePath))
-        {
-            basePath = Path.GetTempPath();
-        }
-
-        return Path.Combine(
-            basePath,
-            "WinUIDesigner",
-            "Logs",
-            $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
-    }
 }

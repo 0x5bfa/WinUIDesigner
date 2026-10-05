@@ -2,9 +2,7 @@
 // Licensed under MIT License.
 
 using System;
-using System.Diagnostics;
 using System.ComponentModel;
-using System.IO;
 using Microsoft.VisualStudio.DesignTools.Extensibility.Metadata;
 using Microsoft.VisualStudio.DesignTools.Markup.Metadata;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Pipeline;
@@ -23,6 +21,8 @@ using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views;
 using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner;
 using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views.NodeObjectConverters;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Platform;
 
 // VS has no complete WinUI Designer backend, so this platform reuses the shared
@@ -30,7 +30,6 @@ namespace WinUIDesigner.Platform;
 // hosting and serialization where the two XAML runtimes differ.
 public sealed class WinUIPlatform : XamlPlatform
 {
-    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
     private UwpDisplaySettingsProvider? displaySettingsProvider;
     private PlatformPaneModel? platformPaneModel;
 
@@ -44,7 +43,7 @@ public sealed class WinUIPlatform : XamlPlatform
             {
                 displaySettingsProvider = new WinUIDisplaySettingsProvider(DesignerContext.PlatformService);
                 displaySettingsProvider.Initialize();
-                WriteDiagnosticTrace("UWP device display settings initialized.");
+                WinUIDesignerLogger.LogInformation("Platform", "UWP device display settings initialized.");
             }
 
             return displaySettingsProvider;
@@ -58,7 +57,7 @@ public sealed class WinUIPlatform : XamlPlatform
             if (platformPaneModel is null)
             {
                 platformPaneModel = new UwpPlatformPaneModel(DesignerContext, DisplaySettingsProvider);
-                WriteDiagnosticTrace("Temporary UwpPlatformPaneModel bridge instantiated.");
+                WinUIDesignerLogger.LogDebug("Platform", "Temporary UwpPlatformPaneModel bridge instantiated.");
             }
 
             return platformPaneModel;
@@ -68,18 +67,18 @@ public sealed class WinUIPlatform : XamlPlatform
     public WinUIPlatform(IPlatformReferenceAssemblyResolver referenceAssemblyResolver)
         : base(referenceAssemblyResolver)
     {
-        WriteDiagnosticTrace("WinUIPlatform instantiated.");
+        WinUIDesignerLogger.LogInformation("Platform", "WinUIPlatform instantiated.");
     }
 
     public override void Initialize(IDesignerContext designerContext)
     {
-        WriteDiagnosticTrace("WinUIPlatform.Initialize reached.");
+        WinUIDesignerLogger.LogDebug("Platform", "WinUIPlatform.Initialize reached.");
         base.Initialize(designerContext);
     }
 
     public override AttributeTable[] GetAttributeMetadata()
     {
-        WriteDiagnosticTrace("WinUIPlatform.GetAttributeMetadata reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.GetAttributeMetadata reached.");
         var builder = new AttributeTableBuilder();
         foreach (string property in new[] { "Width", "Height", "MinWidth", "MinHeight", "MaxWidth", "MaxHeight", "Margin", "HorizontalAlignment", "VerticalAlignment" })
             builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", property, new CategoryAttribute("Layout"));
@@ -94,36 +93,36 @@ public sealed class WinUIPlatform : XamlPlatform
 
     public override IProjectContext CreateProjectContext()
     {
-        WriteDiagnosticTrace("WinUIPlatform.CreateProjectContext reached.");
+        WinUIDesignerLogger.LogDebug("Platform", "WinUIPlatform.CreateProjectContext reached.");
         return new WinUIProjectContext(DesignerContext, this);
     }
 
     public override SceneView CreateSceneView(SceneDocument document)
     {
-        WriteDiagnosticTrace("WinUIPlatform.CreateSceneView reached.");
+        WinUIDesignerLogger.LogDebug("Platform", "WinUIPlatform.CreateSceneView reached.");
         UwpSceneViewModel viewModel = new UwpSceneViewModel(DesignerContext, document);
-        WriteDiagnosticTrace("Temporary UwpSceneViewModel bridge instantiated.");
+        WinUIDesignerLogger.LogDebug("Platform", "Temporary UwpSceneViewModel bridge instantiated.");
 
         WinUISceneView view = new WinUISceneView(viewModel);
-        WriteDiagnosticTrace("Minimal WinUISceneView instantiated.");
+        WinUIDesignerLogger.LogInformation("Platform", "Minimal WinUISceneView instantiated.");
         return view;
     }
 
     public override ISurfaceProcessMarkupProvider CreateSurfaceProcessMarkupProvider()
     {
-        WriteDiagnosticTrace("WinUIPlatform.CreateSurfaceProcessMarkupProvider reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreateSurfaceProcessMarkupProvider reached.");
         return new WinUISurfaceProcessMarkupProvider();
     }
 
     public override IInstanceBuilderPlatform CreateSurfaceInstanceBuilderPlatform(IProjectContext projectContext)
     {
-        WriteDiagnosticTrace("WinUIPlatform.CreateSurfaceInstanceBuilderPlatform reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreateSurfaceInstanceBuilderPlatform reached.");
         return new UwpDesignerInstanceBuilderPlatform(projectContext);
     }
 
     protected override IPlatformConverter CreatePlatformConverter()
     {
-        WriteDiagnosticTrace("WinUIPlatform.CreatePlatformConverter reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreatePlatformConverter reached.");
         var converter = new NodeObjectPlatformConverter();
         // The shared WPF frontend expects WPF primitives, while WinUI reports its
         // own serialized names. Register these layout types explicitly.
@@ -150,59 +149,26 @@ public sealed class WinUIPlatform : XamlPlatform
 
     protected override IGeometry CreateIsolatedSurfaceGeometry()
     {
-        WriteDiagnosticTrace("WinUIPlatform.CreateIsolatedSurfaceGeometry reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreateIsolatedSurfaceGeometry reached.");
         return new NodeObjectGeometry(PlatformConverter, value => Math.Floor(value + 0.5));
     }
 
     protected override void RegisterNodeBuilders()
     {
-        WriteDiagnosticTrace("WinUIPlatform.RegisterNodeBuilders reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodeBuilders reached.");
         RegisterSurfaceIsolatedDocumentNodeBuilders();
     }
 
     protected override void RegisterNodeChildBuilders()
     {
-        WriteDiagnosticTrace("WinUIPlatform.RegisterNodeChildBuilders reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodeChildBuilders reached.");
         RegisterSurfaceIsolatedDocumentNodeChildBuilders();
     }
 
     protected override void RegisterNodePropertyBuilders()
     {
-        WriteDiagnosticTrace("WinUIPlatform.RegisterNodePropertyBuilders reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodePropertyBuilders reached.");
         RegisterSurfaceIsolatedDocumentNodePropertyBuilders();
     }
 
-    internal static void WriteDiagnosticTrace(string message)
-    {
-        Trace.WriteLine($"[WinUIDesigner] {message}");
-
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
-            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} Platform: {message}\r\n");
-        }
-        catch (IOException)
-        {
-            // Multiple designer processes write to diagnostic traces.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Diagnostic logging must not interrupt designer activation.
-        }
-    }
-
-    private static string CreateDiagnosticTracePath()
-    {
-        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(basePath))
-        {
-            basePath = Path.GetTempPath();
-        }
-
-        return Path.Combine(
-            basePath,
-            "WinUIDesigner",
-            "Logs",
-            $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
-    }
 }

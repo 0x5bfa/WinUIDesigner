@@ -14,6 +14,8 @@ using Microsoft.VisualStudio.DesignTools.XamlDesignerHost.Platform.ShadowCopy;
 using Microsoft.VisualStudio.DesignTools.Utility.IO;
 using Microsoft.VisualStudio.DesignTools.Xaml.LanguageService;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.DesignerHost;
 
 // VS selects a shadow-copy worker from the target framework. WinUI is .NET-only,
@@ -127,7 +129,7 @@ internal sealed class WinUICoreShadowCopyWorker : WpfCoreShadowCopyWorker
             string relativePath = UwpUriResolver.GetDeploymentRelativePath(hostProject, item.RelativePath, isForRuntime: false)
                 .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             SurfaceInfo.ShadowCacheContent.AddItem(item.Path, relativePath, forceCopyNow: true);
-            WinUIHostPlatform.WriteDiagnosticTrace($"Project media staged: '{item.Path}' -> '{relativePath}'; mode={SurfaceInfo.ShadowCopyType}.");
+            WinUIDesignerLogger.LogInformation("Host", $"Project media staged: '{item.Path}' -> '{relativePath}'; mode={SurfaceInfo.ShadowCopyType}.");
         }
     }
 

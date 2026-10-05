@@ -7,6 +7,8 @@ using Microsoft.VisualStudio.DesignTools.SurfaceDesigner;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Metadata;
 using Microsoft.VisualStudio.DesignTools.Utility;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Platform;
 
 // This bridges VS's platform registry to the WinUI-specific project, scene-view,
@@ -22,12 +24,12 @@ public sealed class WinUIPlatformCreator : PlatformCreatorBase
     public WinUIPlatformCreator(IPlatformService platformService)
         : base(platformService)
     {
-        WinUIPlatform.WriteDiagnosticTrace("WinUIPlatformCreator instantiated.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatformCreator instantiated.");
     }
 
     protected override PlatformBase CreatePlatformInternal(IPlatformReferenceAssemblyResolver referenceAssemblyResolver)
     {
-        WinUIPlatform.WriteDiagnosticTrace("WinUIPlatformCreator.CreatePlatformInternal reached.");
+        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatformCreator.CreatePlatformInternal reached.");
         return new WinUIPlatform(referenceAssemblyResolver);
     }
 }

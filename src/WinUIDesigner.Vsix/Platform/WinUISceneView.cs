@@ -16,6 +16,8 @@ using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views;
 using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Platform;
 
 // Retain the shared WPF artboard and tools, but replace the image host with the HWND
@@ -39,7 +41,7 @@ internal sealed class WinUISceneView : UwpSceneView
         WinUIIsolatedImageHost imageHost = new WinUIIsolatedImageHost(this);
         ImageHostField.SetValue(this, imageHost);
 
-        WinUIPlatform.WriteDiagnosticTrace("Minimal WinUI isolated image host created.");
+        WinUIDesignerLogger.LogTrace("Platform", "Minimal WinUI isolated image host created.");
         Artboard artboard = new UwpArtboard(PlatformSurface, imageHost, ViewModel);
 #if DEBUG
         artboard.AddHandler(
@@ -55,7 +57,7 @@ internal sealed class WinUISceneView : UwpSceneView
     private void Artboard_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         WritePointerDiagnostic("Artboard PreviewMouseDown", e);
-        WinUIPlatform.WriteDiagnosticTrace(
+        WinUIDesignerLogger.LogTrace("Platform",
             $"Artboard PreviewMouseDown: source={e.OriginalSource?.GetType().FullName ?? "<null>"}, " +
             $"activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
             $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
@@ -70,7 +72,7 @@ internal sealed class WinUISceneView : UwpSceneView
 #if DEBUG
             if (System.Windows.PresentationSource.FromVisual(Artboard) is System.Windows.Interop.HwndSource hwndSource)
             {
-                WinUIPlatform.WriteDiagnosticTrace(
+                WinUIDesignerLogger.LogTrace("Platform",
                     $"Artboard presentation source: hwnd=0x{hwndSource.Handle.ToInt64():X}, " +
                     $"root={hwndSource.RootVisual?.GetType().FullName ?? "<null>"}, " +
                     $"artboard={Artboard.ActualWidth}x{Artboard.ActualHeight}, hitTest={Artboard.IsHitTestVisible}, enabled={Artboard.IsEnabled}.");
@@ -86,7 +88,7 @@ internal sealed class WinUISceneView : UwpSceneView
             }
 #endif
 
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"ArtboardLoaded before update: activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
                 $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
                 $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
@@ -94,7 +96,7 @@ internal sealed class WinUISceneView : UwpSceneView
             ViewModel.SchedulePipelineTasks(
                 viewSwitched: true,
                 DocumentPipelineUpdateInfo.CreateFromViewModel(ViewModel, SceneUpdateStates.None));
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"ArtboardLoaded after update: activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
                 $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
                 $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
@@ -106,7 +108,7 @@ internal sealed class WinUISceneView : UwpSceneView
     {
         if (msg == 0x0201 || msg == 0x0202)
         {
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"Presentation source raw mouse: hwnd=0x{hwnd.ToInt64():X}, msg=0x{msg:X}, " +
                 $"wParam=0x{wParam.ToInt64():X}, lParam=0x{lParam.ToInt64():X}, handled={handled}.");
         }
@@ -116,7 +118,7 @@ internal sealed class WinUISceneView : UwpSceneView
 
     private void PresentationRoot_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        WinUIPlatform.WriteDiagnosticTrace(
+        WinUIDesignerLogger.LogTrace("Platform",
             $"Presentation root PreviewMouseDown: sender={sender.GetType().FullName}, " +
             $"source={e.OriginalSource?.GetType().FullName ?? "<null>"}, handled={e.Handled}.");
     }
@@ -134,7 +136,7 @@ internal sealed class WinUISceneView : UwpSceneView
             System.Windows.Media.Matrix contentToArtboard = Artboard.CalculateTransformFromContentToArtboard().Value;
             System.Windows.Media.Matrix artboardToHitRoot = Artboard.ArtboardToHitRootTransform.Value;
 
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"{prefix} coordinates: artboard={artboardPoint}, viewRoot={viewRootPoint}, content={contentPoint}, " +
                 $"contentToArtboard={contentToArtboard}, artboardToHitRoot={artboardToHitRoot}, " +
                 $"zoom={Artboard.Zoom}, viewRootToArtboardScale={Artboard.ViewRootToArtboardScale}, " +
@@ -142,7 +144,7 @@ internal sealed class WinUISceneView : UwpSceneView
         }
         catch (Exception ex)
         {
-            WinUIPlatform.WriteDiagnosticTrace($"{prefix} coordinate diagnostic failed: {ex.GetType().FullName}: {ex.Message}");
+            WinUIDesignerLogger.LogError("Platform", $"{prefix} coordinate diagnostic failed.", ex);
         }
 #endif
     }
@@ -207,7 +209,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         protected override void InitializeSurfaceHwnd(IntPtr parentHwnd)
         {
             this.parentHwnd = parentHwnd.ToInt32();
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"WinUI artboard HWND initialized: parent=0x{parentHwnd.ToInt64():X}, document={surfaceDocumentId}.");
         }
 
@@ -224,7 +226,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                             pipeline.LiveNodeTree.ProcessPendingMutations();
                             var liveRoot = pipeline.LiveNodeTree.RootNode;
 #if DEBUG
-                            WinUIPlatform.WriteDiagnosticTrace(
+                            WinUIDesignerLogger.LogTrace("Platform",
                                 $"Frontend mutation received: count={mutations.Mutations?.Count ?? 0}, " +
                                 $"liveRootChildren={liveRoot.Children.Count()}, " +
                                 $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
@@ -241,7 +243,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                     Width = width,
                     Height = height,
                 });
-                WinUIPlatform.WriteDiagnosticTrace(
+                WinUIDesignerLogger.LogTrace("Platform",
                     $"SetSurfacePosition (548) posted: document={surfaceDocumentId}, parent=0x{parentHwnd:X}, size={width}x{height}.");
             }
         }
@@ -292,9 +294,9 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                 new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor),
                 handledEventsToo: true);
 
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
         }
 
@@ -348,9 +350,9 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         private void InputBridge_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs args)
         {
             imageHost.SceneView.WritePointerDiagnostic("Input bridge MouseDown", args);
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, forward={ShouldForwardInput(args)}.");
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, " +
                 $"forward={ShouldForwardInput(args)}, activeTool={imageHost.SceneView.DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
                 $"activeBehavior={imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
@@ -370,7 +372,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                 Source = imageHost.SceneView.Artboard,
             };
             imageHost.SceneView.Artboard.RaiseEvent(forwarded);
-            WinUIPlatform.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Platform",
                 $"Input bridge MouseDown forwarded: handled={forwarded.Handled}, " +
                 $"activeBehavior={imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
             args.Handled = forwarded.Handled;
@@ -525,7 +527,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                         $"horizontalAlignment={horizontalAlignment?.Value ?? "<null>"}, verticalAlignment={verticalAlignment?.Value ?? "<null>"}, " +
                         $"layoutSlot={layoutSlot?.Value ?? "<null>"}, transformToParent={transformToParent?.Value ?? "<null>"}";
                 }
-                WinUIPlatform.WriteDiagnosticTrace(
+                WinUIDesignerLogger.LogTrace("Platform",
                     $"Frontend selection hit: content={contentPoint}, artboard={artboardPoint}, type={typeName}, bounds={bounds}{hitDetails}.");
             }
         }
@@ -586,7 +588,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
                     expectedActualWidth = $"<failed: {ex.GetType().Name}: {ex.Message}>";
                 }
 
-                WinUIPlatform.WriteDiagnosticTrace(
+                WinUIDesignerLogger.LogTrace("Platform",
                     $"Frontend geometry depth={depth}, type={node.Type.FullName}, bounds={bounds}, boundsInParent={boundsInParent}, " +
                     $"visualParent={viewObject.VisualParent?.LiveObject?.Type?.FullName ?? "<null>"}, visualChildren={viewObject.VisualChildrenCount}, " +
                     $"transformToRoot={node.TransformToRoot}, expectedActualWidth={expectedActualWidth}, expectedActualHeight={expectedActualHeight}, " +
@@ -595,7 +597,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
             }
             else
             {
-                WinUIPlatform.WriteDiagnosticTrace($"Frontend geometry depth={depth}, type={node.Type.FullName}, viewObject=<invalid>.");
+                WinUIDesignerLogger.LogTrace("Platform", $"Frontend geometry depth={depth}, type={node.Type.FullName}, viewObject=<invalid>.");
             }
 
             foreach (SceneNode child in new SceneNodeLiveChildrenCollection<SceneNode>(node))
@@ -605,7 +607,7 @@ internal sealed class WinUIIsolatedImageHost : IsolatedSurfaceImageHost
         }
         catch (Exception ex)
         {
-            WinUIPlatform.WriteDiagnosticTrace($"Frontend geometry failed for depth={depth}: {ex.GetType().FullName}: {ex.Message}");
+            WinUIDesignerLogger.LogError("Platform", $"Frontend geometry failed for depth={depth}.", ex);
         }
     }
 #endif

@@ -2,8 +2,6 @@
 // Licensed under MIT License.
 
 using System;
-using System.Diagnostics;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,7 +29,6 @@ namespace WinUIDesigner.Vsix;
 public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 {
     private readonly WinUIStaticToolboxItemProvider toolboxItemProvider = new();
-    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
 
     public const string PackageGuidString = "4b134b27-b9ee-4f30-a267-cf19aa49f896";
 
@@ -53,7 +50,7 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
         catch (Exception exception)
         {
             ActivityLog.LogError(nameof(WinUIDesignerPackage), exception.ToString());
-            WriteDiagnosticTrace($"Package initialization failed: {exception}");
+            WinUIDesignerLogger.LogCritical("VSIX", "Package initialization failed.", exception);
 
             throw;
         }
@@ -71,27 +68,4 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
         base.Dispose(disposing);
     }
 
-    private static void WriteDiagnosticTrace(string message)
-    {
-        Trace.WriteLine($"[WinUIDesigner] {message}");
-
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
-            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} VSIX: {message}\r\n");
-        }
-        catch (IOException) { } // Multiple designer processes write to diagnostic traces.
-        catch (UnauthorizedAccessException) { } // Diagnostic logging must not interrupt designer activation.
-    }
-
-    private static string CreateDiagnosticTracePath()
-    {
-        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(basePath))
-        {
-            basePath = Path.GetTempPath();
-        }
-
-        return Path.Combine(basePath, "WinUIDesigner", "Logs", $"WinUIDesigner-{Process.GetCurrentProcess().Id}.log");
-    }
 }

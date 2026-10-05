@@ -9,6 +9,8 @@ using Microsoft.VisualStudio.DesignTools.Utility.IO;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.UI.PlatformPane;
 using Microsoft.Win32;
 
+using WinUIDesigner.Vsix;
+
 namespace WinUIDesigner.Platform;
 
 // Retain the UWP SDK device parser, ordering, qualifiers and default settings.
@@ -30,7 +32,7 @@ internal sealed class WinUIDisplaySettingsProvider(IPlatformService platformServ
             CultureInfo.CreateSpecificCulture("en-US"), Path.Combine(sdkRoot, @"DesignTime\UAP\Devices"), useLcidFormat: true);
         if (string.IsNullOrEmpty(devicesDirectory) || !Directory.Exists(devicesDirectory)) return files;
 
-        WinUIPlatform.WriteDiagnosticTrace($"UWP device definitions loaded from '{devicesDirectory}'.");
+        WinUIDesignerLogger.LogTrace("Platform", $"UWP device definitions loaded from '{devicesDirectory}'.");
         return AccessHelper.AccessService.DirectoryGetFiles(devicesDirectory, "*.xml");
     }
 }
