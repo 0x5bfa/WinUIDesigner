@@ -102,11 +102,17 @@ RegisterPlatformConfiguration(winuiSpecification, new Dictionary<string, string>
 
 ```mermaid
 flowchart TD
-    P["Target project's platform ID<br/>(e.g. WinUI)"] --> C[Configuration table]
-    C --> D[PlatformService]
-    C --> H[HostPlatformService]
-    D --> PC[Activation of PlatformCreator]
-    PC --> Model[Type models, documents, editor fundamentals]
-    H --> HP[Activation of HostPlatform]
-    HP --> Process[Run designer process]
+    PCS["PlatformConfigurationService<br/>configuration table"] -->|GetConfigurations| HPS["HostPlatformService"]
+    HPS -->|Configuration snapshot at construction| PS["PlatformService"]
+    P["Target project's PlatformIdentifier<br/>(e.g., WinUI)"] --> PS
+    P --> HPS
+
+    PS -->|GetPlatformCreator| PC["Create or return IPlatformCreator"]
+    PC --> PI["Platform-specific project and document context,<br/>type model, and scene services"]
+
+    HPS -->|GetPlatform| HP["Create or return IHostPlatform"]
+    HP --> SP["Prepare or reuse the designer surface process"]
 ```
+
+## Hosting a designer process
+
