@@ -40,10 +40,13 @@ internal static class WinUIPlatformRegistration
 
         string version = FileVersionInfo.GetVersionInfo(typeof(PlatformService).Assembly.Location).FileVersion ?? string.Empty;
 
-        if (!version.StartsWith("18.9.", StringComparison.Ordinal) || IntPtr.Size != 8)
+        string numericVersion = version.Split('-')[0];
+        if (!Version.TryParse(numericVersion, out Version? parsedVersion) || parsedVersion.Major < 17 || !Environment.Is64BitProcess)
         {
-            throw new NotSupportedException($"WinUI Designer requires the verified Visual Studio 18.9 x64 contracts. Found {version}.");
+            throw new NotSupportedException($"WinUI Designer requires Visual Studio 17.0 or later running as a 64-bit process. Found DesignTools version {version}.");
         }
+
+        WinUIDesignerLogger.LogInformation("VSIX", $"Checking Visual Studio DesignTools {version} in a {(Environment.Is64BitProcess ? "64-bit" : "32-bit")} process.");
 
         // Validate all private entry points before changing process-wide registration.
         _ = typeof(Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views.UwpSceneView).GetField("imageHost", BindingFlags.Instance | BindingFlags.NonPublic)

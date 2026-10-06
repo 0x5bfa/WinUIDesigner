@@ -35,14 +35,14 @@ internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
             throw new NotSupportedException("WinUI Designer currently supports .NETCoreApp projects only.");
         }
 
-        if (!string.Equals(surfaceProcessInfo.PlatformIdentifier?.TargetRuntime, "Managed", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(surfaceProcessInfo.RuntimeArchitecture, "x64", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(surfaceProcessInfo.PlatformIdentifier?.TargetRuntime, "Managed", StringComparison.OrdinalIgnoreCase))
         {
-            throw new NotSupportedException($"WinUI Designer requires a managed x64 project. Runtime={surfaceProcessInfo.PlatformIdentifier?.TargetRuntime}, architecture={surfaceProcessInfo.RuntimeArchitecture}.");
+            throw new NotSupportedException($"WinUI Designer requires a managed project. Runtime={surfaceProcessInfo.PlatformIdentifier?.TargetRuntime}, architecture={surfaceProcessInfo.RuntimeArchitecture}.");
         }
 
         var extensionDirectory = Path.GetDirectoryName(typeof(WinUIShadowCopyWorkerFactory).Assembly.Location)!;
-        var payloadSurface = Path.Combine(extensionDirectory, "WinUISurface.exe");
+        var payloadArchitecture = GetPayloadArchitecture(surfaceProcessInfo.RuntimeArchitecture);
+        var payloadSurface = Path.Combine(extensionDirectory, $"WinUISurface.{payloadArchitecture}.exe");
         var projectWinUI = hostProject.References.Select(reference => reference.Path)
             .FirstOrDefault(reference => string.Equals(Path.GetFileName(reference), "Microsoft.WinUI.dll", StringComparison.OrdinalIgnoreCase));
 
@@ -61,11 +61,32 @@ internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
             }
         }
 
-        return new WinUICoreShadowCopyWorker(surfaceProcessInfo, hostProject, controlAssembliesForShadowCopy);
+        return new WinUICoreShadowCopyWorker(surfaceProcessInfo, hostProject, controlAssembliesForShadowCopy, payloadSurface);
+    }
+
+    private static string GetPayloadArchitecture(string? runtimeArchitecture)
+    {
+        if (string.Equals(runtimeArchitecture, "x64", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(runtimeArchitecture, "amd64", StringComparison.OrdinalIgnoreCase))
+        {
+            return "x64";
+        }
+
+        if (string.Equals(runtimeArchitecture, "arm64", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(runtimeArchitecture, "aarch64", StringComparison.OrdinalIgnoreCase))
+        {
+            return "arm64";
+        }
+
+        throw new NotSupportedException($"WinUI Designer supports x64 and ARM64 managed projects. Runtime architecture: {runtimeArchitecture}.");
     }
 }
 
-internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo,ã€€IHostProject hostProject,ã€€IEnumerable<string> controlAssembliesForShadowCopy)
+internal sealed class WinUICoreShadowCopyWorker(
+    SurfaceProcessInfo surfaceInfo,
+    IHostProject hostProject,
+    IEnumerable<string> controlAssembliesForShadowCopy,
+    string payloadSurface)
     : WpfCoreShadowCopyWorker(surfaceInfo, hostProject, controlAssembliesForShadowCopy)
 {
     private const string SurfaceExecutableName = "WinUISurface.exe";
@@ -75,6 +96,7 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo,ã
         .Distinct(StringComparer.OrdinalIgnoreCase)];
 
     private readonly IHostProject hostProject = hostProject;
+    private readonly string payloadSurface = payloadSurface;
 
     public override string CopySurfaceProcessPayload(CancellationToken cancelToken)
     {
@@ -86,7 +108,6 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo,ã
         var assemblyDirectory = Path.GetDirectoryName(typeof(WinUICoreShadowCopyWorker).Assembly.Location)
             ?? throw new InvalidOperationException("Unable to locate the WinUIDesigner VSIX assembly.");
 
-        var payloadSurface = Path.Combine(assemblyDirectory, SurfaceExecutableName);
         if (!File.Exists(payloadSurface))
         {
             throw new FileNotFoundException($"WinUI surface payload was not found: {payloadSurface}", payloadSurface);
