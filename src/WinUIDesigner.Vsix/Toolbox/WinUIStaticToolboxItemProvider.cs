@@ -8,8 +8,6 @@ using System.Windows;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Microsoft.VisualStudio.Shell.Interop;
-using WinUIDesigner.Interop;
-
 namespace WinUIDesigner.Toolbox;
 
 internal sealed class WinUIStaticToolboxItemProvider : IVsToolboxItemProvider

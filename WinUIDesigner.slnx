@@ -10,7 +10,7 @@
     </Project>
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/WinUIDesigner.Tests/WinUIDesigner.Tests.csproj" />
-    <Project Path="tests/WinUIDesigner.Toolbox.Tests/WinUIDesigner.Toolbox.Tests.csproj" />
+    <Project Path="tests/WinUIDesigner.Surface.Tests/WinUIDesigner.Surface.Tests.csproj" />
+    <Project Path="tests/WinUIDesigner.Vsix.Tests/WinUIDesigner.Vsix.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,0 +1,38 @@
+<Project Sdk="MSTest.Sdk/4.4.1">
+
+	<PropertyGroup>
+		<TargetFramework>net472</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<TestingExtensionsProfile>None</TestingExtensionsProfile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/WinUIStandardToolboxItems.cs" Link="WinUIStandardToolboxItems.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/WinUIStaticToolboxItemProvider.cs" Link="WinUIStaticToolboxItemProvider.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/WinUIDesignerLogger.cs" Link="WinUIDesignerLogger.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/NativeMethods.cs" Link="NativeMethods.cs" Visible="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Mono.Cecil" Version="0.11.6" />
+		<PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.0.11" />
+		<PackageReference Include="System.Reflection.Metadata" Version="10.0.8" />
+		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="PresentationFramework" />
+		<Reference Include="PresentationCore" />
+		<Reference Include="WindowsBase" />
+		<Reference Include="Microsoft.VisualStudio.Shell.Framework">
+			<HintPath>$(VsInstallRoot)/Common7/IDE/PublicAssemblies/Microsoft.VisualStudio.Shell.Framework.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.VisualStudio.Interop">
+			<HintPath>$(VsInstallRoot)/Common7/IDE/PublicAssemblies/Microsoft.VisualStudio.Interop.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.VisualStudio.DesignTools.Utility">
+			<HintPath>$(VsInstallRoot)/Common7/IDE/PrivateAssemblies/Microsoft.VisualStudio.DesignTools.Utility.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+
+</Project>
