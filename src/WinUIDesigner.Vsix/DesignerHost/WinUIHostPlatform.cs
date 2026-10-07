@@ -62,9 +62,6 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         return new Win32SurfaceProcess(surfaceProcess, surfaceProcessId);
     }
 
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern IntPtr GetThreadDpiAwarenessContext();
-
     private static Process StartSurfaceProcess(string path, string tapPath, string initializationData)
     {
         using Process currentProcess = Process.GetCurrentProcess();
@@ -76,7 +73,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             currentProcess.Id,
             WpfHostPlatform.ShellEscape(tapPath),
             WpfHostPlatform.ShellEscape(initializationData),
-            GetThreadDpiAwarenessContext().ToInt64());
+            NativeMethods.GetThreadDpiAwarenessContext().ToInt64());
 
         var process = new Process()
         {

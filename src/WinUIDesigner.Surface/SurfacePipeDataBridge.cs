@@ -127,16 +127,6 @@ internal sealed class SurfaceAnonymousPipe : IDisposable
     private readonly AnonymousPipeClientStream writePipe;
     private readonly int writeBufferSize;
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PeekNamedPipe(
-        SafePipeHandle handle,
-        byte[]? buffer,
-        int bufferSize,
-        ref int bytesRead,
-        ref int bytesAvailable,
-        ref int bytesLeftThisMessage);
-
     public SurfaceAnonymousPipe(IntPtr readEventHandle, IntPtr readPipeHandle, IntPtr writeEventHandle, IntPtr writePipeHandle)
     {
         readEvent.SafeWaitHandle = new SafeWaitHandle(readEventHandle, ownsHandle: true);
@@ -171,7 +161,7 @@ internal sealed class SurfaceAnonymousPipe : IDisposable
 
                 int bytesRead = 0;
                 int bytesLeft = 0;
-                if (!PeekNamedPipe(readPipe.SafePipeHandle, null, 0, ref bytesRead, ref totalBytesAvailable, ref bytesLeft))
+                if (!NativeMethods.PeekNamedPipe(readPipe.SafePipeHandle, null, 0, ref bytesRead, ref totalBytesAvailable, ref bytesLeft))
                 {
                     return ConditionResult.Shutdown;
                 }
@@ -206,7 +196,7 @@ internal sealed class SurfaceAnonymousPipe : IDisposable
 
                         int bytesRead = 0;
                         int bytesLeft = 0;
-                        if (!PeekNamedPipe(readPipe.SafePipeHandle, null, 0, ref bytesRead, ref totalBytesAvailable, ref bytesLeft))
+                        if (!NativeMethods.PeekNamedPipe(readPipe.SafePipeHandle, null, 0, ref bytesRead, ref totalBytesAvailable, ref bytesLeft))
                         {
                             return ConditionResult.Shutdown;
                         }

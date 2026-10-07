@@ -2,7 +2,6 @@
 // Licensed under MIT License.
 
 using System;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
@@ -136,17 +135,5 @@ internal sealed class DiagnosticsPropertySourceService
             Program.WriteDiagnosticTrace($"WinUI diagnostics rendering switch unavailable: {ex}");
             return false;
         }
-    }
-
-    private static class NativeMethods
-    {
-        [DllImport("WinUIDesigner.DiagnosticsTap.dll")]
-        internal static extern int WinUIDesignerDiagnostics_Initialize();
-
-        [DllImport("WinUIDesigner.DiagnosticsTap.dll", CharSet = CharSet.Unicode)]
-        internal static extern int WinUIDesignerDiagnostics_GetPropertySource(nint instance, string propertyName, out int valueSource);
-
-        [DllImport("WinUIDesigner.DiagnosticsTap.dll")]
-        internal static extern int WinUIDesignerDiagnostics_SetRenderingEnabled([MarshalAs(UnmanagedType.Bool)] bool enabled);
     }
 }

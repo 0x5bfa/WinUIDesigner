@@ -17,7 +17,7 @@ namespace WinUIDesigner.Surface;
 
 // Own the per-process IPC and document services. Register each observer before
 // starting ProtocolHandler so VS cannot send an early message to an empty table.
-public sealed partial class SurfaceApplication : Application, IXamlMetadataProvider, IDisposable
+public sealed partial class App : Application, IXamlMetadataProvider, IDisposable
 {
     // The XAML compiler adds this provider after its first compilation pass.
     // Resolve it at runtime so the explicit interface also compiles during pass one.
@@ -55,7 +55,7 @@ public sealed partial class SurfaceApplication : Application, IXamlMetadataProvi
     private SurfaceService? surfaceService;
     private bool disposed;
 
-    public SurfaceApplication(
+    public App(
         int hostProcessId,
         string tapPath,
         string bridgeInitializationData,

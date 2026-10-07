@@ -128,25 +128,11 @@
 		</VSIXSourceItem>
 	</ItemGroup>
 
-	<Target Name="PublishWinUIDesignerSurface"
-	        BeforeTargets="GetVsixSourceItems"
-	        Condition="'$(CreateVsixContainer)' != 'false' and '$(DesignTimeBuild)' != 'true'">
-		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.DiagnosticsTap\WinUIDesigner.DiagnosticsTap.vcxproj"
-		         Targets="Build"
-		         Properties="Configuration=$(Configuration);Platform=ARM64"
-		         BuildInParallel="false" />
-		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\WinUIDesigner.Surface.csproj"
-		         Targets="Publish"
-		         Properties="RuntimeIdentifier=win-arm64;DiagnosticsTapOutputDir=..\WinUIDesigner.DiagnosticsTap\bin\ARM64\$(Configuration)"
-		         BuildInParallel="false" />
-		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.DiagnosticsTap\WinUIDesigner.DiagnosticsTap.vcxproj"
-		         Targets="Build"
-		         Properties="Configuration=$(Configuration);Platform=x64"
-		         BuildInParallel="false" />
-		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\WinUIDesigner.Surface.csproj"
-		         Targets="Publish"
-		         Properties="RuntimeIdentifier=win-x64;DiagnosticsTapOutputDir=..\WinUIDesigner.DiagnosticsTap\bin\x64\$(Configuration)"
-		         BuildInParallel="false" />
+	<Target Name="PublishWinUIDesignerSurface" BeforeTargets="GetVsixSourceItems" Condition="'$(CreateVsixContainer)' != 'false' and '$(DesignTimeBuild)' != 'true'">
+		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.DiagnosticsTap\WinUIDesigner.DiagnosticsTap.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=ARM64" BuildInParallel="false" />
+		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\WinUIDesigner.Surface.csproj" Targets="Publish" Properties="RuntimeIdentifier=win-arm64;DiagnosticsTapOutputDir=..\WinUIDesigner.DiagnosticsTap\bin\ARM64\$(Configuration)" BuildInParallel="false" />
+		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.DiagnosticsTap\WinUIDesigner.DiagnosticsTap.vcxproj" Targets="Build" Properties="Configuration=$(Configuration);Platform=x64" BuildInParallel="false" />
+		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\WinUIDesigner.Surface.csproj" Targets="Publish" Properties="RuntimeIdentifier=win-x64;DiagnosticsTapOutputDir=..\WinUIDesigner.DiagnosticsTap\bin\x64\$(Configuration)" BuildInParallel="false" />
 	</Target>
 
 </Project>

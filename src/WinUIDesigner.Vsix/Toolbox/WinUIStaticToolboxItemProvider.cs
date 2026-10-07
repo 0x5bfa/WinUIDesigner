@@ -8,6 +8,7 @@ using System.Windows;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Microsoft.VisualStudio.Shell.Interop;
+using WinUIDesigner.Interop;
 
 namespace WinUIDesigner.Toolbox;
 
@@ -33,16 +34,16 @@ internal sealed class WinUIStaticToolboxItemProvider : IVsToolboxItemProvider
 
         byte[] bytes = ToolEncoder.Encode(properties);
 
-        IntPtr allocation = GlobalAlloc(0x0002, new UIntPtr((uint)bytes.Length));
+        IntPtr allocation = NativeMethods.GlobalAlloc(0x0002, new UIntPtr((uint)bytes.Length));
         if (allocation == IntPtr.Zero)
         {
             return VSConstants.E_OUTOFMEMORY;
         }
 
-        IntPtr address = GlobalLock(allocation);
+        IntPtr address = NativeMethods.GlobalLock(allocation);
         if (address == IntPtr.Zero)
         {
-            GlobalFree(allocation);
+            NativeMethods.GlobalFree(allocation);
             return VSConstants.E_OUTOFMEMORY;
         }
 
@@ -52,12 +53,12 @@ internal sealed class WinUIStaticToolboxItemProvider : IVsToolboxItemProvider
         }
         catch
         {
-            GlobalUnlock(allocation);
-            GlobalFree(allocation);
+            NativeMethods.GlobalUnlock(allocation);
+            NativeMethods.GlobalFree(allocation);
             throw;
         }
 
-        GlobalUnlock(allocation);
+        NativeMethods.GlobalUnlock(allocation);
         global = allocation; // Ownership passes to the Toolbox; it calls GlobalFree.
 
         WinUIDesignerLogger.LogDebug("Toolbox", $"Static item content: {typeName}.");
@@ -65,12 +66,4 @@ internal sealed class WinUIStaticToolboxItemProvider : IVsToolboxItemProvider
         return VSConstants.S_OK;
     }
 
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr GlobalAlloc(uint flags, UIntPtr bytes);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr GlobalLock(IntPtr handle);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GlobalUnlock(IntPtr handle);
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr GlobalFree(IntPtr handle);
 }

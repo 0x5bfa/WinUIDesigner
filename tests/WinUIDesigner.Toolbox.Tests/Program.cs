@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Windows;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Mono.Cecil;
@@ -63,7 +62,7 @@ internal static class Program
         {
             Check(provider.GetItemContent(WinUIStandardToolboxItems.GetItemId(type), format, out IntPtr global) == 0,
                 "provider must supply " + type);
-            IntPtr address = GlobalLock(global);
+            IntPtr address = NativeMethods.GlobalLock(global);
             try
             {
                 IDictionary<string, object> decoded = ToolEncoder.Decode(address);
@@ -77,8 +76,8 @@ internal static class Program
             }
             finally
             {
-                GlobalUnlock(global);
-                GlobalFree(global);
+                NativeMethods.GlobalUnlock(global);
+                NativeMethods.GlobalFree(global);
             }
         }
 
@@ -137,7 +136,4 @@ internal static class Program
     }
 
     private static void Check(bool valid, string message) { if (!valid) throw new Exception(message); }
-    [DllImport("kernel32.dll")] private static extern IntPtr GlobalLock(IntPtr handle);
-    [DllImport("kernel32.dll")] private static extern bool GlobalUnlock(IntPtr handle);
-    [DllImport("kernel32.dll")] private static extern IntPtr GlobalFree(IntPtr handle);
 }

@@ -42,7 +42,7 @@ internal static class Program
 
         WriteDiagnosticTrace($"WinUISurface started for host PID {hostProcessId}; TAP='{args[1]}'.");
 
-        SurfaceApplication? surfaceApplication = null;
+        App? app = null;
 
         try
         {
@@ -51,7 +51,7 @@ internal static class Program
                 throw new ArgumentException("Invalid DPI awareness context.");
             }
 
-            if (SetThreadDpiAwarenessContext((nint)(dpiContext == 0 ? -4 : dpiContext)) == 0)
+            if (NativeMethods.SetThreadDpiAwarenessContext((nint)(dpiContext == 0 ? -4 : dpiContext)) == 0)
             {
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
             }
@@ -66,8 +66,8 @@ internal static class Program
                     ?? throw new InvalidOperationException("WinUI DispatcherQueue was not created for the application thread.");
 
                 SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(dispatcherQueue));
-                surfaceApplication = new SurfaceApplication(hostProcessId, args[1], args[2], dispatcherQueue);
-                surfaceApplication.Initialize();
+                app = new App(hostProcessId, args[1], args[2], dispatcherQueue);
+                app.Initialize();
             });
 
             return 0;
@@ -79,13 +79,10 @@ internal static class Program
         }
         finally
         {
-            surfaceApplication?.Dispose();
+            app?.Dispose();
             WriteDiagnosticTrace("WinUISurface exiting.");
         }
     }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint SetThreadDpiAwarenessContext(nint context);
 
     private static void RegisterVisualStudioAssemblyResolver()
     {

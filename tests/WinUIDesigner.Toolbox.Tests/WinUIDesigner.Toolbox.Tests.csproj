@@ -7,6 +7,7 @@
     <Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/WinUIStandardToolboxItems.cs" Link="WinUIStandardToolboxItems.cs" />
     <Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/WinUIStaticToolboxItemProvider.cs" Link="WinUIStaticToolboxItemProvider.cs" />
     <Compile Include="../../src/WinUIDesigner.Vsix/WinUIDesignerLogger.cs" Link="WinUIDesignerLogger.cs" />
+    <Compile Include="../../src/WinUIDesigner.Vsix/NativeMethods.cs" Link="NativeMethods.cs" />
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <Reference Include="PresentationFramework" />
     <Reference Include="PresentationCore" />
