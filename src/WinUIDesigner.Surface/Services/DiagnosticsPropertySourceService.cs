@@ -9,8 +9,11 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Attach the VS-compatible XAML Diagnostics TAP and query dependency-property value
-// sources, which WinUI's public DependencyObject API does not expose.
+/// <summary>
+/// Queries WinUI diagnostics for dependency-property value-source information.
+/// Uses the VS-compatible XAML Diagnostics TAP because WinUI's public DependencyObject API
+/// does not expose these sources.
+/// </summary>
 internal sealed class DiagnosticsPropertySourceService
 {
     private const int S_OK = 0;
@@ -23,8 +26,9 @@ internal sealed class DiagnosticsPropertySourceService
 
     public void StartInitialization()
     {
-        if (nativeUnavailable || Environment.TickCount64 < Interlocked.Read(ref retryAfter)
-            || Interlocked.Exchange(ref initializationStarted, 1) != 0)
+        if (nativeUnavailable ||
+            Environment.TickCount64 < Interlocked.Read(ref retryAfter) ||
+            Interlocked.Exchange(ref initializationStarted, 1) != 0)
         {
             return;
         }
@@ -36,7 +40,9 @@ internal sealed class DiagnosticsPropertySourceService
                 // Connection can wait for the diagnostics endpoint to appear; keep
                 // TAP attachment off the UI thread while the surface starts.
                 int hr = NativeMethods.WinUIDesignerDiagnostics_Initialize();
-                Program.WriteDiagnosticTrace($"WinUI diagnostics TAP initialization completed: hr=0x{hr:X8}.");
+
+                WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics TAP initialization completed: hr=0x{hr:X8}.");
+
                 if (hr < 0)
                 {
                     // Missing endpoints can be transient while the island starts.
@@ -47,7 +53,7 @@ internal sealed class DiagnosticsPropertySourceService
             catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
             {
                 nativeUnavailable = true;
-                Program.WriteDiagnosticTrace($"WinUI diagnostics TAP initialization unavailable: {ex}");
+                WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics TAP initialization unavailable: {ex}");
             }
             finally
             {
@@ -59,6 +65,7 @@ internal sealed class DiagnosticsPropertySourceService
     public bool TryGetPropertySource(DependencyObject target, string propertyName, out BaseValueSource valueSource)
     {
         valueSource = BaseValueSource.Unknown;
+
         if (nativeUnavailable)
         {
             return false;
@@ -85,7 +92,7 @@ internal sealed class DiagnosticsPropertySourceService
             {
                 if (hr < 0)
                 {
-                    Program.WriteDiagnosticTrace($"WinUI diagnostics property-source lookup failed: property={propertyName}, hr=0x{hr:X8}.");
+                    WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics property-source lookup failed: property={propertyName}, hr=0x{hr:X8}.");
                 }
 
                 return false;
@@ -95,22 +102,27 @@ internal sealed class DiagnosticsPropertySourceService
             {
                 // Windows XAML Diagnostics uses 14 for VisualState, while the VS protocol uses 14 for Accessibility.
                 valueSource = BaseValueSource.Unknown;
+
                 return true;
             }
 
             if (nativeSource is >= (int)BaseValueSource.Unknown and <= (int)BaseValueSource.Coercion)
             {
                 valueSource = (BaseValueSource)nativeSource;
+
                 return true;
             }
 
-            Program.WriteDiagnosticTrace($"WinUI diagnostics returned an unsupported property source: property={propertyName}, source={nativeSource}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics returned an unsupported property source: property={propertyName}, source={nativeSource}.");
+
             return false;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
             nativeUnavailable = true;
-            Program.WriteDiagnosticTrace($"WinUI diagnostics property-source lookup unavailable: {ex}");
+
+            WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics property-source lookup unavailable: {ex}");
+
             return false;
         }
         finally
@@ -127,12 +139,15 @@ internal sealed class DiagnosticsPropertySourceService
         try
         {
             int hr = NativeMethods.WinUIDesignerDiagnostics_SetRenderingEnabled(enabled);
-            Program.WriteDiagnosticTrace($"WinUI diagnostics rendering switch: enabled={enabled}, hr=0x{hr:X8}.");
+
+            WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics rendering switch: enabled={enabled}, hr=0x{hr:X8}.");
+
             return hr == S_OK;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
-            Program.WriteDiagnosticTrace($"WinUI diagnostics rendering switch unavailable: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics rendering switch unavailable: {ex}");
+
             return false;
         }
     }

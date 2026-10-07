@@ -6,6 +6,9 @@ using System.IO;
 
 namespace WinUIDesigner.Surface;
 
+/// <summary>
+/// Reads and validates framed messages from the designer protocol stream.
+/// </summary>
 internal static class MessageFrameReader
 {
     // Includes the three remaining header integers, but excludes the length prefix.

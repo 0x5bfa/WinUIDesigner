@@ -16,9 +16,12 @@ using Windows.Graphics;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Hosts the document inside the Visual Studio-provided HWND while keeping the
-// artboard transform, viewport clipping, and native child-window lifetime aligned.
-internal sealed class DesignerSurface : IDisposable
+/// <summary>
+/// Hosts and positions the document visual tree inside the designer-provided window.
+/// Keeps the artboard transform, viewport clipping, and native child-window lifetime aligned
+/// while hosting the document inside the Visual Studio-provided HWND.
+/// </summary>
+internal sealed partial class DesignerSurface : IDisposable
 {
     private const uint WsPopup = 0x80000000;
     private const uint WsChild = 0x40000000;
@@ -53,15 +56,15 @@ internal sealed class DesignerSurface : IDisposable
     public DesignerSurface(FrameworkElement content, double width, double height)
     {
         this.content = content;
-
         // Keep the HWND-sized viewport separate from the design surface itself.
         // The Visual Studio artboard sends pan/zoom for the design surface; applying
         // that transform to the XamlSource root also moves the viewport and breaks
         // clipping/input coordinates when the artboard is scrolled.
-        viewportRoot = new Grid();
+
         // Canvas arranges the document at its origin even when d:DesignWidth is
         // smaller than the chosen device. A Grid centers a Stretch child whose
         // explicit width is smaller, disagreeing with the frontend's root origin.
+        viewportRoot = new Grid();
         transformRoot = (Canvas)XamlReader.Load(
             "<Canvas xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
             "Background=\"{ThemeResource ApplicationPageBackgroundThemeBrush}\" />");
@@ -80,6 +83,7 @@ internal sealed class DesignerSurface : IDisposable
     public FrameworkElement Content => content;
 
     public bool IsFrozen { get; private set; }
+
     public event Action<double>? DpiChanged;
 
     public void Freeze()
@@ -88,6 +92,7 @@ internal sealed class DesignerSurface : IDisposable
         {
             renderingSuspended = DiagnosticsPropertySourceService.TrySetRenderingEnabled(false);
         }
+
         IsFrozen = true;
     }
 
@@ -102,6 +107,7 @@ internal sealed class DesignerSurface : IDisposable
         {
             renderingSuspended = false;
         }
+
         IsFrozen = false;
         ArmUnfreezeCompositionBarrier();
     }
@@ -124,6 +130,7 @@ internal sealed class DesignerSurface : IDisposable
         // so the bounds reported to the artboard cover the pixels users can see.
         Rect bounds = GetDocumentBounds();
         AppendDescendantBounds(content, content, ref bounds);
+
         return bounds;
     }
 
@@ -132,6 +139,7 @@ internal sealed class DesignerSurface : IDisposable
         // Message 548 supplies the holder HWND and viewport dimensions after the
         // surface has been created; this also reparents the XAML island when needed.
         EnsureIsland();
+
         if (parentWindow != parentHwnd)
         {
             nint style = NativeMethods.GetWindowLongPtr(hostWindow, GwlStyle);
@@ -140,33 +148,38 @@ internal sealed class DesignerSurface : IDisposable
             _ = NativeMethods.SetParent(hostWindow, parentHwnd);
             parentWindow = parentHwnd;
         }
-
         // The shipped UWP surface is resized synchronously before VS repositions its
         // adorner child HWND. Our message 548 crosses the process boundary, so using
         // HWND_TOP here can run after that step and cover the grid/selection adorners.
         // Keep the remote surface at the bottom of the holder's child z-order.
+
         _ = NativeMethods.SetWindowPos(hostWindow, HwndBottom, 0, 0, width, height, SwpFrameChanged);
         xamlSource!.SiteBridge.MoveAndResize(new RectInt32(0, 0, width, height));
+
         viewportRoot.Width = Math.Max(1, width);
         viewportRoot.Height = Math.Max(1, height);
         viewportRoot.Measure(new Size(viewportRoot.Width, viewportRoot.Height));
         viewportRoot.Arrange(new Rect(0, 0, viewportRoot.Width, viewportRoot.Height));
         viewportRoot.UpdateLayout();
+
         _ = NativeMethods.InvalidateRect(parentHwnd, IntPtr.Zero, true);
-        Program.WriteDiagnosticTrace($"DesignerSurface positioned: parent=0x{parentHwnd.ToInt64():X}, size={width}x{height}.");
+
+        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface positioned: parent=0x{parentHwnd.ToInt64():X}, size={width}x{height}.");
     }
 
     public void SetPanZoomTransform(double offsetX, double offsetY, double scale)
     {
         scale = scale <= 0 ? 1.0 : scale;
-        transformRoot.RenderTransform = new CompositeTransform
+
+        transformRoot.RenderTransform = new CompositeTransform()
         {
             ScaleX = scale,
             ScaleY = scale,
             TranslateX = offsetX,
             TranslateY = offsetY,
         };
-        Program.WriteDiagnosticTrace($"DesignerSurface pan/zoom updated: offset={offsetX},{offsetY}, scale={scale}.");
+
+        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface pan/zoom updated: offset={offsetX},{offsetY}, scale={scale}.");
     }
 
     public void SetDeviceSize(double width, double height)
@@ -182,7 +195,8 @@ internal sealed class DesignerSurface : IDisposable
         transformRoot.Measure(new Size(width, height));
         transformRoot.Arrange(new Rect(0, 0, width, height));
         transformRoot.UpdateLayout();
-        Program.WriteDiagnosticTrace($"DesignerSurface device size updated: {width}x{height}.");
+
+        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface device size updated: {width}x{height}.");
     }
 
     public void ReplaceContent(FrameworkElement newContent)
@@ -196,18 +210,27 @@ internal sealed class DesignerSurface : IDisposable
         transformRoot.Children.Remove(content);
         content = newContent;
         transformRoot.Children.Insert(0, newContent);
+
         if (!XSurfUwp.DT.IsSizePropertyShadowed(content, FrameworkElement.WidthProperty) && double.IsFinite(content.Width))
+        {
             XSurfUwp.DT.SetRuntimeWidth(content, content.Width);
+        }
+
         if (!XSurfUwp.DT.IsSizePropertyShadowed(content, FrameworkElement.HeightProperty) && double.IsFinite(content.Height))
+        {
             XSurfUwp.DT.SetRuntimeHeight(content, content.Height);
+        }
+
         SetDeviceSize(deviceWidth > 0 ? deviceWidth : 800, deviceHeight > 0 ? deviceHeight : 600);
-        Program.WriteDiagnosticTrace($"DesignerSurface content replaced with {newContent.GetType().FullName}.");
+
+        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface content replaced with {newContent.GetType().FullName}.");
     }
 
     public void RefreshLayout()
     {
         double width = deviceWidth > 0 ? deviceWidth : Math.Max(1, transformRoot.Width);
         double height = deviceHeight > 0 ? deviceHeight : Math.Max(1, transformRoot.Height);
+
         transformRoot.Measure(new Size(width, height));
         transformRoot.Arrange(new Rect(0, 0, width, height));
         transformRoot.UpdateLayout();
@@ -223,9 +246,11 @@ internal sealed class DesignerSurface : IDisposable
         }
 
         boundsUpdatePending = true;
+
         if (!viewportRoot.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
         {
             boundsUpdatePending = false;
+
             if (!disposed)
             {
                 BoundsInvalidated?.Invoke(this, EventArgs.Empty);
@@ -247,6 +272,7 @@ internal sealed class DesignerSurface : IDisposable
         unfreezeCompositionCompleted.Reset();
 
         EventHandler<object>? handler = null;
+
         handler = (_, _) =>
         {
             if (handler is not null)
@@ -256,12 +282,14 @@ internal sealed class DesignerSurface : IDisposable
 
             compositionRenderingHandler = null;
             unfreezeCompositionCompleted.Set();
-            Program.WriteDiagnosticTrace("DesignerSurface unfreeze composition barrier completed.");
+
+            WinUIDesignerLogger.LogTrace("Surface", "DesignerSurface unfreeze composition barrier completed.");
         };
 
         compositionRenderingHandler = handler;
         CompositionTarget.Rendering += handler;
-        Program.WriteDiagnosticTrace("DesignerSurface unfreeze composition barrier armed.");
+
+        WinUIDesignerLogger.LogTrace("Surface", "DesignerSurface unfreeze composition barrier armed.");
     }
 
     public void SetCheckerboardColors(Windows.UI.Color color1, Windows.UI.Color color2)
@@ -274,25 +302,30 @@ internal sealed class DesignerSurface : IDisposable
             (byte)((color1.R >> 1) + (color2.R >> 1)),
             (byte)((color1.G >> 1) + (color2.G >> 1)),
             (byte)((color1.B >> 1) + (color2.B >> 1))));
-
         // The shared frontend's background toggle sends colors, not a RequestedTheme
         // action. Use its chosen light/dark backdrop as the preview theme, so controls
         // and ThemeResource expressions change together without recreating the tree.
+
         previewRequestedTheme = color1.R + color1.G + color1.B >= 3 * 128
-            ? ElementTheme.Light : ElementTheme.Dark;
+            ? ElementTheme.Light
+            : ElementTheme.Dark;
+
         ApplyRequestedTheme();
-        Program.WriteDiagnosticTrace($"DesignerSurface preview theme: colors={color1},{color2}, requested={previewRequestedTheme}, actual={viewportRoot.ActualTheme}.");
+
+        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface preview theme: colors={color1},{color2}, requested={previewRequestedTheme}, actual={viewportRoot.ActualTheme}.");
     }
 
     public void SetRequestedTheme(ElementTheme theme)
     {
         appRequestedTheme = theme;
+
         ApplyRequestedTheme();
     }
 
     private void ApplyRequestedTheme()
     {
         viewportRoot.RequestedTheme = previewRequestedTheme ?? appRequestedTheme;
+
         RefreshLayout();
     }
 
@@ -316,6 +349,7 @@ internal sealed class DesignerSurface : IDisposable
         bounds = default;
         double width = element is FrameworkElement frameworkElement ? frameworkElement.ActualWidth : element.RenderSize.Width;
         double height = element is FrameworkElement frameworkElement2 ? frameworkElement2.ActualHeight : element.RenderSize.Height;
+
         if (!double.IsFinite(width) || !double.IsFinite(height) || width < 0 || height < 0)
         {
             return false;
@@ -324,15 +358,18 @@ internal sealed class DesignerSurface : IDisposable
         try
         {
             GeneralTransform transform = element.TransformToVisual(root);
+
             Point topLeft = transform.TransformPoint(new Point(0, 0));
             Point topRight = transform.TransformPoint(new Point(width, 0));
             Point bottomLeft = transform.TransformPoint(new Point(0, height));
             Point bottomRight = transform.TransformPoint(new Point(width, height));
+
             double left = Math.Min(Math.Min(topLeft.X, topRight.X), Math.Min(bottomLeft.X, bottomRight.X));
             double top = Math.Min(Math.Min(topLeft.Y, topRight.Y), Math.Min(bottomLeft.Y, bottomRight.Y));
             double right = Math.Max(Math.Max(topLeft.X, topRight.X), Math.Max(bottomLeft.X, bottomRight.X));
             double bottom = Math.Max(Math.Max(topLeft.Y, topRight.Y), Math.Max(bottomLeft.Y, bottomRight.Y));
             bounds = new Rect(left, top, right - left, bottom - top);
+
             return true;
         }
         catch
@@ -347,6 +384,7 @@ internal sealed class DesignerSurface : IDisposable
         double y = Math.Min(left.Y, right.Y);
         double rightEdge = Math.Max(left.X + left.Width, right.X + right.Width);
         double bottomEdge = Math.Max(left.Y + left.Height, right.Y + right.Height);
+
         return new Rect(x, y, rightEdge - x, bottomEdge - y);
     }
 
@@ -356,10 +394,10 @@ internal sealed class DesignerSurface : IDisposable
         {
             return;
         }
-
         // DesktopWindowXamlSource cannot initialize against a message-only parent.
         // Give it a local top-level HWND on this thread, then reparent that HWND into
         // the Visual Studio artboard after the island has been initialized.
+
         hostWindow = NativeMethods.CreateWindowEx(
             0,
             "STATIC",
@@ -382,12 +420,15 @@ internal sealed class DesignerSurface : IDisposable
         xamlSource = new DesktopWindowXamlSource();
         xamlSource.Initialize(Win32Interop.GetWindowIdFromWindow(hostWindow));
         xamlSource.Content = viewportRoot;
+
         if (viewportRoot.XamlRoot is { } root)
         {
             root.Changed += OnXamlRootChanged;
+
             PublishDpi(root);
         }
-        Program.WriteDiagnosticTrace($"DesktopWindowXamlSource initialized on surface HWND 0x{hostWindow.ToInt64():X}.");
+
+        WinUIDesignerLogger.LogTrace("Surface", $"DesktopWindowXamlSource initialized on surface HWND 0x{hostWindow.ToInt64():X}.");
     }
 
     private void OnXamlRootChanged(XamlRoot sender, XamlRootChangedEventArgs args)
@@ -415,13 +456,16 @@ internal sealed class DesignerSurface : IDisposable
         }
 
         disposed = true;
+
         if (renderingSuspended)
         {
             _ = DiagnosticsPropertySourceService.TrySetRenderingEnabled(true);
             renderingSuspended = false;
         }
+
         IsFrozen = false;
         viewportRoot.LayoutUpdated -= OnLayoutUpdated;
+
         if (viewportRoot.XamlRoot is { } root)
         {
             root.Changed -= OnXamlRootChanged;
@@ -432,14 +476,15 @@ internal sealed class DesignerSurface : IDisposable
             CompositionTarget.Rendering -= compositionRenderingHandler;
             compositionRenderingHandler = null;
         }
+
         unfreezeCompositionCompleted.Set();
         xamlSource?.Dispose();
         xamlSource = null;
+
         if (hostWindow != IntPtr.Zero)
         {
             _ = NativeMethods.DestroyWindow(hostWindow);
             hostWindow = IntPtr.Zero;
         }
     }
-
 }

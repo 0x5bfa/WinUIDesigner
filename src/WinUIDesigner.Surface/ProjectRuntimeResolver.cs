@@ -16,7 +16,10 @@ using Microsoft.UI.Xaml.Markup;
 
 namespace WinUIDesigner.Surface;
 
-// Index staged metadata without executing every project dependency in the host.
+/// <summary>
+/// Resolves staged project assemblies, XAML metadata, and resources in the surface process.
+/// Indexes staged metadata without loading every project dependency into the Visual Studio host.
+/// </summary>
 internal static class ProjectRuntimeResolver
 {
     private static readonly Dictionary<string, string> Assemblies = new(StringComparer.OrdinalIgnoreCase);
@@ -94,13 +97,15 @@ internal static class ProjectRuntimeResolver
 
                         if (type.Kind == HandleKind.TypeReference &&
                             metadata.GetString(metadata.GetTypeReference((TypeReferenceHandle)type).Name) == nameof(IXamlMetadataProvider))
+                        {
                             ProviderTypes.Add(fullName);
+                        }
                     }
                 }
             }
             catch (Exception ex) when (ex is IOException or BadImageFormatException)
             {
-                Program.WriteDiagnosticTrace($"Unable to index staged assembly '{file}': {ex.Message}");
+                WinUIDesignerLogger.LogTrace("Surface", $"Unable to index staged assembly '{file}': {ex.Message}");
             }
         }
 
@@ -130,11 +135,11 @@ internal static class ProjectRuntimeResolver
             {
                 projects.Add(new ResourceManager(file));
 
-                Program.WriteDiagnosticTrace($"Staged PRI loaded: '{file}'.");
+                WinUIDesignerLogger.LogTrace("Surface", $"Staged PRI loaded: '{file}'.");
             }
             catch (Exception ex)
             {
-                Program.WriteDiagnosticTrace($"Unable to load staged PRI '{file}': {ex.Message}");
+                WinUIDesignerLogger.LogTrace("Surface", $"Unable to load staged PRI '{file}': {ex.Message}");
             }
         }
 
@@ -149,12 +154,13 @@ internal static class ProjectRuntimeResolver
                 }
 
                 args.SetResolvedCandidate(candidate);
-                Program.WriteDiagnosticTrace($"Project resource resolved: {args.Name}.");
+
+                WinUIDesignerLogger.LogTrace("Surface", $"Project resource resolved: {args.Name}.");
 
                 return;
             }
 
-            Program.WriteDiagnosticTrace($"Project resource was not found: {args.Name}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Project resource was not found: {args.Name}.");
         };
 
         return primary;
@@ -179,9 +185,9 @@ internal static class ProjectRuntimeResolver
         foreach (string name in ProviderTypes.Distinct())
         {
             var type = ResolveType(name);
-
             // A generated metadata provider is safe to construct independently;
             // constructing a second Application would replace the designer process.
+
             if (type is null || type.IsAbstract || typeof(Application).IsAssignableFrom(type))
             {
                 continue;

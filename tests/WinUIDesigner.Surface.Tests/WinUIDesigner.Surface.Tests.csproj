@@ -13,6 +13,7 @@
 		<Compile Include="../../src/WinUIDesigner.Surface/RuntimeTypeNameSerializer.cs" Link="RuntimeTypeNameSerializer.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Surface/DocumentConstructionException.cs" Link="DocumentConstructionException.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Surface/Services/ObjectIdentityRegistry.cs" Link="ObjectIdentityRegistry.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Surface/Services/DocumentScope.cs" Link="DocumentScope.cs" Visible="false" />
 	</ItemGroup>
 
 	<ItemGroup>

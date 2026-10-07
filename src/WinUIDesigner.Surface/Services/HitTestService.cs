@@ -13,7 +13,10 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
-internal sealed class HitTestService : IDisposable
+/// <summary>
+/// Resolves designer hit-test requests against the live WinUI visual tree.
+/// </summary>
+internal sealed partial class HitTestService : IDisposable
 {
     private readonly ProtocolHandler protocolHandler;
     private readonly DispatcherQueue dispatcherQueue;
@@ -25,10 +28,10 @@ internal sealed class HitTestService : IDisposable
         this.protocolHandler = protocolHandler;
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
-
         // Visual Studio's HitTestRequest uses System.Windows.Point/Rect even for the
         // platform-neutral wire protocol. Keep the WinUI surface independent of WPF
         // by deserializing the same DataContract JSON shape into local DTOs.
+
         registrationId = protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>(526, request =>
         {
             try
@@ -37,7 +40,7 @@ internal sealed class HitTestService : IDisposable
             }
             catch (Exception ex)
             {
-                Program.WriteDiagnosticTrace($"HitTest (526) failed for root {request.RootHandle}: {ex}");
+                WinUIDesignerLogger.LogTrace("Surface", $"HitTest (526) failed for root {request.RootHandle}: {ex}");
                 protocolHandler.PostMessage(529, new UnhandledExceptionResponse { Handle = request.RootHandle, Message = ex.Message, CallStack = ex.ToString() });
                 return Empty;
             }
@@ -64,11 +67,7 @@ internal sealed class HitTestService : IDisposable
         }
         else if (request.Rect is not null)
         {
-            var rootRect = new Windows.Foundation.Rect(
-                request.Rect.X,
-                request.Rect.Y,
-                request.Rect.Width,
-                request.Rect.Height);
+            var rootRect = new Windows.Foundation.Rect(request.Rect.X, request.Rect.Y, request.Rect.Width, request.Rect.Height);
             candidates = HitTestRect(root, rootRect);
         }
         else
@@ -77,9 +76,9 @@ internal sealed class HitTestService : IDisposable
         }
 
         var hits = candidates
-            .Select(candidate => new LiveValueHitEntry
+            .Select(candidate => new LiveValueHitEntry()
             {
-                Element = new LiveValue
+                Element = new LiveValue()
                 {
                     Handle = objectIdentity.GetHandle(candidate.Element),
                     Type = GetDesignerTypeName(candidate.Element.GetType()),
@@ -94,6 +93,7 @@ internal sealed class HitTestService : IDisposable
             : request.Rect is not null
                 ? $"rect={request.Rect.X},{request.Rect.Y},{request.Rect.Width},{request.Rect.Height}"
                 : "region=<none>";
+
         string hitSummary = string.Join(
             ", ",
             hits.Select(hit =>
@@ -101,7 +101,8 @@ internal sealed class HitTestService : IDisposable
                 SourceInfo? source = hit.Element?.SourceInfo;
                 return $"{hit.Element?.Handle}:{hit.Element?.Type}@{source?.FileName ?? "<none>"}:{source?.LineNumber ?? 0}:{source?.ColumnNumber ?? 0}:visible={hit.IsVisible}";
             }));
-        Program.WriteDiagnosticTrace($"HitTest (526) {region}; root={request.RootHandle}; hits=[{hitSummary}].");
+
+        WinUIDesignerLogger.LogTrace("Surface", $"HitTest (526) {region}; root={request.RootHandle}; hits=[{hitSummary}].");
 
         return new HitResponse { Hits = hits };
     }
@@ -109,15 +110,21 @@ internal sealed class HitTestService : IDisposable
     private static List<HitCandidate> HitTestPoint(UIElement root, Windows.Foundation.Point point)
     {
         var hits = new List<HitCandidate>();
+
         if (root.XamlRoot is not null)
         {
             // Message 526 already uses the island/host coordinate space. RootHandle
             // restricts the subtree; it does not make the point root-relative.
             foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(point, root, includeAllElements: true))
+            {
                 hits.Add(new HitCandidate(element, IsVisibleInTree(element)));
+            }
+
             return hits;
         }
+
         AppendPointHits(root, root, point, ancestorsVisible: true, hits);
+
         return hits;
     }
 
@@ -132,6 +139,7 @@ internal sealed class HitTestService : IDisposable
         int childCount = VisualTreeHelper.GetChildrenCount(element);
         // Visit frontmost children first so the response follows visual z-order and
         // the shared selection tool sees the topmost candidate first.
+
         for (int index = childCount - 1; index >= 0; index--)
         {
             if (VisualTreeHelper.GetChild(element, index) is UIElement child)
@@ -149,13 +157,19 @@ internal sealed class HitTestService : IDisposable
     private static List<HitCandidate> HitTestRect(UIElement root, Windows.Foundation.Rect rect)
     {
         var hits = new List<HitCandidate>();
+
         if (root.XamlRoot is not null)
         {
             foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(rect, root, includeAllElements: true))
+            {
                 hits.Add(new HitCandidate(element, IsVisibleInTree(element)));
+            }
+
             return hits;
         }
+
         AppendRectHits(root, root, rect, ancestorsVisible: true, hits);
+
         return hits;
     }
 
@@ -168,6 +182,7 @@ internal sealed class HitTestService : IDisposable
     {
         bool isVisible = ancestorsVisible && element.Visibility == Visibility.Visible;
         int childCount = VisualTreeHelper.GetChildrenCount(element);
+
         for (int index = childCount - 1; index >= 0; index--)
         {
             if (VisualTreeHelper.GetChild(element, index) is UIElement child)
@@ -187,6 +202,7 @@ internal sealed class HitTestService : IDisposable
         bounds = default;
         double width;
         double height;
+
         if (element is FrameworkElement frameworkElement)
         {
             width = frameworkElement.ActualWidth;
@@ -217,6 +233,7 @@ internal sealed class HitTestService : IDisposable
             double right = Math.Max(Math.Max(topLeft.X, topRight.X), Math.Max(bottomLeft.X, bottomRight.X));
             double bottom = Math.Max(Math.Max(topLeft.Y, topRight.Y), Math.Max(bottomLeft.Y, bottomRight.Y));
             bounds = new Windows.Foundation.Rect(left, top, right - left, bottom - top);
+
             return true;
         }
         catch
@@ -228,9 +245,9 @@ internal sealed class HitTestService : IDisposable
     private static bool Intersects(Windows.Foundation.Rect left, Windows.Foundation.Rect right)
     {
         return left.X <= right.X + right.Width &&
-               left.X + left.Width >= right.X &&
-               left.Y <= right.Y + right.Height &&
-               left.Y + left.Height >= right.Y;
+            left.X + left.Width >= right.X &&
+            left.Y <= right.Y + right.Height &&
+            left.Y + left.Height >= right.Y;
     }
 
     private static bool IsVisibleInTree(UIElement element)
@@ -246,8 +263,6 @@ internal sealed class HitTestService : IDisposable
         return true;
     }
 
-    private readonly record struct HitCandidate(UIElement Element, bool IsVisible);
-
     private static string? GetDesignerTypeName(Type type)
     {
         return type.FullName;
@@ -260,42 +275,4 @@ internal sealed class HitTestService : IDisposable
         protocolHandler.UnregisterMessageObserver(registrationId);
     }
 
-    [DataContract]
-    private sealed class HitTestRequestContract
-    {
-        [DataMember]
-        public long RootHandle { get; set; }
-
-        [DataMember(EmitDefaultValue = false)]
-        public PointContract? Point { get; set; }
-
-        [DataMember(EmitDefaultValue = false)]
-        public RectContract? Rect { get; set; }
-    }
-
-    [DataContract]
-    private sealed class PointContract
-    {
-        [DataMember(Name = "_x")]
-        public double X { get; set; }
-
-        [DataMember(Name = "_y")]
-        public double Y { get; set; }
-    }
-
-    [DataContract]
-    private sealed class RectContract
-    {
-        [DataMember(Name = "_x")]
-        public double X { get; set; }
-
-        [DataMember(Name = "_y")]
-        public double Y { get; set; }
-
-        [DataMember(Name = "_width")]
-        public double Width { get; set; }
-
-        [DataMember(Name = "_height")]
-        public double Height { get; set; }
-    }
 }

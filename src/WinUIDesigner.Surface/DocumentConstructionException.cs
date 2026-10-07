@@ -6,6 +6,9 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Shared;
 
 namespace WinUIDesigner.Surface;
 
+/// <summary>
+/// Reports which XAML action failed while constructing a document.
+/// </summary>
 internal sealed class DocumentConstructionException(Exception cause, XamlAction action)
     : Exception("A document construction action failed.", cause)
 {

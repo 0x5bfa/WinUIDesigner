@@ -9,8 +9,10 @@ using System.Reflection;
 
 namespace WinUIDesigner.Surface;
 
-// Describe runtime values using types visible in the project's reference metadata.
-// CsWinRT collection views are implementation objects, not authored XAML types.
+/// <summary>
+/// Formats runtime type names using project reference metadata.
+/// Hides CsWinRT collection-view implementation types that are not authored XAML types.
+/// </summary>
 internal static class RuntimeTypeNameSerializer
 {
     private static readonly Assembly CoreLibraryAssembly = typeof(object).Assembly;
@@ -85,10 +87,10 @@ internal static class RuntimeTypeNameSerializer
         {
             return GetAssemblyName(type.GetElementType()!);
         }
-
         // These framework contracts live in System.Runtime in the reference pack.
         // Preserve other assemblies rather than assuming every CoreLib type is
         // exported by that facade (List/Dictionary, for example, are not).
+
         if (type.Assembly == CoreLibraryAssembly &&
             (type.IsPublic && !type.IsGenericType || type.IsInterface || type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>)))
         {

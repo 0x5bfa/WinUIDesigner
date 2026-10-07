@@ -12,9 +12,12 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Implement the shared Designer's VisualState and Storyboard messages directly
-// against WinUI runtime objects in the surface process.
-internal sealed class AnimationService : IDisposable
+/// <summary>
+/// Applies visual-state and storyboard operations to live WinUI objects.
+/// Implements the shared Designer's VisualState and Storyboard messages directly
+/// against WinUI runtime objects in the surface process.
+/// </summary>
+internal sealed partial class AnimationService : IDisposable
 {
     private readonly ProtocolHandler protocolHandler;
     private readonly DispatcherQueue dispatcherQueue;
@@ -53,7 +56,7 @@ internal sealed class AnimationService : IDisposable
             changed |= TryGoToState(root, stateName, request.UseTransitions);
         }
 
-        Program.WriteDiagnosticTrace($"GoToState (524): root={request.RootHandle}, states={request.StateNames?.Count ?? 0}, changed={changed}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"GoToState (524): root={request.RootHandle}, states={request.StateNames?.Count ?? 0}, changed={changed}.");
         return Success;
     }
 
@@ -121,12 +124,14 @@ internal sealed class AnimationService : IDisposable
                 }
             }
 
-            Program.WriteDiagnosticTrace($"Storyboard (525): handle={request.ObjectHandle}, actions={request.StoryboardActions?.Count ?? 0}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Storyboard (525): handle={request.ObjectHandle}, actions={request.StoryboardActions?.Count ?? 0}.");
+
             return Success;
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"Storyboard (525) failed: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"Storyboard (525) failed: {ex}");
+
             return new ResponseWithError { HResult = ex.HResult == 0 ? -2147467259 : ex.HResult, Error = ex.ToString() };
         }
     }

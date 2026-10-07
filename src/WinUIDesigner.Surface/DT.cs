@@ -6,8 +6,11 @@ using System.Runtime.CompilerServices;
 
 namespace XSurfUwp;
 
-// Keep design, runtime, and root sizing intent separate. The real Width/Height
-// receives only the currently selected value used to lay out the preview.
+/// <summary>
+/// Defines attached design-time properties used to preserve document sizing and style intent.
+/// Keeps design, runtime, and root sizing intent separate. The real Width/Height
+/// receives only the currently selected value used to lay out the preview.
+/// </summary>
 public static class DT
 {
     private static readonly ConditionalWeakTable<FrameworkElement, Style> SuppressedStyles = [];

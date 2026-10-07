@@ -12,8 +12,10 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Translate runtime objects to the shared TAP's LiveValue wire shape. Complex
-// DependencyObjects use handles so later protocol messages retain object identity.
+/// <summary>
+/// Converts live WinUI values into the designer protocol representation.
+/// Serializes complex DependencyObjects as handles so later protocol messages preserve object identity.
+/// </summary>
 internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
 {
     public LiveValue Serialize(object? value)
@@ -26,7 +28,7 @@ internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
         }
 
         Type type = value.GetType();
-        var result = new LiveValue
+        var result = new LiveValue()
         {
             Type = GetSerializedTypeName(type),
             SourceInfo = objectIdentity.GetSourceInfo(value),
@@ -57,9 +59,9 @@ internal sealed class LiveValueSerializer(ObjectIdentityRegistry objectIdentity)
         {
             return false;
         }
-
         // A collection converter can produce "(Collection)", but the frontend
         // still needs the original object handle to query its keys and items.
+
         return value is DependencyObject or IEnumerable || !CanConvertToString(type);
     }
 

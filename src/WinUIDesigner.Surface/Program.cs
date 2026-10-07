@@ -2,7 +2,6 @@
 // Licensed under MIT License.
 
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -11,14 +10,15 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
-using WinUIDesigner.Surface.Services;
 
 namespace WinUIDesigner.Surface;
 
-// Entry point for the out-of-process WinUI island launched by the VS designer host.
+/// <summary>
+/// Starts the isolated WinUI surface process and initializes its runtime environment.
+/// Serves as the entry point launched out of process by the Visual Studio designer host.
+/// </summary>
 internal static class Program
 {
-    private static readonly string DiagnosticTracePath = CreateDiagnosticTracePath();
     internal static string ContentDirectory { get; } = GetContentDirectory();
 
     [STAThread]
@@ -28,19 +28,19 @@ internal static class Program
 
         ProjectRuntimeResolver.Initialize(ContentDirectory);
 
-        WriteDiagnosticTrace($"Main entered with {args.Length} arguments.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Main entered with {args.Length} arguments.");
 
         Assembly surfaceAssembly = typeof(Program).Assembly;
 
-        WriteDiagnosticTrace($"Surface assembly='{surfaceAssembly.Location}'; content directory='{ContentDirectory}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Surface assembly='{surfaceAssembly.Location}'; content directory='{ContentDirectory}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
 
         if (args.Length != 4 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
         {
-            WriteDiagnosticTrace("Invalid startup arguments.");
+            WinUIDesignerLogger.LogTrace("Surface", "Invalid startup arguments.");
             return 1;
         }
 
-        WriteDiagnosticTrace($"WinUISurface started for host PID {hostProcessId}; TAP='{args[1]}'.");
+        WinUIDesignerLogger.LogTrace("Surface", $"WinUISurface started for host PID {hostProcessId}; TAP='{args[1]}'.");
 
         App? app = null;
 
@@ -58,7 +58,7 @@ internal static class Program
 
             WinRT.ComWrappersSupport.InitializeComWrappers();
 
-            WriteDiagnosticTrace("CsWinRT COM wrappers initialized; starting Microsoft.UI.Xaml.Application.");
+            WinUIDesignerLogger.LogTrace("Surface", "CsWinRT COM wrappers initialized; starting Microsoft.UI.Xaml.Application.");
 
             Application.Start(_ =>
             {
@@ -74,13 +74,13 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            WriteDiagnosticTrace($"Surface startup failed: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"Surface startup failed: {ex}");
             return ex.HResult != 0 ? ex.HResult : 1;
         }
         finally
         {
             app?.Dispose();
-            WriteDiagnosticTrace("WinUISurface exiting.");
+            WinUIDesignerLogger.LogTrace("Surface", "WinUISurface exiting.");
         }
     }
 
@@ -98,9 +98,9 @@ internal static class Program
             Path.Combine(installRoot, "Common7", "IDE", "PublicAssemblies"),
             Path.Combine(installRoot, "Common7", "IDE"),
         ];
-
         // Private VS contract assemblies are intentionally not copied into the VSIX.
         // Resolve them from the same Visual Studio installation that launched us.
+
         AssemblyLoadContext.Default.Resolving += (_, assemblyName) =>
         {
             string fileName = $"{assemblyName.Name}.dll";
@@ -116,40 +116,8 @@ internal static class Program
             return null;
         };
     }
-
-    internal static void WriteDiagnosticTrace(string message)
-    {
-        Trace.WriteLine($"[WinUIDesigner] {message}");
-
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(DiagnosticTracePath)!);
-            File.AppendAllText(DiagnosticTracePath, $"{DateTime.UtcNow:O} Surface: {message}\r\n");
-        }
-        catch (IOException)
-        {
             // Diagnostic logging must not terminate the surface.
-        }
-        catch (UnauthorizedAccessException)
-        {
             // Diagnostic logging must not terminate the surface.
-        }
-    }
-
-    private static string CreateDiagnosticTracePath()
-    {
-        string basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(basePath))
-        {
-            basePath = Path.GetTempPath();
-        }
-
-        return Path.Combine(
-            basePath,
-            "WinUIDesigner",
-            "Logs",
-            $"WinUIDesigner-{Environment.ProcessId}.log");
-    }
 
     private static string GetContentDirectory()
     {

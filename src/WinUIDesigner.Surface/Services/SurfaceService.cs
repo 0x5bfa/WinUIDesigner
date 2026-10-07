@@ -24,9 +24,11 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Implements the Visual Studio designer's surface-side protocol and translates
-// those requests into WinUI objects, mutations, bounds, and property operations.
-internal sealed class SurfaceService : IDisposable
+/// <summary>
+/// Implements the surface-side Visual Studio designer protocol for WinUI documents.
+/// Translates designer requests into live objects, visual-tree mutations, bounds, and property operations.
+/// </summary>
+internal sealed partial class SurfaceService : IDisposable
 {
     private const int OnApplicationEventMessage = 521;
     private const int SurfaceLayoutUpdatedMessage = 543;
@@ -64,9 +66,9 @@ internal sealed class SurfaceService : IDisposable
         this.protocolHandler = protocolHandler;
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
-
         // These numeric message IDs are the shared VS designer wire contract; the
         // matching request/response types come from the private VS contract assembly.
+
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>(516, HandleCreateSurfaceAsync));
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CloseDocumentRequestInfo, ResponseWithError>(517, HandleCloseDocumentAsync));
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetPanZoomTransformRequestInfo, ResponseWithError>(518, HandleSetPanZoomTransformAsync));
@@ -88,7 +90,9 @@ internal sealed class SurfaceService : IDisposable
         try
         {
             if (!await constructionGate.WaitAsync(TimeSpan.FromSeconds(30), protocolHandler.CancellationToken).ConfigureAwait(false))
+            {
                 throw new TimeoutException("Another document construction did not finish within 30 seconds.");
+            }
         }
         catch (Exception ex)
         {
@@ -107,10 +111,14 @@ internal sealed class SurfaceService : IDisposable
     private async Task<CreateSurfaceResponseInfo> CreateSurfaceCoreAsync(CreateSurfaceRequestInfo requestInfo)
     {
         CreateDocumentInfo? document = requestInfo.Document;
+
         try
         {
             if (document is null || document.DocumentId == 0)
+            {
                 throw new ArgumentException("A nonzero document ID is required.");
+            }
+
             await InvokeOnDispatcher(() =>
             {
                 CloseSurfaceDocument(document.DocumentId);
@@ -138,6 +146,7 @@ internal sealed class SurfaceService : IDisposable
                 // A resource build can fail before its dictionary is installed.
                 // Record ownership first so the failure path also releases the
                 // partially constructed nonvisual objects and action handles.
+
                 await InvokeOnDispatcher(() =>
                 {
                     TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId);
@@ -159,18 +168,24 @@ internal sealed class SurfaceService : IDisposable
                 }, ex => throw ex).ConfigureAwait(false);
             }
             var result = await BuildDocumentAsync(document, resources: false).ConfigureAwait(false);
+
             return await InvokeOnDispatcher(() => CreateSurface(requestInfo, result.Root, result.PreparedXaml), ex => throw ex).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"CreateSurface failed for document {document?.DocumentId}: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface failed for document {document?.DocumentId}: {ex}");
+
             if (ex is DocumentConstructionException constructionError)
+            {
                 protocolHandler.PostMessage(535, new InstanceBuildingErrors { DocumentId = document?.DocumentId ?? 0, Errors = constructionError.SerializedErrors });
+            }
             else
+            {
                 protocolHandler.PostMessage(529, new UnhandledExceptionResponse
                 {
                     DocumentId = document?.DocumentId ?? 0, Message = ex.Message, CallStack = ex.ToString(), IsArtboardException = true,
                 });
+            }
             await InvokeOnDispatcher(() =>
             {
                 if (document is not null)
@@ -209,7 +224,7 @@ internal sealed class SurfaceService : IDisposable
             catch (Exception ex)
             {
                 parseFailure = ex;
-                Program.WriteDiagnosticTrace($"Prepared XAML parsing failed for document {document.DocumentId}; requesting construction actions: {ex}");
+                WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML parsing failed for document {document.DocumentId}; requesting construction actions: {ex}");
             }
         }
 
@@ -220,16 +235,20 @@ internal sealed class SurfaceService : IDisposable
                 new GetDocumentBuildingActionsRequest { DocumentId = document.DocumentId })
                 .WaitAsync(TimeSpan.FromSeconds(30), protocolHandler.CancellationToken).ConfigureAwait(false);
         }
+
         if (actionsDocument is null || actionsDocument.DocumentId != document.DocumentId || !actionsDocument.HasActions)
+        {
             throw new InvalidOperationException($"No construction actions were returned for document {document.DocumentId}.", parseFailure);
+        }
+
         return await InvokeOnDispatcher(() =>
         {
             if (!resources)
             {
                 return (xamlActionService.BuildDocument(actionsDocument), (string?)null);
             }
-
             // Isolate action-built App resources from the designer's own dictionary.
+
             ResourceDictionary previous = Application.Current.Resources;
             Application.Current.Resources = new ResourceDictionary();
             try
@@ -237,7 +256,10 @@ internal sealed class SurfaceService : IDisposable
                 object root = xamlActionService.BuildDocument(actionsDocument);
                 return (root is Application app ? (object)app.Resources : root, (string?)null);
             }
-            finally { Application.Current.Resources = previous; }
+            finally
+            {
+                Application.Current.Resources = previous;
+            }
         }, ex => throw ex).ConfigureAwait(false);
     }
 
@@ -330,7 +352,7 @@ internal sealed class SurfaceService : IDisposable
             long rootVisualHandle = objectIdentity.GetHandle(root);
             PublishVisualTreeMutation(root, VisualMutationType.Add);
             PublishSurfaceBounds(documentId, surface);
-            Program.WriteDiagnosticTrace($"CreateSurface completed: DocumentId={documentId}, DispatcherHandle={dispatcherHandle}, RootVisualHandle={rootVisualHandle}, DesiredSize={root.DesiredSize.Width}x{root.DesiredSize.Height}, ActualSize={root.ActualWidth}x{root.ActualHeight}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface completed: DocumentId={documentId}, DispatcherHandle={dispatcherHandle}, RootVisualHandle={rootVisualHandle}, DesiredSize={root.DesiredSize.Width}x{root.DesiredSize.Height}, ActualSize={root.ActualWidth}x{root.ActualHeight}.");
 
             _ = dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
             {
@@ -348,9 +370,9 @@ internal sealed class SurfaceService : IDisposable
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"CreateSurface failed: {ex}");
             // Let the construction failure path release resources and identities,
             // including a surface installed before a later initialization failure.
+            WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface failed: {ex}");
             throw;
         }
     }
@@ -402,11 +424,11 @@ internal sealed class SurfaceService : IDisposable
                 mapped++;
             }
 
-            Program.WriteDiagnosticTrace($"Prepared XAML source mapping registered: document={document.DocumentId}, mapped={mapped}/{runtimeElements.Count} visual(s).");
+            WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML source mapping registered: document={document.DocumentId}, mapped={mapped}/{runtimeElements.Count} visual(s).");
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"Prepared XAML source mapping failed for document {document.DocumentId}: {ex.Message}");
+            WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML source mapping failed for document {document.DocumentId}: {ex.Message}");
         }
     }
 
@@ -419,11 +441,11 @@ internal sealed class SurfaceService : IDisposable
         }
 
         elements.Add(element);
-
         // Walk the object graph produced from source XAML instead of the rendered
         // visual tree. The latter contains ControlTemplate implementation details
         // (Border/Grid/ContentPresenter, etc.) which have no source DocumentNode
         // and can otherwise steal same-type source entries from authored elements.
+
         foreach (string propertyName in new[] { "Resources", "MergedDictionaries", "Setters", "Value", "Children", "Content", "Child", "Items" })
         {
             System.Reflection.PropertyInfo? property = element.GetType().GetProperty(propertyName);
@@ -546,7 +568,7 @@ internal sealed class SurfaceService : IDisposable
         objectIdentity.GetHandle(root);
         PublishVisualTreeMutation(root, VisualMutationType.Add);
         PublishSurfaceBounds(documentId, surface);
-        Program.WriteDiagnosticTrace($"Action surface content applied: document={documentId}, root={root.GetType().FullName}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Action surface content applied: document={documentId}, root={root.GetType().FullName}.");
     }
 
     internal void CompleteActionBatch()
@@ -584,11 +606,11 @@ internal sealed class SurfaceService : IDisposable
 
         if (!File.Exists(path))
         {
-            Program.WriteDiagnosticTrace($"Prepared XAML path was not found for document {document.DocumentId}: '{path}'.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML path was not found for document {document.DocumentId}: '{path}'.");
             return null;
         }
 
-        Program.WriteDiagnosticTrace($"Reading prepared XAML for document {document.DocumentId}: '{path}'.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Reading prepared XAML for document {document.DocumentId}: '{path}'.");
         return File.ReadAllText(path);
     }
 
@@ -658,7 +680,7 @@ internal sealed class SurfaceService : IDisposable
             return await InvokeOnDispatcher(() =>
             {
                 CloseSurfaceDocument(request.DocumentId);
-                Program.WriteDiagnosticTrace($"CloseDocument (517) completed for document {request.DocumentId}.");
+                WinUIDesignerLogger.LogTrace("Surface", $"CloseDocument (517) completed for document {request.DocumentId}.");
                 return Success;
             }, CreateResponseFailure).ConfigureAwait(false);
         }
@@ -712,7 +734,7 @@ internal sealed class SurfaceService : IDisposable
         if (dispatcherQueue.HasThreadAccess)
         {
             ApplyFreezeState(request.DocumentIdToFreeze);
-            Program.WriteDiagnosticTrace($"SetFreezeState (527): document={request.DocumentIdToFreeze}, handled directly on UI thread.");
+            WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState (527): document={request.DocumentIdToFreeze}, handled directly on UI thread.");
             return;
         }
 
@@ -731,12 +753,12 @@ internal sealed class SurfaceService : IDisposable
         if (waitForPreviousUnfreeze && targetSurface is not null)
         {
             bool completed = targetSurface.WaitForUnfreezeComposition(FreezeCompositionTimeoutMilliseconds);
-            Program.WriteDiagnosticTrace(
+            WinUIDesignerLogger.LogTrace("Surface",
                 $"SetFreezeState (527) composition barrier: document={request.DocumentIdToFreeze}, completed={completed}.");
         }
 
         InvokeOnDispatcher(() => ApplyFreezeState(request.DocumentIdToFreeze));
-        Program.WriteDiagnosticTrace($"SetFreezeState (527): document={request.DocumentIdToFreeze}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState (527): document={request.DocumentIdToFreeze}.");
     }
 
     private void ApplyFreezeState(int documentIdToFreeze)
@@ -748,9 +770,9 @@ internal sealed class SurfaceService : IDisposable
                 surface.Unfreeze();
             }
         }
-
         // Rendering suspension belongs to the UI thread, so resume the old
         // document before freezing the next one, regardless of dictionary order.
+
         if (documentIdToFreeze != 0
             && surfaces.TryGetValue(documentIdToFreeze, out DesignerSurface? targetSurface)
             && !targetSurface.IsFrozen)
@@ -786,11 +808,11 @@ internal sealed class SurfaceService : IDisposable
             };
             Application.Current.Resources.MergedDictionaries.Add(resources);
             appResourcesLoaded = true;
-            Program.WriteDiagnosticTrace("XamlControlsResources loaded into Application resources.");
+            WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources loaded into Application resources.");
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"XamlControlsResources could not be loaded: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"XamlControlsResources could not be loaded: {ex}");
             throw;
         }
     }
@@ -805,7 +827,7 @@ internal sealed class SurfaceService : IDisposable
             }
 
             action(surface);
-            Program.WriteDiagnosticTrace($"{operation} completed for document {documentId}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"{operation} completed for document {documentId}.");
             return Success;
         }, CreateResponseFailure);
     }
@@ -818,7 +840,7 @@ internal sealed class SurfaceService : IDisposable
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"Surface operation failed: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"Surface operation failed: {ex}");
             return failureFactory(ex);
         }
     }
@@ -885,7 +907,7 @@ internal sealed class SurfaceService : IDisposable
         if (publishedSurfaceBounds.TryGetValue(documentId, out SurfaceBoundsSnapshot publishedBounds)
             && publishedBounds.Equals(currentBounds))
         {
-            Program.WriteDiagnosticTrace($"SurfaceBoundsChanged (531) skipped: bounds unchanged for document={documentId}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"SurfaceBoundsChanged (531) skipped: bounds unchanged for document={documentId}.");
             return;
         }
 
@@ -896,56 +918,10 @@ internal sealed class SurfaceService : IDisposable
             ContentBounds = RectContract.FromRect(contentBounds),
             DocumentBounds = RectContract.FromRect(documentBounds),
         });
-        Program.WriteDiagnosticTrace(
+        WinUIDesignerLogger.LogTrace("Surface",
             $"SurfaceBoundsChanged (531) posted: document={documentId}, " +
             $"content={contentBounds.X},{contentBounds.Y},{contentBounds.Width},{contentBounds.Height}, " +
             $"document={documentBounds.X},{documentBounds.Y},{documentBounds.Width},{documentBounds.Height}.");
-    }
-
-    [DataContract]
-    private sealed class SurfaceBoundsChangedEventContract
-    {
-        [DataMember]
-        public RectContract ContentBounds { get; set; } = new();
-
-        [DataMember]
-        public RectContract DocumentBounds { get; set; } = new();
-
-        [DataMember]
-        public int DocumentId { get; set; }
-    }
-
-    [DataContract]
-    private sealed class RectContract
-    {
-        [DataMember(Name = "_x")]
-        public double X { get; set; }
-
-        [DataMember(Name = "_y")]
-        public double Y { get; set; }
-
-        [DataMember(Name = "_width")]
-        public double Width { get; set; }
-
-        [DataMember(Name = "_height")]
-        public double Height { get; set; }
-
-        public static RectContract FromRect(Rect rect)
-        {
-            return new() { X = rect.X, Y = rect.Y, Width = rect.Width, Height = rect.Height };
-        }
-    }
-
-    private readonly record struct SurfaceBoundsSnapshot(Rect ContentBounds, Rect DocumentBounds);
-
-    [DataContract]
-    private sealed class AppResourcesRequest
-    {
-        [DataMember]
-        public bool HasXamlControlsResources { get; set; }
-
-        [DataMember]
-        public string? RequestedTheme { get; set; }
     }
 
     private void PublishVisualTreeMutation(FrameworkElement root, VisualMutationType mutationType)
@@ -961,7 +937,7 @@ internal sealed class SurfaceService : IDisposable
                 ],
             });
             publishedVisualTreeTopologies.Remove(rootHandle);
-            Program.WriteDiagnosticTrace($"Visual tree mutation (9) posted: {mutationType} root handle={rootHandle}, type={root.GetType().FullName}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation (9) posted: {mutationType} root handle={rootHandle}, type={root.GetType().FullName}.");
             return;
         }
 
@@ -974,7 +950,7 @@ internal sealed class SurfaceService : IDisposable
         });
 
         publishedVisualTreeTopologies[rootHandle] = CaptureVisualTreeTopology(root);
-        Program.WriteDiagnosticTrace($"Visual tree mutation (9) posted: Add {mutations.Count} visual(s), root handle={rootHandle}, type={root.GetType().FullName}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation (9) posted: Add {mutations.Count} visual(s), root handle={rootHandle}, type={root.GetType().FullName}.");
     }
 
     private void PublishVisualTreeMutationIfChanged(FrameworkElement root)
@@ -985,15 +961,15 @@ internal sealed class SurfaceService : IDisposable
         if (publishedVisualTreeTopologies.TryGetValue(rootHandle, out VisualTreeTopologyEntry[]? publishedTopology)
             && publishedTopology.AsSpan().SequenceEqual(currentTopology))
         {
-            Program.WriteDiagnosticTrace($"Visual tree mutation (9) skipped: topology unchanged for root handle={rootHandle}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation (9) skipped: topology unchanged for root handle={rootHandle}.");
             return;
         }
 
         if (publishedTopology is not null)
         {
-            var retained = currentTopology.Select(entry => entry.Handle).ToHashSet();
             // A full Add snapshot relocates surviving children, but does not remove
             // deleted nodes in LiveNodeTreeBase. Explicitly remove the vanished roots.
+            var retained = currentTopology.Select(entry => entry.Handle).ToHashSet();
             var removed = publishedTopology.Where(entry => !retained.Contains(entry.Handle)).ToArray();
             var removedHandles = removed.Select(entry => entry.Handle).ToHashSet();
             var mutations = removed.Where(entry => !removedHandles.Contains(entry.ParentHandle))
@@ -1007,7 +983,6 @@ internal sealed class SurfaceService : IDisposable
             {
                 protocolHandler.PostMessage(9, new MutationList { Mutations = mutations });
             }
-
             // Keep detached object handles alive until document close: Undo can
             // reconnect an existing proxy. Visual-tree deletion is not object release.
         }
@@ -1092,8 +1067,6 @@ internal sealed class SurfaceService : IDisposable
             VisualMutationType = mutationType,
         };
     }
-
-    private readonly record struct VisualTreeTopologyEntry(long Handle, long ParentHandle, uint ChildIndex);
 
     private void RemoveVisualTreeIdentities(DependencyObject element)
     {

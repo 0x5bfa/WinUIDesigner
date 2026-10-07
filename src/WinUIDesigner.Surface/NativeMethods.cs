@@ -6,6 +6,9 @@ using Microsoft.Win32.SafeHandles;
 
 namespace WinUIDesigner.Surface;
 
+/// <summary>
+/// Declares native Windows APIs used by the surface process.
+/// </summary>
 internal static partial class NativeMethods
 {
     [LibraryImport("user32.dll", SetLastError = true)]

@@ -7,6 +7,9 @@ using System.Reflection;
 
 namespace WinUIDesigner.Surface;
 
+/// <summary>
+/// Resolves runtime members against indexed project reference metadata.
+/// </summary>
 internal static class RuntimeMemberResolver
 {
     public static MethodInfo? FindMethod(Type type, string name, Type[] parameters, bool isStatic)

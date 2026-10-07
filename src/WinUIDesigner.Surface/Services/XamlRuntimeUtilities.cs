@@ -18,8 +18,10 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Resolve and mutate the serialized XAML values used by VS instance-builder actions.
-// This maps protocol type names to WinUI without introducing WPF into the Surface.
+/// <summary>
+/// Resolves and converts serialized XAML values to live WinUI values.
+/// Maps the Visual Studio instance-builder protocol types to WinUI without introducing WPF into the surface.
+/// </summary>
 internal static class XamlRuntimeUtilities
 {
     private static readonly ConditionalWeakTable<FrameworkElement, Dictionary<string, object?>> NameChanges = new();
@@ -36,9 +38,9 @@ internal static class XamlRuntimeUtilities
         {
             return null;
         }
-
         // Shared VS action contracts can spell framework types with the UWP prefix;
         // translate that prefix before looking in the WinUI runtime assemblies.
+
         string candidate = NormalizeWinUITypeName(serializedTypeName.Trim());
         if (candidate.Split(',')[0].Trim() == StaticResourceReference.ProtocolTypeName)
         {
@@ -282,8 +284,8 @@ internal static class XamlRuntimeUtilities
                     }
                 }
             }
-
             // A value query must never clear and recreate a binding on the live object.
+
             return GetDefaultValue(fullPropertyName, target.GetType().AssemblyQualifiedName);
         }
         return property?.CanRead == true ? property.GetValue(target) : null;

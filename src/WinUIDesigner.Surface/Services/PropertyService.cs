@@ -17,15 +17,24 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
-internal sealed class PropertyService : IDisposable
+/// <summary>
+/// Handles designer requests for live object properties and values.
+/// </summary>
+internal sealed partial class PropertyService : IDisposable
 {
     private readonly ProtocolHandler protocolHandler;
+
     private readonly DispatcherQueue dispatcherQueue;
+
     private readonly ObjectIdentityRegistry objectIdentity;
+
     private readonly XamlActionService xamlActionService;
+
     private readonly DiagnosticsPropertySourceService diagnosticsPropertySource;
+
     private readonly LiveValueSerializer serializer;
-    private readonly List<int> registrationIds = new();
+
+    private readonly List<int> registrationIds = [];
 
     public PropertyService(
         ProtocolHandler protocolHandler,
@@ -52,7 +61,9 @@ internal sealed class PropertyService : IDisposable
     {
         LiveObjectState response = InvokeOnDispatcher(() => CreateObjectState(request.Object),
             () => new LiveObjectState { Properties = [], Items = [] }, request.Object);
-        Program.WriteDiagnosticTrace($"GetProperties (522) completed for handle {request.Object}: properties={response.Properties.Count}, items={response.Items.Count}.");
+
+        WinUIDesignerLogger.LogTrace("Surface", $"GetProperties (522) completed for handle {request.Object}: properties={response.Properties.Count}, items={response.Items.Count}.");
+
         return response;
     }
 
@@ -60,8 +71,8 @@ internal sealed class PropertyService : IDisposable
     {
         var response = new LiveObjectState
         {
-            Properties = new List<LiveObjectPropertyValue>(),
-            Items = new List<LiveValue>(),
+            Properties = [],
+            Items = [],
         };
 
         if (!objectIdentity.TryGetObject(handle, out object? value) || value is null)
@@ -71,9 +82,10 @@ internal sealed class PropertyService : IDisposable
 
         using var scope = objectIdentity.EnterDocument(objectIdentity.GetDocumentId(value));
         AddKnownProperties(value, response.Properties);
+
         if (value is FrameworkElement element)
         {
-            Program.WriteDiagnosticTrace($"Layout properties (522): handle={handle}, type={value.GetType().FullName}, size={element.ActualWidth}x{element.ActualHeight}, margin={element.Margin}, transform={GetTransformToParent(element)}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Layout properties (522): handle={handle}, type={value.GetType().FullName}, size={element.ActualWidth}x{element.ActualHeight}, margin={element.Margin}, transform={GetTransformToParent(element)}.");
         }
 
         if (value is IEnumerable enumerable and not string)
@@ -89,15 +101,16 @@ internal sealed class PropertyService : IDisposable
 
     private void AddKnownProperties(object value, List<LiveObjectPropertyValue> properties)
     {
-        string[] propertyNames = value.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(property => property.CanRead && property.GetIndexParameters().Length == 0
-                && property.Name is not ("Parent" or "TemplatedParent" or "XamlRoot" or "DispatcherQueue" or "Dispatcher"))
-            .Select(property => property.Name).Distinct().ToArray();
+        string[] propertyNames = [.. value.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(property => property.CanRead &&
+                property.GetIndexParameters().Length == 0 &&
+                property.Name is not ("Parent" or "TemplatedParent" or "XamlRoot" or "DispatcherQueue" or "Dispatcher"))
+            .Select(property => property.Name).Distinct()];
 
-        Type runtimeType = value.GetType();
+        var runtimeType = value.GetType();
         foreach (string name in propertyNames)
         {
-            PropertyInfo? property = runtimeType.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+            var property = runtimeType.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
             if (property is null || !property.CanRead || property.GetIndexParameters().Length != 0)
             {
                 continue;
@@ -105,9 +118,9 @@ internal sealed class PropertyService : IDisposable
 
             try
             {
-                Type declaringType = property.DeclaringType ?? runtimeType;
-                if (value is DependencyObject dependencyObject
-                    && FindDependencyProperty(declaringType, runtimeType, name) is DependencyProperty dependencyProperty)
+                var declaringType = property.DeclaringType ?? runtimeType;
+                if (value is DependencyObject dependencyObject &&
+                    FindDependencyProperty(declaringType, runtimeType, name) is DependencyProperty dependencyProperty)
                 {
                     if (name is "ActualWidth" or "ActualHeight")
                     {
@@ -150,21 +163,19 @@ internal sealed class PropertyService : IDisposable
                     try
                     {
                         if (attached.GetValue(null) is DependencyProperty dp)
+                        {
                             AddDependencyProperty(properties, element, name, owner, dp);
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Program.WriteDiagnosticTrace($"Attached property '{owner.FullName}.{name}' could not be read: {ex.Message}");
+                        WinUIDesignerLogger.LogTrace("Surface", $"Attached property '{owner.FullName}.{name}' could not be read: {ex.Message}");
                     }
                 }
             }
             try
             {
-                AddDesignTimeProperty(
-                    properties,
-                    "LayoutSlot",
-                    LayoutInformation.GetLayoutSlot(element),
-                    BaseValueSource.Local);
+                AddDesignTimeProperty(properties, "LayoutSlot", LayoutInformation.GetLayoutSlot(element), BaseValueSource.Local);
                 AddDesignTimeDependencyProperty(properties, element, "DesignWidth", XSurfUwp.DT.DesignWidthProperty);
                 AddDesignTimeDependencyProperty(properties, element, "RuntimeWidth", XSurfUwp.DT.RuntimeWidthProperty);
                 AddDesignTimeDependencyProperty(properties, element, "DesignHeight", XSurfUwp.DT.DesignHeightProperty);
@@ -179,11 +190,7 @@ internal sealed class PropertyService : IDisposable
         {
             try
             {
-                AddDesignTimeProperty(
-                    properties,
-                    "TransformToParent",
-                    GetTransformToParent(visual),
-                    BaseValueSource.Local);
+                AddDesignTimeProperty(properties, "TransformToParent", GetTransformToParent(visual), BaseValueSource.Local);
             }
             catch
             {
@@ -234,7 +241,7 @@ internal sealed class PropertyService : IDisposable
         string name, Type declaringType, DependencyProperty property, BaseValueSource source)
     {
         object? baseValue = XamlRuntimeUtilities.GetBaseValue(target, property);
-        properties.Add(new LiveObjectPropertyValue
+        properties.Add(new LiveObjectPropertyValue()
         {
             Property = LiveValueSerializer.SerializeProperty(name, declaringType),
             BaseValue = serializer.Serialize(baseValue),
@@ -250,7 +257,7 @@ internal sealed class PropertyService : IDisposable
         object? value,
         BaseValueSource valueSource)
     {
-        properties.Add(new LiveObjectPropertyValue
+        properties.Add(new LiveObjectPropertyValue()
         {
             Property = LiveValueSerializer.SerializeProperty(name, declaringType),
             BaseValue = serializer.Serialize(value),
@@ -265,7 +272,7 @@ internal sealed class PropertyService : IDisposable
         object? value,
         BaseValueSource valueSource)
     {
-        properties.Add(new LiveObjectPropertyValue
+        properties.Add(new LiveObjectPropertyValue()
         {
             Property = $"{name}:XSurfUwp.DT",
             BaseValue = serializer.Serialize(value),
@@ -284,6 +291,7 @@ internal sealed class PropertyService : IDisposable
         if (!ReferenceEquals(localValue, DependencyProperty.UnsetValue))
         {
             AddDesignTimeProperty(properties, name, target.GetValue(dependencyProperty), BaseValueSource.Local);
+
             return;
         }
 
@@ -312,6 +320,7 @@ internal sealed class PropertyService : IDisposable
     private static DependencyProperty? FindDependencyProperty(Type declaringType, Type runtimeType, string propertyName)
     {
         DependencyProperty? result = FindDependencyProperty(declaringType, propertyName);
+
         return result ?? (declaringType == runtimeType ? null : FindDependencyProperty(runtimeType, propertyName));
     }
 
@@ -319,13 +328,13 @@ internal sealed class PropertyService : IDisposable
     {
         for (Type? current = type; current is not null; current = current.BaseType)
         {
-            FieldInfo? field = current.GetField(propertyName + "Property", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+            var field = current.GetField(propertyName + "Property", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
             if (field?.GetValue(null) is DependencyProperty dependencyProperty)
             {
                 return dependencyProperty;
             }
 
-            PropertyInfo? property = current.GetProperty(propertyName + "Property", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+            var property = current.GetProperty(propertyName + "Property", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
             if (property?.GetValue(null) is DependencyProperty propertyValue)
             {
                 return propertyValue;
@@ -361,9 +370,11 @@ internal sealed class PropertyService : IDisposable
 
     private LiveValueResponse HandleGetDefaultValue(DefaultValueRequestInfo request)
     {
-        Program.WriteDiagnosticTrace($"GetDefaultValue (523): property={request.FullPropertyName}, target={request.TargetTypeName}.");
-        LiveValue value = InvokeOnDispatcher(() => serializer.Serialize(GetDefaultValue(request.FullPropertyName, request.TargetTypeName)), () => new LiveValue());
-        return new LiveValueResponse { Value = value };
+        WinUIDesignerLogger.LogTrace("Surface", $"GetDefaultValue (523): property={request.FullPropertyName}, target={request.TargetTypeName}.");
+
+        var value = InvokeOnDispatcher(() => serializer.Serialize(GetDefaultValue(request.FullPropertyName, request.TargetTypeName)), () => new LiveValue());
+
+        return new LiveValueResponse() { Value = value };
     }
 
     private static object? GetDefaultValue(string fullPropertyName, string? targetTypeName)
@@ -386,8 +397,9 @@ internal sealed class PropertyService : IDisposable
 
     private UnderlyingValueSourceInformation HandleGetUnderlyingValue(UnderlyingValueSourceRequest request)
     {
-        Program.WriteDiagnosticTrace($"GetUnderlyingValue (528): handle={request.Object}, property={request.Property}.");
-        LiveValue value = InvokeOnDispatcher(() =>
+        WinUIDesignerLogger.LogTrace("Surface", $"GetUnderlyingValue (528): handle={request.Object}, property={request.Property}.");
+
+        var value = InvokeOnDispatcher(() =>
         {
             if (!objectIdentity.TryGetObject(request.Object, out object? target) || target is null)
             {
@@ -396,13 +408,15 @@ internal sealed class PropertyService : IDisposable
 
             return serializer.Serialize(XamlRuntimeUtilities.GetUnderlyingValue(target, request.Property));
         }, () => new LiveValue(), request.Object);
-        return new UnderlyingValueSourceInformation { UnderlyingValue = value };
+
+        return new UnderlyingValueSourceInformation() { UnderlyingValue = value };
     }
 
     private UnderlyingValueSourceInformation HandleExecuteLookupActions(ExecuteXamlActionsRequestInfo request)
     {
-        Program.WriteDiagnosticTrace($"Execute lookup actions (539): count={request.Actions?.Count ?? 0}.");
-        return new UnderlyingValueSourceInformation
+        WinUIDesignerLogger.LogTrace("Surface", $"Execute lookup actions (539): count={request.Actions?.Count ?? 0}.");
+
+        return new UnderlyingValueSourceInformation()
         {
             UnderlyingValue = InvokeOnDispatcher(() => xamlActionService.ExecuteLookupActions(request, serializer), () => new LiveValue()),
         };
@@ -410,7 +424,8 @@ internal sealed class PropertyService : IDisposable
 
     private LiveValue HandleEvaluateStaticExtension(EvaluateStaticExtensionRequest request)
     {
-        Program.WriteDiagnosticTrace($"EvaluateStaticExtension (546): member={request.MemberName}, type={request.TypeName}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"EvaluateStaticExtension (546): member={request.MemberName}, type={request.TypeName}.");
+
         return InvokeOnDispatcher(() => serializer.Serialize(XamlRuntimeUtilities.ResolveMember(request.MemberName)), () => new LiveValue());
     }
 
@@ -422,14 +437,18 @@ internal sealed class PropertyService : IDisposable
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"Property request failed: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"Property request failed: {ex}");
+
             int documentId = objectIdentity.TryGetObject(handle, out var target) && target is not null
-                ? objectIdentity.GetDocumentId(target) : 0;
-            protocolHandler.PostMessage(529, new UnhandledExceptionResponse
+                ? objectIdentity.GetDocumentId(target)
+                : 0;
+
+            protocolHandler.PostMessage(529, new UnhandledExceptionResponse()
             {
                 DocumentId = documentId, Handle = handle, Message = ex.Message,
                 CallStack = ex.ToString(), IsArtboardException = true,
             });
+
             return failure();
         }
     }

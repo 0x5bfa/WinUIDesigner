@@ -15,8 +15,10 @@ using WinUIDesigner.Surface.Services;
 
 namespace WinUIDesigner.Surface;
 
-// Own the per-process IPC and document services. Register each observer before
-// starting ProtocolHandler so VS cannot send an early message to an empty table.
+/// <summary>
+/// Initializes the surface process protocol, document services, and XAML metadata providers.
+/// Initializes per-process IPC and document services before registering the protocol handler so early host messages have observers.
+/// </summary>
 public sealed partial class App : Application, IXamlMetadataProvider, IDisposable
 {
     // The XAML compiler adds this provider after its first compilation pass.
@@ -73,7 +75,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
     {
         UnhandledException += (_, args) =>
         {
-            Program.WriteDiagnosticTrace($"WinUI unhandled exception: {args.Exception}");
+            WinUIDesignerLogger.LogTrace("Surface", $"WinUI unhandled exception: {args.Exception}");
             protocolHandler?.PostMessage(529, new UnhandledExceptionResponse
             {
                 Message = args.Exception.Message,
@@ -82,13 +84,13 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
             });
         };
 
-        Program.WriteDiagnosticTrace($"Microsoft.UI.Xaml.Application initialized; DispatcherQueue acquired; TAP='{tapPath}'.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Microsoft.UI.Xaml.Application initialized; DispatcherQueue acquired; TAP='{tapPath}'.");
 
         dataBridge = new(bridgeInitializationData);
         protocolHandler = new(dataBridge, tokenSource: null, shouldStart: false);
         protocolHandler.OnUnhandledException += (_, exception) =>
         {
-            Program.WriteDiagnosticTrace($"Asynchronous protocol request failed: {exception}");
+            WinUIDesignerLogger.LogTrace("Surface", $"Asynchronous protocol request failed: {exception}");
 
             protocolHandler.PostMessage(529, new UnhandledExceptionResponse
             {
@@ -99,11 +101,11 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         objectIdentity = new();
         surfaceService = new(protocolHandler, dispatcherQueue, objectIdentity);
 
-        Program.WriteDiagnosticTrace("PipeDataBridge, ProtocolHandler, and minimal SurfaceService initialized; message 516 registered before protocol start.");
+        WinUIDesignerLogger.LogTrace("Surface", "PipeDataBridge, ProtocolHandler, and minimal SurfaceService initialized; message 516 registered before protocol start.");
 
         protocolHandler.Start();
 
-        Program.WriteDiagnosticTrace("ProtocolHandler started.");
+        WinUIDesignerLogger.LogTrace("Surface", "ProtocolHandler started.");
 
         _ = Task.Run(WatchHostProcess);
     }
@@ -135,9 +137,9 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
             return;
         }
 
-        disposed = true;
         // Shutdown cancels pending protocol/dispatcher requests before their
         // document state is released; closing only the pipes leaves them live.
+        disposed = true;
         protocolHandler?.Shutdown();
         surfaceService?.Dispose();
         protocolHandler?.Dispose();

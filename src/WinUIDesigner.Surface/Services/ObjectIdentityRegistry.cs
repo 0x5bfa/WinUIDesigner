@@ -8,9 +8,11 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Maintain the stable object<->handle identity expected by VS's LiveObject cache.
-// Reference identity matters: equal values from distinct runtime objects stay distinct.
-internal sealed class ObjectIdentityRegistry
+/// <summary>
+/// Maintains the stable object-to-handle identity expected by the Visual Studio LiveObject cache.
+/// Uses reference identity so distinct runtime objects remain distinct even when they compare equal.
+/// </summary>
+internal sealed partial class ObjectIdentityRegistry
 {
     private readonly Dictionary<object, long> objectToHandle = new(ReferenceEqualityComparer.Instance);
 
@@ -19,6 +21,7 @@ internal sealed class ObjectIdentityRegistry
     private readonly Dictionary<object, SourceInfo> sourceInfo = new(ReferenceEqualityComparer.Instance);
 
     private long nextHandle = 1;
+
     private int currentDocument;
 
     private readonly Dictionary<int, HashSet<object>> documents = new();
@@ -29,6 +32,7 @@ internal sealed class ObjectIdentityRegistry
     {
         int previous = currentDocument;
         currentDocument = documentId;
+
         return new DocumentScope(() => currentDocument = previous);
     }
 
@@ -97,25 +101,14 @@ internal sealed class ObjectIdentityRegistry
         documents.Clear();
         owners.Clear();
         currentDocument = 0;
-
         // Never reuse a handle that the frontend may still have cached.
-    }
 
-    private sealed class DocumentScope(Action restore) : IDisposable
-    {
-        private Action? restoreAction = restore;
-
-        public void Dispose()
-        {
-            var action = restoreAction;
-            restoreAction = null;
-            action?.Invoke();
-        }
     }
 
     public long GetHandle(object value)
     {
         ArgumentNullException.ThrowIfNull(value);
+
         Track(value);
 
         if (objectToHandle.TryGetValue(value, out long handle))
@@ -131,17 +124,17 @@ internal sealed class ObjectIdentityRegistry
         handle = nextHandle++;
         objectToHandle.Add(value, handle);
         handleToObject.Add(handle, value);
+
         return handle;
     }
 
     public void RegisterHandle(long handle, object value)
     {
         ArgumentNullException.ThrowIfNull(value);
+
         Track(value);
-        if (handle == 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(handle));
-        }
+
+        ArgumentOutOfRangeException.ThrowIfZero(handle);
 
         if (handleToObject.TryGetValue(handle, out object? oldValue) && !ReferenceEquals(oldValue, value))
         {
@@ -155,6 +148,7 @@ internal sealed class ObjectIdentityRegistry
 
         objectToHandle[value] = handle;
         handleToObject[handle] = value;
+
         if (handle >= nextHandle)
         {
             nextHandle = handle + 1;

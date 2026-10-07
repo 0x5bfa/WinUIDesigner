@@ -7,12 +7,17 @@ using Microsoft.UI.Xaml;
 
 namespace WinUIDesigner.Surface.Services;
 
+/// <summary>
+/// Resolves static resources within the document and its theme resource scopes.
+/// </summary>
 internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 {
     private readonly Dictionary<object, object> parents = new(ReferenceEqualityComparer.Instance);
 
     private string? themeAssembly;
+
     private string? themePath;
+
     private ResourceDictionary? themeResources;
 
     public void SetParent(object child, object? parent)
@@ -20,6 +25,7 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
         if (parent is null)
         {
             parents.Remove(child);
+
             return;
         }
 
@@ -44,10 +50,9 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 
         themeAssembly = assembly;
         themePath = relativePath;
-        themeResources = string.IsNullOrEmpty(relativePath) ? null : new ResourceDictionary
-        {
-            Source = new Uri($"ms-appx:///{assembly.Split(',')[0]}/{relativePath.TrimStart('/')}")
-        };
+        themeResources = string.IsNullOrEmpty(relativePath)
+            ? null
+            : new ResourceDictionary() { Source = new Uri($"ms-appx:///{assembly.Split(',')[0]}/{relativePath.TrimStart('/')}") };
     }
 
     public object? ResolveStaticResource(object owner, object? key)
@@ -58,8 +63,11 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
         }
 
         var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        for (object? current = owner; current is not null && visited.Add(current);
-            current = parents.TryGetValue(current, out object? parent) ? parent : (current as FrameworkElement)?.Parent)
+        for (object? current = owner;
+            current is not null && visited.Add(current);
+            current = parents.TryGetValue(current, out object? parent)
+                ? parent
+                : (current as FrameworkElement)?.Parent)
         {
             ResourceDictionary? dictionary = current switch
             {
@@ -68,6 +76,7 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
                 Application app => app.Resources,
                 _ => null,
             };
+
             if (dictionary is not null && dictionary.TryGetValue(key, out object? value))
             {
                 return value;
@@ -89,25 +98,27 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 
     public object Parse(object? owner, string xaml)
     {
-        ResourceDictionary application = Application.Current.Resources;
+        var application = Application.Current.Resources;
+
         var dictionaries = new List<ResourceDictionary>();
         var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
         for (object? current = owner; current is not null && visited.Add(current); current = parents.GetValueOrDefault(current))
         {
-            ResourceDictionary? dictionary = current switch
+            var dictionary = current switch
             {
                 FrameworkElement element => element.Resources,
                 ResourceDictionary resources => resources,
                 Application app => app.Resources,
                 _ => null,
             };
+
             if (dictionary is not null && !ReferenceEquals(dictionary, application) && !dictionaries.Contains(dictionary))
             {
                 dictionaries.Add(dictionary);
             }
         }
-
         // The innermost scope must win over ancestors while parsing detached objects.
+
         dictionaries.Reverse();
 
         if (themeResources is not null && !dictionaries.Contains(themeResources))
@@ -116,6 +127,7 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
         }
 
         int originalCount = application.MergedDictionaries.Count;
+
         try
         {
             foreach (ResourceDictionary dictionary in dictionaries)
@@ -125,7 +137,7 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 
             if (!string.IsNullOrEmpty(themePath))
             {
-                Program.WriteDiagnosticTrace($"Parsing resource in theme scope '{themeAssembly}/{themePath}'.");
+                WinUIDesignerLogger.LogTrace("Surface", $"Parsing resource in theme scope '{themeAssembly}/{themePath}'.");
             }
 
             return XamlRuntimeUtilities.ParseXaml(xaml) ?? throw new InvalidOperationException("XAML parsing returned no object.");
@@ -133,23 +145,21 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
         finally
         {
             while (application.MergedDictionaries.Count > originalCount)
+            {
                 application.MergedDictionaries.RemoveAt(application.MergedDictionaries.Count - 1);
+            }
         }
     }
 
     public void UpdateResources(object owner)
     {
-        ResourceDictionary? dictionary = owner switch
+        var dictionary = owner switch
         {
             ResourceDictionary resources => resources,
             FrameworkElement element => element.Resources,
             Application application => application.Resources,
             _ => null,
-        };
-        if (dictionary is null)
-        {
-            throw new InvalidOperationException("The resource owner has no dictionary.");
-        }
+        } ?? throw new InvalidOperationException("The resource owner has no dictionary.");
 
         foreach (var entry in dictionary)
         {

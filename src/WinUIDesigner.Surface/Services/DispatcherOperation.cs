@@ -8,6 +8,9 @@ using Microsoft.UI.Dispatching;
 
 namespace WinUIDesigner.Surface.Services;
 
+/// <summary>
+/// Provides awaitable operations for work dispatched to the WinUI UI thread.
+/// </summary>
 internal static class DispatcherOperation
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
@@ -26,13 +29,18 @@ internal static class DispatcherOperation
         }
 
         using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
         void OnShutdown(DispatcherQueue sender, DispatcherQueueShutdownStartingEventArgs args)
-            => shutdown.Cancel();
+        {
+            shutdown.Cancel();
+        }
 
         queue.ShutdownStarting += OnShutdown;
+
         try
         {
-            return await QueuedOperation.RunAsync(action => queue.TryEnqueue(() => action()), callback, Timeout, shutdown.Token).ConfigureAwait(false);
+            return await QueuedOperation.RunAsync(action => queue.TryEnqueue(() => action()), callback, Timeout, shutdown.Token)
+                .ConfigureAwait(false);
         }
         finally
         {

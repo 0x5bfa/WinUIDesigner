@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 
 namespace WinUIDesigner.Surface;
 
+/// <summary>
+/// Runs asynchronous operations sequentially while preserving their results and failures.
+/// </summary>
 internal static class QueuedOperation
 {
     public static async Task<T> RunAsync<T>(Func<Action, bool> enqueue, Func<T> callback, TimeSpan timeout, CancellationToken cancellationToken)

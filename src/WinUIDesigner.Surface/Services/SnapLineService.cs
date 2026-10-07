@@ -13,9 +13,11 @@ using Windows.Foundation;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Supply the shared designer's alignment guides from WinUI layout bounds. Positions
-// are relative to the requested container, not to the screen or HWND.
-internal sealed class SnapLineService : IDisposable
+/// <summary>
+/// Calculates designer alignment guides from WinUI layout bounds.
+/// Reports positions relative to the requested container, not the screen or its window handle.
+/// </summary>
+internal sealed partial class SnapLineService : IDisposable
 {
     private readonly ProtocolHandler protocolHandler;
     private readonly DispatcherQueue dispatcherQueue;
@@ -28,6 +30,7 @@ internal sealed class SnapLineService : IDisposable
         this.protocolHandler = protocolHandler;
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
+
         snapLinesRegistrationId = protocolHandler.RegisterMessageObserver<GetSnapLinesRequest, GetSnapLinesResponse>(532, HandleGetSnapLines);
         elementDataRegistrationId = protocolHandler.RegisterMessageObserver<GetElementSnapDataRequest, GetElementSnapDataResponse>(533, HandleGetElementSnapData);
     }
@@ -67,7 +70,8 @@ internal sealed class SnapLineService : IDisposable
             }
         }
 
-        Program.WriteDiagnosticTrace($"GetSnapLines (532) returned {lines.Count} line(s) for container handle {request.ContainerHandle}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"GetSnapLines (532) returned {lines.Count} line(s) for container handle {request.ContainerHandle}.");
+
         return new GetSnapLinesResponse { SnapLines = lines };
     }
 
@@ -94,6 +98,7 @@ internal sealed class SnapLineService : IDisposable
         }
 
         SingleSnapLineFlags flags = isContainer ? SingleSnapLineFlags.Container : SingleSnapLineFlags.None;
+
         double centerX = bounds.Left + bounds.Width / 2;
         double centerY = bounds.Top + bounds.Height / 2;
         lines.Add(new SingleSnapLine(bounds.Top, bounds.Left, bounds.Right, flags));
@@ -104,6 +109,7 @@ internal sealed class SnapLineService : IDisposable
         lines.Add(new SingleSnapLine(bounds.Right, bounds.Top, bounds.Bottom, flags | SingleSnapLineFlags.Vertical | SingleSnapLineFlags.Maximum));
         // Only TextBlock exposes a baseline in this implementation; all elements
         // still receive edge and center guides above.
+
         double? baseline = TryGetBaseline(element, container);
         if (baseline.HasValue)
         {
@@ -125,11 +131,13 @@ internal sealed class SnapLineService : IDisposable
             double right = Math.Max(Math.Max(origin.X, corner.X), Math.Max(topRight.X, bottomLeft.X));
             double bottom = Math.Max(Math.Max(origin.Y, corner.Y), Math.Max(topRight.Y, bottomLeft.Y));
             bounds = new Rect(left, top, right - left, bottom - top);
+
             return true;
         }
         catch
         {
             bounds = default;
+
             return false;
         }
     }
@@ -144,10 +152,12 @@ internal sealed class SnapLineService : IDisposable
         if (objectIdentity.TryGetObject(handle, out object? value) && value is FrameworkElement frameworkElement)
         {
             element = frameworkElement;
+
             return true;
         }
 
         element = null;
+
         return false;
     }
 
@@ -159,8 +169,10 @@ internal sealed class SnapLineService : IDisposable
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"Snap request failed: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"Snap request failed: {ex}");
+
             protocolHandler.PostMessage(529, new UnhandledExceptionResponse { Message = ex.Message, CallStack = ex.ToString() });
+
             return fallback;
         }
     }

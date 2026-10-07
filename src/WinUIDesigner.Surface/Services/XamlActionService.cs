@@ -12,9 +12,11 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;
 
-// Apply the instance builder's serialized action sequence to the live WinUI tree.
-// Proxy handles are scoped to the action batch and map to stable live-object handles.
-internal sealed class XamlActionService : IDisposable
+/// <summary>
+/// Applies instance-builder actions to the live WinUI document tree.
+/// Scopes proxy handles to each action batch and maps them to stable live-object handles.
+/// </summary>
+internal sealed partial class XamlActionService : IDisposable
 {
     private readonly ProtocolHandler protocolHandler;
     private readonly DispatcherQueue dispatcherQueue;
@@ -50,6 +52,7 @@ internal sealed class XamlActionService : IDisposable
         try
         {
             IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
+
             int documentId = 0;
             foreach (XamlAction action in actions)
             {
@@ -68,14 +71,15 @@ internal sealed class XamlActionService : IDisposable
                     break;
                 }
             }
-            using var documentScope = objectIdentity.EnterDocument(documentId);
+
             // Keep the wire order: later actions can refer to objects or names created
             // by earlier actions in this same transaction.
+            using var documentScope = objectIdentity.EnterDocument(documentId);
             for (int index = 0; index < actions.Count; index++)
             {
                 if (request.Actions is { } serializedActions && index < serializedActions.Count)
                 {
-                    Program.WriteDiagnosticTrace($"ExecuteXamlActions (507) action[{index}]: {serializedActions[index]}");
+                    WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions (507) action[{index}]: {serializedActions[index]}");
                 }
 
                 failedAction = actions[index];
@@ -84,23 +88,25 @@ internal sealed class XamlActionService : IDisposable
             }
 
             surfaceService.CompleteActionBatch();
-            Program.WriteDiagnosticTrace($"ExecuteXamlActions (507) completed: count={actions.Count}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions (507) completed: count={actions.Count}.");
+
             return Success;
         }
         catch (Exception ex)
         {
-            Program.WriteDiagnosticTrace($"ExecuteXamlActions (507) failed: {ex}");
             // Synchronize the surviving changes, then report the exact failed
             // action using the shared error contract. Raw exception text is not
             // valid ActionError JSON and prevents frontend error processing.
+            WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions (507) failed: {ex}");
             try
             {
                 surfaceService.CompleteActionBatch();
             }
             catch (Exception layoutError)
             {
-                Program.WriteDiagnosticTrace($"Layout after failed action: {layoutError}");
+                WinUIDesignerLogger.LogTrace("Surface", $"Layout after failed action: {layoutError}");
             }
+
             return Failure(ex, failedAction);
         }
     }
@@ -125,31 +131,37 @@ internal sealed class XamlActionService : IDisposable
     public object BuildDocument(CreateDocumentInfo document)
     {
         using var scope = objectIdentity.EnterDocument(document.DocumentId);
+
         object? root = null;
         IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(document.Actions ?? []);
+
         for (int index = 0; index < actions.Count; index++)
         {
             XamlAction action = actions[index];
             if (document.Actions is { } serializedActions && index < serializedActions.Count)
-                Program.WriteDiagnosticTrace($"BuildDocument ({document.DocumentId}) action[{index}]: {serializedActions[index]}");
+            {
+                WinUIDesignerLogger.LogTrace("Surface", $"BuildDocument ({document.DocumentId}) action[{index}]: {serializedActions[index]}");
+            }
+
             try
             {
-            Execute(action, (id, value) =>
-            {
-                if (id != document.DocumentId)
+                Execute(action, (id, value) =>
                 {
-                    throw new InvalidOperationException("The construction action targets another document.");
-                }
+                    if (id != document.DocumentId)
+                    {
+                        throw new InvalidOperationException("The construction action targets another document.");
+                    }
 
-                root = value;
-            });
-            TrackActionObjects();
+                    root = value;
+                });
+                TrackActionObjects();
             }
             catch (Exception ex)
             {
                 throw new DocumentConstructionException(ex, action);
             }
         }
+
         return root ?? throw new InvalidOperationException($"No root was constructed for document {document.DocumentId}.");
     }
 
@@ -158,7 +170,10 @@ internal sealed class XamlActionService : IDisposable
         foreach (var entry in actionObjects)
         {
             if (entry.Value is not null && (!trackedActionObjects.TryGetValue(entry.Key, out var oldValue) || !ReferenceEquals(oldValue, entry.Value)))
+            {
                 objectIdentity.Track(entry.Value);
+            }
+
             trackedActionObjects[entry.Key] = entry.Value;
         }
     }
@@ -197,12 +212,12 @@ internal sealed class XamlActionService : IDisposable
                 }
                 break;
 
-            case SetDispatcherAction:
                 // The stock TAP uses this live-object handle only to choose the dispatcher
                 // for the following actions. This surface already executes the whole batch
                 // on its single DispatcherQueue, so do not put the dispatcher into the
                 // proxy/object map: the same handle still identifies the live WinUI object
                 // used by a following ConnectToLiveTreeAction.
+            case SetDispatcherAction:
                 break;
 
             case CreateInstanceAction create:
@@ -463,8 +478,8 @@ internal sealed class XamlActionService : IDisposable
         object? value = ResolveObject(handle);
         if (value is StaticResourceReference reference)
         {
-            value = resourceScopes.ResolveStaticResource(owner, reference.ResourceKey);
             // The native UWP TAP replaces the reference's object state with its value.
+            value = resourceScopes.ResolveStaticResource(owner, reference.ResourceKey);
             actionObjects[handle] = value;
         }
         return value;
