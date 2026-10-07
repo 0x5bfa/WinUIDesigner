@@ -1,5 +1,5 @@
 <h1 align="center">WinUI 3 Designer for Visual Studio</h1>
-<p align="center">WinUI 3 designer integration for Visual Studio.</p>
+<p align="center">Design and preview WinUI 3 layouts in Visual Studio.</p>
 
 ![preview](src/WinUIDesigner.Vsix/Resources/preview.png)
 

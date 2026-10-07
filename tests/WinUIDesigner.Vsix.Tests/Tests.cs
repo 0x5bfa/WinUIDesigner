@@ -150,9 +150,17 @@ public sealed class ToolboxTests
         {
             if (File.Exists(Path.Combine(directory.FullName, "WinUIDesigner.slnx")))
             {
-                return Path.Combine(directory.FullName,
+                string surfaceOutputDirectory = Path.Combine(directory.FullName,
                     "src", "WinUIDesigner.Surface", "bin", "Release",
-                    "net10.0-windows10.0.26100.0", "Microsoft.WinUI.dll");
+                    "net10.0-windows10.0.26100.0");
+                foreach (string runtimeIdentifier in new[] { "win-x64", "win-arm64" })
+                {
+                    string projectionPath = Path.Combine(surfaceOutputDirectory, runtimeIdentifier, "Microsoft.WinUI.dll");
+                    if (File.Exists(projectionPath)) return projectionPath;
+                }
+
+                string frameworkOutputPath = Path.Combine(surfaceOutputDirectory, "Microsoft.WinUI.dll");
+                if (File.Exists(frameworkOutputPath)) return frameworkOutputPath;
             }
         }
 
