@@ -43,8 +43,8 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: |
-          dotnet test .\tests\WinUIDesigner.Tests\WinUIDesigner.Tests.csproj --configuration Release --no-build
-          dotnet test .\tests\WinUIDesigner.Toolbox.Tests\WinUIDesigner.Toolbox.Tests.csproj --configuration Release --no-build
+          dotnet test .\tests\WinUIDesigner.Surface.Tests\WinUIDesigner.Surface.Tests.csproj --configuration Release --no-build
+          dotnet test .\tests\WinUIDesigner.Vsix.Tests\WinUIDesigner.Vsix.Tests.csproj --configuration Release --no-build
 
       - name: Build sample app
         shell: pwsh
