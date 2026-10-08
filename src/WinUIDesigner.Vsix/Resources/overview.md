@@ -1,6 +1,6 @@
 # Overview
 
-![preview](preview.png)
+![preview](https://github.com/0x5bfa/WinUIDesigner/blob/main/src/WinUIDesigner.Vsix/Resources/preview.png?raw=true)
 
 ## Limitations
 
