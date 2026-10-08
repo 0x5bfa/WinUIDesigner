@@ -15,7 +15,6 @@ namespace WinUIDesigner.Surface;
 
 /// <summary>
 /// Starts the isolated WinUI surface process and initializes its runtime environment.
-/// Serves as the entry point launched out of process by the Visual Studio designer host.
 /// </summary>
 internal static class Program
 {
@@ -116,8 +115,6 @@ internal static class Program
             return null;
         };
     }
-            // Diagnostic logging must not terminate the surface.
-            // Diagnostic logging must not terminate the surface.
 
     private static string GetContentDirectory()
     {
