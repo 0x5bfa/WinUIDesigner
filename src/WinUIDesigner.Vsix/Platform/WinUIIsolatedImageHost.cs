@@ -2,22 +2,16 @@
 // Licensed under MIT License.
 
 using System;
-using System.Diagnostics;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Threading;
-using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
-using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.ViewModel;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views;
-using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views;
 using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views;
 
 namespace WinUIDesigner.Platform;
 
 /// <summary>
-/// Creates the isolated surface presenter and coordinates designer geometry diagnostics.
+/// Hosts the isolated WinUI design surface in the shared Visual Studio artboard
+/// and bridges surface positioning and input to the designer.
 /// </summary>
 internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : IsolatedSurfaceImageHost(view)
 {
@@ -44,52 +38,48 @@ internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : Isol
             {
                 ((System.Windows.Threading.DispatcherTimer)sender).Stop();
                 geometryDiagnosticScheduled = false;
+
                 LogGeometry(SceneView.ViewModel.RootNode, 0);
-                LogSelectionHitTests();
+
+                System.Windows.Media.GeneralTransform contentToArtboard = SceneView.Artboard.CalculateTransformFromContentToArtboard();
+
+                double[] xs = [400, 600, 800];
+                double[] ys = [200, 400, 600];
+
+                foreach (double x in xs)
+                {
+                    foreach (double y in ys)
+                    {
+                        var contentPoint = new System.Windows.Point(x, y);
+                        var artboardPoint = contentToArtboard.Transform(contentPoint);
+                        var hit = SceneView.GetSelectableElementAtPoint(artboardPoint, SelectionFor3D.None, selectedOnly: false);
+                        var typeName = hit?.Type.FullName ?? "<none>";
+                        var bounds = hit is { IsViewObjectValid: true } ? SceneView.GetActualBounds(hit.ViewTargetElement).ToString() : "<invalid>";
+                        var hitDetails = "";
+
+                        if (hit is { IsViewObjectValid: true })
+                        {
+                            var hitView = hit.ViewTargetElement;
+                            var knownProperties = hit.ProjectContext.Metadata.PlatformMetadata.KnownProperties;
+                            var boundsInParent = SceneView.GetActualBoundsInParent(hitView).ToString();
+                            var horizontalAlignment = hitView.LiveObject.GetValue(knownProperties.FrameworkElementHorizontalAlignment);
+                            var verticalAlignment = hitView.LiveObject.GetValue(knownProperties.FrameworkElementVerticalAlignment);
+                            var layoutSlot = hitView.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.LayoutSlotProperty);
+                            var transformToParent = hitView.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.TransformToParentProperty);
+                            hitDetails =
+                                $", parent={hitView.VisualParent?.LiveObject?.Type?.FullName ?? "<null>"}, " +
+                                $"boundsInParent={boundsInParent}, visualChildren={hitView.VisualChildrenCount}, " +
+                                $"horizontalAlignment={horizontalAlignment?.Value ?? "<null>"}, verticalAlignment={verticalAlignment?.Value ?? "<null>"}, " +
+                                $"layoutSlot={layoutSlot?.Value ?? "<null>"}, transformToParent={transformToParent?.Value ?? "<null>"}";
+                        }
+
+                        WinUIDesignerLogger.LogTrace("Platform", $"Frontend selection hit: content={contentPoint}, artboard={artboardPoint}, type={typeName}, bounds={bounds}{hitDetails}.");
+                    }
+                }
             },
             System.Windows.Threading.Dispatcher.CurrentDispatcher);
 
         timer.Start();
-    }
-
-    private void LogSelectionHitTests()
-    {
-        System.Windows.Media.GeneralTransform contentToArtboard = SceneView.Artboard.CalculateTransformFromContentToArtboard();
-
-        double[] xs = [400, 600, 800];
-        double[] ys = [200, 400, 600];
-
-        foreach (double x in xs)
-        {
-            foreach (double y in ys)
-            {
-                var contentPoint = new System.Windows.Point(x, y);
-                var artboardPoint = contentToArtboard.Transform(contentPoint);
-                var hit = SceneView.GetSelectableElementAtPoint(artboardPoint, SelectionFor3D.None, selectedOnly: false);
-                var typeName = hit?.Type.FullName ?? "<none>";
-                var bounds = hit is { IsViewObjectValid: true } ? SceneView.GetActualBounds(hit.ViewTargetElement).ToString() : "<invalid>";
-                var hitDetails = "";
-
-                if (hit is { IsViewObjectValid: true })
-                {
-                    var hitView = hit.ViewTargetElement;
-                    var knownProperties = hit.ProjectContext.Metadata.PlatformMetadata.KnownProperties;
-                    var boundsInParent = SceneView.GetActualBoundsInParent(hitView).ToString();
-                    var horizontalAlignment = hitView.LiveObject.GetValue(knownProperties.FrameworkElementHorizontalAlignment);
-                    var verticalAlignment = hitView.LiveObject.GetValue(knownProperties.FrameworkElementVerticalAlignment);
-                    var layoutSlot = hitView.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.LayoutSlotProperty);
-                    var transformToParent = hitView.LiveObject.GetValue(Microsoft.VisualStudio.DesignTools.Markup.Metadata.XamlDesignTimeProperties.TransformToParentProperty);
-                    hitDetails =
-                        $", parent={hitView.VisualParent?.LiveObject?.Type?.FullName ?? "<null>"}, " +
-                        $"boundsInParent={boundsInParent}, visualChildren={hitView.VisualChildrenCount}, " +
-                        $"horizontalAlignment={horizontalAlignment?.Value ?? "<null>"}, verticalAlignment={verticalAlignment?.Value ?? "<null>"}, " +
-                        $"layoutSlot={layoutSlot?.Value ?? "<null>"}, transformToParent={transformToParent?.Value ?? "<null>"}";
-                }
-
-                WinUIDesignerLogger.LogTrace("Platform",
-                    $"Frontend selection hit: content={contentPoint}, artboard={artboardPoint}, type={typeName}, bounds={bounds}{hitDetails}.");
-            }
-        }
     }
 
     private void LogGeometry(SceneNode? node, int depth)
@@ -180,6 +170,7 @@ internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : Isol
     protected override IsolatedHwndHost CreateHwndHost(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
         return new WinUIHwndHost(this);
     }
 }

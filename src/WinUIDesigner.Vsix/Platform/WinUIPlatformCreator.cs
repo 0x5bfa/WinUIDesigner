@@ -8,8 +8,10 @@ using Microsoft.VisualStudio.DesignTools.Utility;
 
 namespace WinUIDesigner.Platform;
 
-// This bridges VS's platform registry to the WinUI-specific project, scene-view,
-// and surface-process implementations.
+/// <summary>
+/// Implements <see cref="IPlatformCreator"/> for the WinUI platform, responsible for creating
+/// and configuring the WinUI platform instance for the XAML designer.
+/// </summary>
 public sealed class WinUIPlatformCreator : PlatformCreatorBase
 {
     protected override FrameworkName RuntimeFramework => FrameworkNames.CurrentDotNetCore;

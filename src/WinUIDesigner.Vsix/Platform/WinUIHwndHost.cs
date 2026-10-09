@@ -2,17 +2,10 @@
 // Licensed under MIT License.
 
 using System;
-using System.Diagnostics;
 using System.Linq;
-using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Threading;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
-using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.ViewModel;
-using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views;
-using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views;
-using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views;
 
 namespace WinUIDesigner.Platform;
 
@@ -33,7 +26,9 @@ internal sealed partial class WinUIIsolatedImageHost
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
             HandleRef handle = base.BuildWindowCore(hwndParent);
+
             InstallInputBridge();
+
             return handle;
         }
 
@@ -59,6 +54,7 @@ internal sealed partial class WinUIIsolatedImageHost
             }
 
             RemoveInputBridge();
+
             base.DestroyWindowCore(hwnd);
         }
 
@@ -66,8 +62,8 @@ internal sealed partial class WinUIIsolatedImageHost
         {
             this.parentHwnd = parentHwnd.ToInt32();
 
-            WinUIDesignerLogger.LogTrace("Platform",
-                $"WinUI artboard HWND initialized: parent=0x{parentHwnd.ToInt64():X}, document={surfaceDocumentId}.");
+            WinUIDesignerLogger.LogTrace(
+                "Platform", $"WinUI artboard HWND initialized: parent=0x{parentHwnd.ToInt64():X}, document={surfaceDocumentId}.");
         }
 
         protected override void ResizeSurfaceHwnd(int width, int height)
@@ -76,6 +72,8 @@ internal sealed partial class WinUIIsolatedImageHost
             {
                 if (mutationObserverRegistrationId == 0)
                 {
+                    // Apply WinUI surface mutations to the Visual Studio live tree so
+                    // selection and hit testing use the current runtime visual hierarchy.
                     mutationObserverRegistrationId = pipeline.ProtocolHandler.RegisterMessageObserver<MutationList>(9, mutations =>
                     {
                         Dispatcher.BeginInvoke(new Action(() =>
@@ -83,7 +81,8 @@ internal sealed partial class WinUIIsolatedImageHost
                             pipeline.LiveNodeTree.ProcessPendingMutations();
                             var liveRoot = pipeline.LiveNodeTree.RootNode;
 #if DEBUG
-                            WinUIDesignerLogger.LogTrace("Platform",
+                            WinUIDesignerLogger.LogTrace(
+                                "Platform",
                                 $"Frontend mutation received: count={mutations.Mutations?.Count ?? 0}, " +
                                 $"liveRootChildren={liveRoot.Children.Count()}, " +
                                 $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
@@ -94,6 +93,7 @@ internal sealed partial class WinUIIsolatedImageHost
                     });
                 }
 
+                // This is the same as WPF
                 pipeline.ProtocolHandler.PostMessage(548, new SetSurfacePositionRequestInfo()
                 {
                     DocumentId = surfaceDocumentId,
@@ -103,8 +103,7 @@ internal sealed partial class WinUIIsolatedImageHost
                 });
 
                 WinUIDesignerLogger.LogTrace(
-                    "Platform",
-                    $"SetSurfacePosition (548) posted: document={surfaceDocumentId}, parent=0x{parentHwnd:X}, size={width}x{height}.");
+                    "Platform", $"SetSurfacePosition (548) posted: document={surfaceDocumentId}, parent=0x{parentHwnd:X}, size={width}x{height}.");
             }
         }
 
@@ -125,6 +124,7 @@ internal sealed partial class WinUIIsolatedImageHost
             // it remains an input target.
             root.Background = new System.Windows.Media.SolidColorBrush(
                 System.Windows.Media.Color.FromArgb(1, 0, 0, 0));
+
             root.AddHandler(
                 System.Windows.Input.Mouse.PreviewMouseDownEvent,
                 new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseDown),
@@ -154,10 +154,11 @@ internal sealed partial class WinUIIsolatedImageHost
                 new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor),
                 handledEventsToo: true);
 
-            WinUIDesignerLogger.LogTrace("Platform",
-                $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
-            WinUIDesignerLogger.LogTrace("Platform",
-                $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
+            WinUIDesignerLogger.LogTrace(
+                "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
+
+            WinUIDesignerLogger.LogTrace(
+                "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
         }
 
         private void RemoveInputBridge()
@@ -211,9 +212,10 @@ internal sealed partial class WinUIIsolatedImageHost
         {
             imageHost.SceneView.WritePointerDiagnostic("Input bridge MouseDown", args);
 
-            WinUIDesignerLogger.LogTrace("Platform",
-                $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, forward={ShouldForwardInput(args)}.");
-            WinUIDesignerLogger.LogTrace("Platform",
+            WinUIDesignerLogger.LogTrace(
+                "Platform", $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, forward={ShouldForwardInput(args)}.");
+            WinUIDesignerLogger.LogTrace(
+                "Platform",
                 $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, " +
                 $"forward={ShouldForwardInput(args)}, activeTool={imageHost.SceneView.DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
                 $"activeBehavior={imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");

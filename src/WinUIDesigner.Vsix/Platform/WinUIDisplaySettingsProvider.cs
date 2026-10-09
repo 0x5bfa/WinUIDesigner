@@ -11,15 +11,19 @@ using Microsoft.Win32;
 
 namespace WinUIDesigner.Platform;
 
-// Retain the UWP SDK device parser, ordering, qualifiers and default settings.
-// WinUI projects do not supply UAP's PlatformInstalledPath, so locate that same
-// device directory through the installed Windows SDK when necessary.
+/// <summary>
+/// Provides display settings for WinUI projects by extending <see cref="UwpDisplaySettingsProvider"/>,
+/// which retrieves XML files from the directory specified by the UAP's <c>PlatformInstalledPath</c> property.
+/// However, since WinUI projects do not supply that property, this class overrides the method to locate
+/// UWP SDK device definitions through the installed Windows SDK instead.
+/// </summary>
+/// <param name="platformService">The platform service used to access platform-specific functionality.</param>
 internal sealed class WinUIDisplaySettingsProvider(IPlatformService platformService)
     : UwpDisplaySettingsProvider(platformService)
 {
     protected override string[] GetXmlFilesFromDirectory()
     {
-        var files = base.GetXmlFilesFromDirectory();
+        var files = base.GetXmlFilesFromDirectory(); // Unlikely to work.
         if (files is { Length: > 0 })
         {
             return files;
@@ -32,9 +36,7 @@ internal sealed class WinUIDisplaySettingsProvider(IPlatformService platformServ
             return files;
         }
 
-        var devicesDirectory = LocalizationHelper.FindFolderForCulture(
-            CultureInfo.CreateSpecificCulture("en-US"), Path.Combine(sdkRoot, @"DesignTime\UAP\Devices"), useLcidFormat: true);
-
+        var devicesDirectory = LocalizationHelper.FindFolderForCulture(CultureInfo.CreateSpecificCulture("en-US"), Path.Combine(sdkRoot, @"DesignTime\UAP\Devices"), useLcidFormat: true);
         if (string.IsNullOrEmpty(devicesDirectory) || !Directory.Exists(devicesDirectory))
         {
             return files;

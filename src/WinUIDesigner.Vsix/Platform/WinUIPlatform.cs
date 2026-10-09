@@ -22,9 +22,9 @@ using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views.NodeObjectCon
 
 namespace WinUIDesigner.Platform;
 
-// VS has no complete WinUI Designer backend, so this platform reuses the shared
-// XAML designer model and selected UWP infrastructure, then supplies WinUI surface
-// hosting and serialization where the two XAML runtimes differ.
+/// <summary>
+/// Represents the WinUI platform for the XAML designer, providing support for WinUI-specific features and behaviors.
+/// </summary>
 public sealed class WinUIPlatform : XamlPlatform
 {
     private UwpDisplaySettingsProvider? displaySettingsProvider;
@@ -48,15 +48,20 @@ public sealed class WinUIPlatform : XamlPlatform
         }
     }
 
+    /// <summary>
+    /// Gets the view model behind the designer's settings area (top and bottom). It provides settings such as
+    /// device size, orientation, theme, and clipping, then applies the selected options to the design-time view context.
+    /// </summary>
     public override PlatformPaneModel PlatformPaneModel
     {
         get
         {
             if (platformPaneModel is null)
             {
+                // TODO: This seems to be working fine for now, but we may need to implement WinUIPlatformPaneModel.
                 platformPaneModel = new UwpPlatformPaneModel(DesignerContext, DisplaySettingsProvider);
 
-                WinUIDesignerLogger.LogDebug("Platform", "Temporary UwpPlatformPaneModel bridge instantiated.");
+                WinUIDesignerLogger.LogDebug("Platform", "UwpPlatformPaneModel instantiated.");
             }
 
             return platformPaneModel;
@@ -82,21 +87,23 @@ public sealed class WinUIPlatform : XamlPlatform
 
         var builder = new AttributeTableBuilder();
 
+        // TODO: Add more categories for other properties as needed.
         foreach (string property in new[] { "Width", "Height", "MinWidth", "MinHeight", "MaxWidth", "MaxHeight", "Margin", "HorizontalAlignment", "VerticalAlignment" })
         {
             builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", property, new CategoryAttribute("Layout"));
         }
 
+        builder.AddCustomAttributes("Microsoft.UI.Xaml.Controls.Control", "FontSize", new CategoryAttribute("Text"));
+        builder.AddCustomAttributes("Microsoft.UI.Xaml.Controls.TextBlock", "Text", new CategoryAttribute("Text"));
+
         builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", "Width", new DefaultValueAttribute(double.NaN));
         builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", "Height", new DefaultValueAttribute(double.NaN));
 
+        // TODO: Maybe there are more properties that should be marked as non-browsable.
         foreach (string property in new[] { "Parent", "TemplatedParent", "XamlRoot", "DispatcherQueue", "Dispatcher", "ActualWidth", "ActualHeight", "DesiredSize", "RenderSize" })
         {
             builder.AddCustomAttributes("Microsoft.UI.Xaml.FrameworkElement", property, BrowsableAttribute.No);
         }
-
-        builder.AddCustomAttributes("Microsoft.UI.Xaml.Controls.Control", "FontSize", new CategoryAttribute("Text"));
-        builder.AddCustomAttributes("Microsoft.UI.Xaml.Controls.TextBlock", "Text", new CategoryAttribute("Text"));
 
         return [builder.CreateTable()];
     }
@@ -119,6 +126,7 @@ public sealed class WinUIPlatform : XamlPlatform
         var view = new WinUISceneView(viewModel);
 
         WinUIDesignerLogger.LogInformation("Platform", "Minimal WinUISceneView instantiated.");
+
         return view;
     }
 
@@ -142,34 +150,39 @@ public sealed class WinUIPlatform : XamlPlatform
 
         var converter = new NodeObjectPlatformConverter();
 
-        // The shared WPF frontend expects WPF primitives, while WinUI reports its
-        // own serialized names. Register these layout types explicitly.
+        // The shared Visual Studio designer model represents these layout values with WPF types.
+        // Visual Studio's shared converter has built-in type-name mappings between WPF (System.Windows)
+        // and UWP (Windows.UI.Xaml), but no equivalent general mapping for WinUI (Microsoft.UI.Xaml).
+        // Register individual conversions for the primitive values WinUI needs to pass to the shared WPF designer.
         converter.RegisterPrimitiveConverter(XamlTypes.HorizontalAlignment, ConvertHorizontalAlignment);
         converter.RegisterPrimitiveConverter(XamlTypes.VerticalAlignment, ConvertVerticalAlignment);
         converter.RegisterPrimitiveConverter(XamlTypes.Matrix, value => System.Windows.Media.Matrix.Parse(value));
         converter.RegisterPrimitiveConverter(XamlTypes.Thickness, value => new System.Windows.ThicknessConverter().ConvertFromInvariantString(value));
 
         return converter;
+
+        static object ConvertHorizontalAlignment(string value)
+        {
+            return Enum.TryParse(value, true, out System.Windows.HorizontalAlignment alignment)
+                ? alignment
+                : System.Windows.HorizontalAlignment.Stretch;
+        }
+
+        static object ConvertVerticalAlignment(string value)
+        {
+            return Enum.TryParse(value, true, out System.Windows.VerticalAlignment alignment)
+                ? alignment
+                : System.Windows.VerticalAlignment.Stretch;
+        }
     }
 
-    private static object ConvertHorizontalAlignment(string value)
-    {
-        return Enum.TryParse(value, ignoreCase: true, out System.Windows.HorizontalAlignment alignment)
-            ? alignment
-            : System.Windows.HorizontalAlignment.Stretch;
-    }
-
-    private static object ConvertVerticalAlignment(string value)
-    {
-        return Enum.TryParse(value, ignoreCase: true, out System.Windows.VerticalAlignment alignment)
-            ? alignment
-            : System.Windows.VerticalAlignment.Stretch;
-    }
 
     protected override IGeometry CreateIsolatedSurfaceGeometry()
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreateIsolatedSurfaceGeometry reached.");
 
+        // WPF uses Math.Round(), while UWP uses Math.Floor(value + 0.5). For WinUI's geometry,
+        // we use the same rounding behavior as UWP.
         return new NodeObjectGeometry(PlatformConverter, value => Math.Floor(value + 0.5));
     }
 
@@ -177,20 +190,20 @@ public sealed class WinUIPlatform : XamlPlatform
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodeBuilders reached.");
 
-        RegisterSurfaceIsolatedDocumentNodeBuilders();
+        base.RegisterSurfaceIsolatedDocumentNodeBuilders();
     }
 
     protected override void RegisterNodeChildBuilders()
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodeChildBuilders reached.");
 
-        RegisterSurfaceIsolatedDocumentNodeChildBuilders();
+        base.RegisterSurfaceIsolatedDocumentNodeChildBuilders();
     }
 
     protected override void RegisterNodePropertyBuilders()
     {
         WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodePropertyBuilders reached.");
 
-        RegisterSurfaceIsolatedDocumentNodePropertyBuilders();
+        base.RegisterSurfaceIsolatedDocumentNodePropertyBuilders();
     }
 }

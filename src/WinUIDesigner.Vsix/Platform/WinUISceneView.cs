@@ -3,12 +3,7 @@
 
 using System;
 using System.Diagnostics;
-using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Threading;
-using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
-using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.ViewModel;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views;
@@ -17,7 +12,8 @@ using Microsoft.VisualStudio.DesignTools.XamlSurfaceDesigner.Views;
 namespace WinUIDesigner.Platform;
 
 /// <summary>
-/// Retains the shared artboard and editing tools and supplies the isolated WinUI surface presenter.
+/// Provides the view that displays the WinUI design surface (artboard) in Visual Studio's XAML Designer
+/// and connects it to editing interactions.
 /// </summary>
 internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView(viewModel)
 {
@@ -28,11 +24,12 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
     {
         PlatformSurface = new IsolatedSurface();
 
+        // Use WinUI-specific isolated image host instance so that the artboard can render WinUI content via WinUIHwndHost.
         var imageHost = new WinUIIsolatedImageHost(this);
-
         ImageHostField.SetValue(this, imageHost);
 
         WinUIDesignerLogger.LogTrace("Platform", "Minimal WinUI isolated image host created.");
+
         Artboard artboard = new UwpArtboard(PlatformSurface, imageHost, ViewModel);
 
 #if DEBUG
@@ -147,5 +144,4 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
         }
 #endif
     }
-
 }
