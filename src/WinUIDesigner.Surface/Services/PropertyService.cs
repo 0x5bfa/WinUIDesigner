@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Windows.Foundation;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -50,11 +51,11 @@ internal sealed partial class PropertyService : IDisposable
         diagnosticsPropertySource.StartInitialization();
         serializer = new LiveValueSerializer(objectIdentity);
 
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<PropertiesRequestInfo, LiveObjectState>(522, HandleGetProperties));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<DefaultValueRequestInfo, LiveValueResponse>(523, HandleGetDefaultValue));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<UnderlyingValueSourceRequest, UnderlyingValueSourceInformation>(528, HandleGetUnderlyingValue));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, UnderlyingValueSourceInformation>(539, HandleExecuteLookupActions));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<EvaluateStaticExtensionRequest, LiveValue>(546, HandleEvaluateStaticExtension));
+        registrationIds.Add(protocolHandler.RegisterMessageObserver<PropertiesRequestInfo, LiveObjectState>((int)DesignerMessageId.GetProperties, HandleGetProperties));
+        registrationIds.Add(protocolHandler.RegisterMessageObserver<DefaultValueRequestInfo, LiveValueResponse>((int)DesignerMessageId.GetDefaultValue, HandleGetDefaultValue));
+        registrationIds.Add(protocolHandler.RegisterMessageObserver<UnderlyingValueSourceRequest, UnderlyingValueSourceInformation>((int)DesignerMessageId.GetUnderlyingValue, HandleGetUnderlyingValue));
+        registrationIds.Add(protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, UnderlyingValueSourceInformation>((int)DesignerMessageId.ExecuteLookupActions, HandleExecuteLookupActions));
+        registrationIds.Add(protocolHandler.RegisterMessageObserver<EvaluateStaticExtensionRequest, LiveValue>((int)DesignerMessageId.EvaluateStaticExtension, HandleEvaluateStaticExtension));
     }
 
     private LiveObjectState HandleGetProperties(PropertiesRequestInfo request)
@@ -62,7 +63,7 @@ internal sealed partial class PropertyService : IDisposable
         LiveObjectState response = InvokeOnDispatcher(() => CreateObjectState(request.Object),
             () => new LiveObjectState { Properties = [], Items = [] }, request.Object);
 
-        WinUIDesignerLogger.LogTrace("Surface", $"GetProperties (522) completed for handle {request.Object}: properties={response.Properties.Count}, items={response.Items.Count}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"GetProperties ({(int)DesignerMessageId.GetProperties}) completed for handle {request.Object}: properties={response.Properties.Count}, items={response.Items.Count}.");
 
         return response;
     }
@@ -85,7 +86,7 @@ internal sealed partial class PropertyService : IDisposable
 
         if (value is FrameworkElement element)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Layout properties (522): handle={handle}, type={value.GetType().FullName}, size={element.ActualWidth}x{element.ActualHeight}, margin={element.Margin}, transform={GetTransformToParent(element)}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Layout properties ({(int)DesignerMessageId.GetProperties}): handle={handle}, type={value.GetType().FullName}, size={element.ActualWidth}x{element.ActualHeight}, margin={element.Margin}, transform={GetTransformToParent(element)}.");
         }
 
         if (value is IEnumerable enumerable and not string)
@@ -370,7 +371,7 @@ internal sealed partial class PropertyService : IDisposable
 
     private LiveValueResponse HandleGetDefaultValue(DefaultValueRequestInfo request)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"GetDefaultValue (523): property={request.FullPropertyName}, target={request.TargetTypeName}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"GetDefaultValue ({(int)DesignerMessageId.GetDefaultValue}): property={request.FullPropertyName}, target={request.TargetTypeName}.");
 
         var value = InvokeOnDispatcher(() => serializer.Serialize(GetDefaultValue(request.FullPropertyName, request.TargetTypeName)), () => new LiveValue());
 
@@ -397,7 +398,7 @@ internal sealed partial class PropertyService : IDisposable
 
     private UnderlyingValueSourceInformation HandleGetUnderlyingValue(UnderlyingValueSourceRequest request)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"GetUnderlyingValue (528): handle={request.Object}, property={request.Property}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"GetUnderlyingValue ({(int)DesignerMessageId.GetUnderlyingValue}): handle={request.Object}, property={request.Property}.");
 
         var value = InvokeOnDispatcher(() =>
         {
@@ -414,7 +415,7 @@ internal sealed partial class PropertyService : IDisposable
 
     private UnderlyingValueSourceInformation HandleExecuteLookupActions(ExecuteXamlActionsRequestInfo request)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"Execute lookup actions (539): count={request.Actions?.Count ?? 0}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Execute lookup actions ({(int)DesignerMessageId.ExecuteLookupActions}): count={request.Actions?.Count ?? 0}.");
 
         return new UnderlyingValueSourceInformation()
         {
@@ -424,7 +425,7 @@ internal sealed partial class PropertyService : IDisposable
 
     private LiveValue HandleEvaluateStaticExtension(EvaluateStaticExtensionRequest request)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"EvaluateStaticExtension (546): member={request.MemberName}, type={request.TypeName}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"EvaluateStaticExtension ({(int)DesignerMessageId.EvaluateStaticExtension}): member={request.MemberName}, type={request.TypeName}.");
 
         return InvokeOnDispatcher(() => serializer.Serialize(XamlRuntimeUtilities.ResolveMember(request.MemberName)), () => new LiveValue());
     }
@@ -443,7 +444,7 @@ internal sealed partial class PropertyService : IDisposable
                 ? objectIdentity.GetDocumentId(target)
                 : 0;
 
-            protocolHandler.PostMessage(529, new UnhandledExceptionResponse()
+            protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {
                 DocumentId = documentId, Handle = handle, Message = ex.Message,
                 CallStack = ex.ToString(), IsArtboardException = true,

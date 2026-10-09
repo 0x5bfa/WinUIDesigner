@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Live;
@@ -13,6 +12,7 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Pipeline;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Platform;
 
@@ -23,8 +23,6 @@ internal sealed class WinUIDesignerInstanceManager(
     IProtocolHandler protocolHandler)
     : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler)
 {
-    // Configure app resources before the surface parses a document that may use them.
-    private const int ConfigureAppResourcesMessage = 6001;
     private readonly IProtocolHandler protocolHandler = protocolHandler;
 
     protected override LiveMarkupLinkResult TryLinkDocumentNode(ILiveNode liveNode, bool canDelay)
@@ -64,8 +62,8 @@ internal sealed class WinUIDesignerInstanceManager(
             var requestedTheme = (string?)appXaml?.Root?.Attribute("RequestedTheme");
 
             ResponseWithError response = await protocolHandler.SendMessageAsync<ResponseWithError>(
-                ConfigureAppResourcesMessage,
-                new AppResourcesRequest { HasXamlControlsResources = hasXamlControlsResources, RequestedTheme = requestedTheme }).ConfigureAwait(false);
+                (int)DesignerMessageId.ConfigureAppResources,
+                new ConfigureAppResourcesRequest { HasXamlControlsResources = hasXamlControlsResources, RequestedTheme = requestedTheme }).ConfigureAwait(false);
 
             if (response.HResult < 0)
             {
@@ -105,15 +103,5 @@ internal sealed class WinUIDesignerInstanceManager(
         }
 
         return request;
-    }
-
-    [DataContract]
-    private sealed class AppResourcesRequest
-    {
-        [DataMember]
-        public bool HasXamlControlsResources { get; set; }
-
-        [DataMember]
-        public string? RequestedTheme { get; set; }
     }
 }

@@ -1,0 +1,16 @@
+<!-- Copyright (c) 0x5BFA. All rights reserved. Licensed under MIT License. -->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>{D87009EF-2A1C-4B5C-917F-20FB4CE0789A}</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>WinUIDesigner</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Protocol\DesignerMessageId.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Protocol\ConfigureAppResourcesRequest.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Diagnostics\WinUIDesignerLogger.cs" />
+  </ItemGroup>
+</Project>

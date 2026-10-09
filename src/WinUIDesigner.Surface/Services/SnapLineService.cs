@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Windows.Foundation;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -31,8 +32,8 @@ internal sealed partial class SnapLineService : IDisposable
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
 
-        snapLinesRegistrationId = protocolHandler.RegisterMessageObserver<GetSnapLinesRequest, GetSnapLinesResponse>(532, HandleGetSnapLines);
-        elementDataRegistrationId = protocolHandler.RegisterMessageObserver<GetElementSnapDataRequest, GetElementSnapDataResponse>(533, HandleGetElementSnapData);
+        snapLinesRegistrationId = protocolHandler.RegisterMessageObserver<GetSnapLinesRequest, GetSnapLinesResponse>((int)DesignerMessageId.GetSnapLines, HandleGetSnapLines);
+        elementDataRegistrationId = protocolHandler.RegisterMessageObserver<GetElementSnapDataRequest, GetElementSnapDataResponse>((int)DesignerMessageId.GetElementSnapData, HandleGetElementSnapData);
     }
 
     private GetSnapLinesResponse HandleGetSnapLines(GetSnapLinesRequest request)
@@ -70,7 +71,7 @@ internal sealed partial class SnapLineService : IDisposable
             }
         }
 
-        WinUIDesignerLogger.LogTrace("Surface", $"GetSnapLines (532) returned {lines.Count} line(s) for container handle {request.ContainerHandle}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"GetSnapLines ({(int)DesignerMessageId.GetSnapLines}) returned {lines.Count} line(s) for container handle {request.ContainerHandle}.");
 
         return new GetSnapLinesResponse { SnapLines = lines };
     }
@@ -171,7 +172,7 @@ internal sealed partial class SnapLineService : IDisposable
         {
             WinUIDesignerLogger.LogTrace("Surface", $"Snap request failed: {ex}");
 
-            protocolHandler.PostMessage(529, new UnhandledExceptionResponse { Message = ex.Message, CallStack = ex.ToString() });
+            protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse { Message = ex.Message, CallStack = ex.ToString() });
 
             return fallback;
         }

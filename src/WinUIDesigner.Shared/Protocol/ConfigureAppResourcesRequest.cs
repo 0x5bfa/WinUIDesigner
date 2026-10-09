@@ -3,13 +3,13 @@
 
 using System.Runtime.Serialization;
 
-namespace WinUIDesigner.Surface.Services;
+namespace WinUIDesigner.Protocol;
 
 /// <summary>
-/// Serializes a request to load project resources into the surface application.
+/// Carries the subset of App.xaml resource settings needed by the surface process.
 /// </summary>
 [DataContract]
-internal sealed class AppResourcesRequest
+internal sealed class ConfigureAppResourcesRequest
 {
     [DataMember]
     public bool HasXamlControlsResources { get; set; }

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Platform;
 
@@ -27,7 +28,54 @@ internal sealed partial class WinUIIsolatedImageHost
         {
             HandleRef handle = base.BuildWindowCore(hwndParent);
 
-            InstallInputBridge();
+            if (inputBridgeRoot is null && ExtensibilityLayerHwndSource?.HwndSource?.RootVisual is System.Windows.Controls.Canvas root)
+            {
+                inputBridgeRoot = root;
+                inputBridgeAdornerLayer = root.Children.Count == 1 ? root.Children[0] : null;
+
+                // The child HwndSource used by the VS designer is per-pixel transparent.
+                // A fully transparent root is skipped by Win32 hit testing, so mouse input
+                // falls through to the host HwndSource instead of reaching this bridge.
+                // Keep the overlay visually transparent, but give it a non-zero alpha so
+                // it remains an input target.
+                root.Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(1, 0, 0, 0));
+
+                root.AddHandler(
+                    System.Windows.Input.Mouse.PreviewMouseDownEvent,
+                    new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseDown),
+                    handledEventsToo: true);
+                root.AddHandler(
+                    System.Windows.Input.Mouse.PreviewMouseMoveEvent,
+                    new System.Windows.Input.MouseEventHandler(InputBridge_MouseMove),
+                    handledEventsToo: true);
+                root.AddHandler(
+                    System.Windows.Input.Mouse.PreviewMouseUpEvent,
+                    new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseUp),
+                    handledEventsToo: true);
+                root.AddHandler(
+                    System.Windows.Input.Mouse.MouseEnterEvent,
+                    new System.Windows.Input.MouseEventHandler(InputBridge_MouseEnter),
+                    handledEventsToo: true);
+                root.AddHandler(
+                    System.Windows.Input.Mouse.MouseLeaveEvent,
+                    new System.Windows.Input.MouseEventHandler(InputBridge_MouseLeave),
+                    handledEventsToo: true);
+                root.AddHandler(
+                    System.Windows.Input.Mouse.PreviewMouseWheelEvent,
+                    new System.Windows.Input.MouseWheelEventHandler(InputBridge_MouseWheel),
+                    handledEventsToo: true);
+                root.AddHandler(
+                    System.Windows.Input.Mouse.QueryCursorEvent,
+                    new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor),
+                    handledEventsToo: true);
+
+                WinUIDesignerLogger.LogTrace(
+                    "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
+
+                WinUIDesignerLogger.LogTrace(
+                    "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
+            }
 
             return handle;
         }
@@ -53,7 +101,34 @@ internal sealed partial class WinUIIsolatedImageHost
                 mutationObserverRegistrationId = 0;
             }
 
-            RemoveInputBridge();
+            if (inputBridgeRoot is { } root)
+            {
+                root.RemoveHandler(
+                    System.Windows.Input.Mouse.PreviewMouseDownEvent,
+                    new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseDown));
+                root.RemoveHandler(
+                    System.Windows.Input.Mouse.PreviewMouseMoveEvent,
+                    new System.Windows.Input.MouseEventHandler(InputBridge_MouseMove));
+                root.RemoveHandler(
+                    System.Windows.Input.Mouse.PreviewMouseUpEvent,
+                    new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseUp));
+                root.RemoveHandler(
+                    System.Windows.Input.Mouse.MouseEnterEvent,
+                    new System.Windows.Input.MouseEventHandler(InputBridge_MouseEnter));
+                root.RemoveHandler(
+                    System.Windows.Input.Mouse.MouseLeaveEvent,
+                    new System.Windows.Input.MouseEventHandler(InputBridge_MouseLeave));
+                root.RemoveHandler(
+                    System.Windows.Input.Mouse.PreviewMouseWheelEvent,
+                    new System.Windows.Input.MouseWheelEventHandler(InputBridge_MouseWheel));
+                root.RemoveHandler(
+                    System.Windows.Input.Mouse.QueryCursorEvent,
+                    new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor));
+
+                root.Background = null;
+                inputBridgeAdornerLayer = null;
+                inputBridgeRoot = null;
+            }
 
             base.DestroyWindowCore(hwnd);
         }
@@ -74,13 +149,13 @@ internal sealed partial class WinUIIsolatedImageHost
                 {
                     // Apply WinUI surface mutations to the Visual Studio live tree so
                     // selection and hit testing use the current runtime visual hierarchy.
-                    mutationObserverRegistrationId = pipeline.ProtocolHandler.RegisterMessageObserver<MutationList>(9, mutations =>
+                    mutationObserverRegistrationId = pipeline.ProtocolHandler.RegisterMessageObserver<MutationList>((int)DesignerMessageId.VisualTreeMutations, mutations =>
                     {
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
                             pipeline.LiveNodeTree.ProcessPendingMutations();
                             var liveRoot = pipeline.LiveNodeTree.RootNode;
-#if DEBUG
+
                             WinUIDesignerLogger.LogTrace(
                                 "Platform",
                                 $"Frontend mutation received: count={mutations.Mutations?.Count ?? 0}, " +
@@ -88,13 +163,12 @@ internal sealed partial class WinUIIsolatedImageHost
                                 $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
 
                             imageHost.ScheduleGeometryDiagnostic();
-#endif
                         }));
                     });
                 }
 
                 // This is the same as WPF
-                pipeline.ProtocolHandler.PostMessage(548, new SetSurfacePositionRequestInfo()
+                pipeline.ProtocolHandler.PostMessage((int)DesignerMessageId.SetSurfacePosition, new SetSurfacePositionRequestInfo()
                 {
                     DocumentId = surfaceDocumentId,
                     ParentWindow = parentHwnd,
@@ -103,96 +177,8 @@ internal sealed partial class WinUIIsolatedImageHost
                 });
 
                 WinUIDesignerLogger.LogTrace(
-                    "Platform", $"SetSurfacePosition (548) posted: document={surfaceDocumentId}, parent=0x{parentHwnd:X}, size={width}x{height}.");
+                    "Platform", $"SetSurfacePosition ({(int)DesignerMessageId.SetSurfacePosition}) posted: document={surfaceDocumentId}, parent=0x{parentHwnd:X}, size={width}x{height}.");
             }
-        }
-
-        private void InstallInputBridge()
-        {
-            if (inputBridgeRoot is not null || ExtensibilityLayerHwndSource?.HwndSource?.RootVisual is not System.Windows.Controls.Canvas root)
-            {
-                return;
-            }
-
-            inputBridgeRoot = root;
-            inputBridgeAdornerLayer = root.Children.Count == 1 ? root.Children[0] : null;
-
-            // The child HwndSource used by the VS designer is per-pixel transparent.
-            // A fully transparent root is skipped by Win32 hit testing, so mouse input
-            // falls through to the host HwndSource instead of reaching this bridge.
-            // Keep the overlay visually transparent, but give it a non-zero alpha so
-            // it remains an input target.
-            root.Background = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromArgb(1, 0, 0, 0));
-
-            root.AddHandler(
-                System.Windows.Input.Mouse.PreviewMouseDownEvent,
-                new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseDown),
-                handledEventsToo: true);
-            root.AddHandler(
-                System.Windows.Input.Mouse.PreviewMouseMoveEvent,
-                new System.Windows.Input.MouseEventHandler(InputBridge_MouseMove),
-                handledEventsToo: true);
-            root.AddHandler(
-                System.Windows.Input.Mouse.PreviewMouseUpEvent,
-                new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseUp),
-                handledEventsToo: true);
-            root.AddHandler(
-                System.Windows.Input.Mouse.MouseEnterEvent,
-                new System.Windows.Input.MouseEventHandler(InputBridge_MouseEnter),
-                handledEventsToo: true);
-            root.AddHandler(
-                System.Windows.Input.Mouse.MouseLeaveEvent,
-                new System.Windows.Input.MouseEventHandler(InputBridge_MouseLeave),
-                handledEventsToo: true);
-            root.AddHandler(
-                System.Windows.Input.Mouse.PreviewMouseWheelEvent,
-                new System.Windows.Input.MouseWheelEventHandler(InputBridge_MouseWheel),
-                handledEventsToo: true);
-            root.AddHandler(
-                System.Windows.Input.Mouse.QueryCursorEvent,
-                new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor),
-                handledEventsToo: true);
-
-            WinUIDesignerLogger.LogTrace(
-                "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
-
-            WinUIDesignerLogger.LogTrace(
-                "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
-        }
-
-        private void RemoveInputBridge()
-        {
-            if (inputBridgeRoot is not { } root)
-            {
-                return;
-            }
-
-            root.RemoveHandler(
-                System.Windows.Input.Mouse.PreviewMouseDownEvent,
-                new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseDown));
-            root.RemoveHandler(
-                System.Windows.Input.Mouse.PreviewMouseMoveEvent,
-                new System.Windows.Input.MouseEventHandler(InputBridge_MouseMove));
-            root.RemoveHandler(
-                System.Windows.Input.Mouse.PreviewMouseUpEvent,
-                new System.Windows.Input.MouseButtonEventHandler(InputBridge_MouseUp));
-            root.RemoveHandler(
-                System.Windows.Input.Mouse.MouseEnterEvent,
-                new System.Windows.Input.MouseEventHandler(InputBridge_MouseEnter));
-            root.RemoveHandler(
-                System.Windows.Input.Mouse.MouseLeaveEvent,
-                new System.Windows.Input.MouseEventHandler(InputBridge_MouseLeave));
-            root.RemoveHandler(
-                System.Windows.Input.Mouse.PreviewMouseWheelEvent,
-                new System.Windows.Input.MouseWheelEventHandler(InputBridge_MouseWheel));
-            root.RemoveHandler(
-                System.Windows.Input.Mouse.QueryCursorEvent,
-                new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor));
-
-            root.Background = null;
-            inputBridgeAdornerLayer = null;
-            inputBridgeRoot = null;
         }
 
         private bool ShouldForwardInput(System.Windows.RoutedEventArgs args)
@@ -201,11 +187,6 @@ internal sealed partial class WinUIIsolatedImageHost
             // bridge only the blank overlay events that otherwise have no WPF target.
             return inputBridgeRoot is not null &&
                 (ReferenceEquals(args.OriginalSource, inputBridgeRoot) || ReferenceEquals(args.OriginalSource, inputBridgeAdornerLayer));
-        }
-
-        private bool IsArtboardMouseCaptureWithin()
-        {
-            return imageHost.SceneView.Artboard.IsMouseCaptureWithin;
         }
 
         private void InputBridge_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs args)
@@ -246,7 +227,7 @@ internal sealed partial class WinUIIsolatedImageHost
             // forwarded initial MouseDown. Once capture is anywhere inside the Artboard,
             // WPF already routes the physical move/up stream through the designer. Forwarding
             // the overlay event as well makes relocate/resize process every drag update twice.
-            if (ShouldForwardInput(args) && !IsArtboardMouseCaptureWithin())
+            if (ShouldForwardInput(args) && !imageHost.SceneView.Artboard.IsMouseCaptureWithin)
             {
                 ForwardMouseEvent(args, System.Windows.Input.Mouse.MouseMoveEvent);
             }
@@ -254,7 +235,7 @@ internal sealed partial class WinUIIsolatedImageHost
 
         private void InputBridge_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs args)
         {
-            if (!ShouldForwardInput(args) || IsArtboardMouseCaptureWithin())
+            if (!ShouldForwardInput(args) || imageHost.SceneView.Artboard.IsMouseCaptureWithin)
             {
                 return;
             }
@@ -331,6 +312,5 @@ internal sealed partial class WinUIIsolatedImageHost
             imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Handled = forwarded.Handled;
         }
-
     }
 }

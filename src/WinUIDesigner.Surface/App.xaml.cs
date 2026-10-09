@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml.Markup;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using WinUIDesigner.Surface.Services;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Surface;
 
@@ -76,7 +77,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         UnhandledException += (_, args) =>
         {
             WinUIDesignerLogger.LogTrace("Surface", $"WinUI unhandled exception: {args.Exception}");
-            protocolHandler?.PostMessage(529, new UnhandledExceptionResponse
+            protocolHandler?.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse
             {
                 Message = args.Exception.Message,
                 CallStack = args.Exception.ToString(),
@@ -92,7 +93,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         {
             WinUIDesignerLogger.LogTrace("Surface", $"Asynchronous protocol request failed: {exception}");
 
-            protocolHandler.PostMessage(529, new UnhandledExceptionResponse
+            protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse
             {
                 Message = exception.Message, CallStack = exception.ToString(), IsArtboardException = true,
             });
@@ -101,7 +102,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         objectIdentity = new();
         surfaceService = new(protocolHandler, dispatcherQueue, objectIdentity);
 
-        WinUIDesignerLogger.LogTrace("Surface", "PipeDataBridge, ProtocolHandler, and minimal SurfaceService initialized; message 516 registered before protocol start.");
+        WinUIDesignerLogger.LogTrace("Surface", $"PipeDataBridge, ProtocolHandler, and minimal SurfaceService initialized; message {(int)DesignerMessageId.CreateSurface} registered before protocol start.");
 
         protocolHandler.Start();
 

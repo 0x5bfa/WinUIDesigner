@@ -18,6 +18,10 @@ Download and open a vsix file from Visual Studio Marketplace. WinUI 3 designer w
 
 ## Structure
 
+**`WinUIDesigner.Shared`**
+
+A Visual Studio shared source project compiled into `WinUIDesigner.Surface`, `WinUIDesigner.Vsix`, and the VSIX tests. It contains the common designer protocol message IDs, the app-resources request contract, and `WinUIDesignerLogger`; it does not produce a separate runtime DLL.
+
 **`WinUIDesigner.DiagnosticsTap`**
 
 A native DLL, packaged for x64 and ARM64, loaded by the isolated WinUI surface process. It attaches to WinUI XAML Diagnostics, exposes property-value-source queries and rendering control to the managed surface, and implements the diagnostics TAP COM entry points.
@@ -28,7 +32,7 @@ The out-of-process WinUI 3 designer surface, published as the self-contained `Wi
 
 **`WinUIDesigner.Vsix`**
 
-The in-process Visual Studio extension. It registers the WinUI XAML runtime, selects the WinUI platform implementation, reuses Visual Studio's designer host and process-isolation services, stages and launches `WinUISurface.exe`, and provides Toolbox integration and logging.
+The in-process Visual Studio extension. It registers the WinUI XAML runtime, selects the WinUI platform implementation, reuses Visual Studio's designer host and process-isolation services, stages and launches `WinUISurface.exe`, and provides Toolbox integration.
 
 ```mermaid
 flowchart TB

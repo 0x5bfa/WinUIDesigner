@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/WinUIDesigner.Shared/WinUIDesigner.Shared.shproj" Id="d87009ef-2a1c-4b5c-917f-20fb4ce0789a" />
     <Project Path="src/WinUIDesigner.DiagnosticsTap/WinUIDesigner.DiagnosticsTap.vcxproj" Id="d3d3130b-bb92-4ae7-93a5-716b19939913" />
     <Project Path="src/WinUIDesigner.Surface/WinUIDesigner.Surface.csproj">
       <BuildDependency Project="src/WinUIDesigner.DiagnosticsTap/WinUIDesigner.DiagnosticsTap.vcxproj" />

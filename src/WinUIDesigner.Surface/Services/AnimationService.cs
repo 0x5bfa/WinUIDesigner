@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -34,8 +35,8 @@ internal sealed partial class AnimationService : IDisposable
         this.protocolHandler = protocolHandler;
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
-        visualStateRegistrationId = protocolHandler.RegisterMessageObserver<GoToStateRequest, ResponseWithError>(524, HandleGoToState);
-        storyboardRegistrationId = protocolHandler.RegisterMessageObserver<StoryboardRequest, ResponseWithError>(525, HandleStoryboardAction);
+        visualStateRegistrationId = protocolHandler.RegisterMessageObserver<GoToStateRequest, ResponseWithError>((int)DesignerMessageId.GoToState, HandleGoToState);
+        storyboardRegistrationId = protocolHandler.RegisterMessageObserver<StoryboardRequest, ResponseWithError>((int)DesignerMessageId.Storyboard, HandleStoryboardAction);
     }
 
     private ResponseWithError HandleGoToState(GoToStateRequest request)
@@ -56,7 +57,7 @@ internal sealed partial class AnimationService : IDisposable
             changed |= TryGoToState(root, stateName, request.UseTransitions);
         }
 
-        WinUIDesignerLogger.LogTrace("Surface", $"GoToState (524): root={request.RootHandle}, states={request.StateNames?.Count ?? 0}, changed={changed}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"GoToState ({(int)DesignerMessageId.GoToState}): root={request.RootHandle}, states={request.StateNames?.Count ?? 0}, changed={changed}.");
         return Success;
     }
 
@@ -124,13 +125,13 @@ internal sealed partial class AnimationService : IDisposable
                 }
             }
 
-            WinUIDesignerLogger.LogTrace("Surface", $"Storyboard (525): handle={request.ObjectHandle}, actions={request.StoryboardActions?.Count ?? 0}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Storyboard ({(int)DesignerMessageId.Storyboard}): handle={request.ObjectHandle}, actions={request.StoryboardActions?.Count ?? 0}.");
 
             return Success;
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Storyboard (525) failed: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"Storyboard ({(int)DesignerMessageId.Storyboard}) failed: {ex}");
 
             return new ResponseWithError { HResult = ex.HResult == 0 ? -2147467259 : ex.HResult, Error = ex.ToString() };
         }

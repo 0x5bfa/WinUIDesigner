@@ -6,10 +6,10 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 
-namespace WinUIDesigner.Surface;
+namespace WinUIDesigner;
 
 /// <summary>
-/// Writes structured designer diagnostics to the process trace and shared log file.
+/// Writes structured designer diagnostics to the process trace and log file.
 /// </summary>
 internal static class WinUIDesignerLogger
 {
@@ -22,6 +22,7 @@ internal static class WinUIDesignerLogger
         Write("Critical", category, message, exception);
     }
 
+    [Conditional("DEBUG")]
     public static void LogDebug(string category, string message, Exception? exception = null)
     {
         Write("Debug", category, message, exception);
@@ -37,6 +38,7 @@ internal static class WinUIDesignerLogger
         Write("Information", category, message, exception);
     }
 
+    [Conditional("DEBUG")]
     public static void LogTrace(string category, string message, Exception? exception = null)
     {
         Write("Trace", category, message, exception);
@@ -57,11 +59,11 @@ internal static class WinUIDesignerLogger
 
         try
         {
-            // A diagnostic listener must not interfere with designer activation.
             Trace.WriteLine($"[WinUIDesigner] {entry}");
         }
         catch (Exception)
         {
+            // A diagnostic listener must not interfere with designer activation.
         }
 
         bool mutexAcquired = false;

@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Shared;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -38,7 +39,7 @@ internal sealed partial class XamlActionService : IDisposable
         this.objectIdentity = objectIdentity;
         this.surfaceService = surfaceService;
         resourceScopes = new ResourceScopeService(objectIdentity);
-        registrationId = protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, ResponseWithError>(507, HandleExecuteActions);
+        registrationId = protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, ResponseWithError>((int)DesignerMessageId.ExecuteXamlActions, HandleExecuteActions);
     }
 
     private ResponseWithError HandleExecuteActions(ExecuteXamlActionsRequestInfo request)
@@ -79,7 +80,7 @@ internal sealed partial class XamlActionService : IDisposable
             {
                 if (request.Actions is { } serializedActions && index < serializedActions.Count)
                 {
-                    WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions (507) action[{index}]: {serializedActions[index]}");
+                    WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) action[{index}]: {serializedActions[index]}");
                 }
 
                 failedAction = actions[index];
@@ -88,7 +89,7 @@ internal sealed partial class XamlActionService : IDisposable
             }
 
             surfaceService.CompleteActionBatch();
-            WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions (507) completed: count={actions.Count}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) completed: count={actions.Count}.");
 
             return Success;
         }
@@ -97,7 +98,7 @@ internal sealed partial class XamlActionService : IDisposable
             // Synchronize the surviving changes, then report the exact failed
             // action using the shared error contract. Raw exception text is not
             // valid ActionError JSON and prevents frontend error processing.
-            WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions (507) failed: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) failed: {ex}");
             try
             {
                 surfaceService.CompleteActionBatch();

@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -32,7 +33,7 @@ internal sealed partial class HitTestService : IDisposable
         // platform-neutral wire protocol. Keep the WinUI surface independent of WPF
         // by deserializing the same DataContract JSON shape into local DTOs.
 
-        registrationId = protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>(526, request =>
+        registrationId = protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>((int)DesignerMessageId.HitTest, request =>
         {
             try
             {
@@ -40,8 +41,8 @@ internal sealed partial class HitTestService : IDisposable
             }
             catch (Exception ex)
             {
-                WinUIDesignerLogger.LogTrace("Surface", $"HitTest (526) failed for root {request.RootHandle}: {ex}");
-                protocolHandler.PostMessage(529, new UnhandledExceptionResponse { Handle = request.RootHandle, Message = ex.Message, CallStack = ex.ToString() });
+                WinUIDesignerLogger.LogTrace("Surface", $"HitTest ({(int)DesignerMessageId.HitTest}) failed for root {request.RootHandle}: {ex}");
+                protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse { Handle = request.RootHandle, Message = ex.Message, CallStack = ex.ToString() });
                 return Empty;
             }
         });
@@ -102,7 +103,7 @@ internal sealed partial class HitTestService : IDisposable
                 return $"{hit.Element?.Handle}:{hit.Element?.Type}@{source?.FileName ?? "<none>"}:{source?.LineNumber ?? 0}:{source?.ColumnNumber ?? 0}:visible={hit.IsVisible}";
             }));
 
-        WinUIDesignerLogger.LogTrace("Surface", $"HitTest (526) {region}; root={request.RootHandle}; hits=[{hitSummary}].");
+        WinUIDesignerLogger.LogTrace("Surface", $"HitTest ({(int)DesignerMessageId.HitTest}) {region}; root={request.RootHandle}; hits=[{hitSummary}].");
 
         return new HitResponse { Hits = hits };
     }
@@ -113,7 +114,7 @@ internal sealed partial class HitTestService : IDisposable
 
         if (root.XamlRoot is not null)
         {
-            // Message 526 already uses the island/host coordinate space. RootHandle
+            // HitTest already uses the island/host coordinate space. RootHandle
             // restricts the subtree; it does not make the point root-relative.
             foreach (UIElement element in VisualTreeHelper.FindElementsInHostCoordinates(point, root, includeAllElements: true))
             {

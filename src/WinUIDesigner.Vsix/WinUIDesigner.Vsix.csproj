@@ -135,4 +135,6 @@
 		<MSBuild Projects="$(MSBuildProjectDirectory)\..\WinUIDesigner.Surface\WinUIDesigner.Surface.csproj" Targets="Publish" Properties="RuntimeIdentifier=win-x64;DiagnosticsTapOutputDir=..\WinUIDesigner.DiagnosticsTap\bin\x64\$(Configuration)" BuildInParallel="false" />
 	</Target>
 
+	<Import Project="..\WinUIDesigner.Shared\WinUIDesigner.Shared.projitems" Label="Shared" />
+
 </Project>

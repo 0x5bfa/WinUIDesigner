@@ -55,4 +55,6 @@
 		</Reference>
 	</ItemGroup>
 
+	<Import Project="..\WinUIDesigner.Shared\WinUIDesigner.Shared.projitems" Label="Shared" />
+
 </Project>

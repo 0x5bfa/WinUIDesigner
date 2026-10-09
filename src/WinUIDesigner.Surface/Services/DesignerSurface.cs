@@ -136,7 +136,7 @@ internal sealed partial class DesignerSurface : IDisposable
 
     public void SetSurfacePosition(IntPtr parentHwnd, int width, int height)
     {
-        // Message 548 supplies the holder HWND and viewport dimensions after the
+        // SetSurfacePosition supplies the holder HWND and viewport dimensions after the
         // surface has been created; this also reparents the XAML island when needed.
         EnsureIsland();
 
@@ -149,7 +149,7 @@ internal sealed partial class DesignerSurface : IDisposable
             parentWindow = parentHwnd;
         }
         // The shipped UWP surface is resized synchronously before VS repositions its
-        // adorner child HWND. Our message 548 crosses the process boundary, so using
+        // adorner child HWND. This message crosses the process boundary, so using
         // HWND_TOP here can run after that step and cover the grid/selection adorners.
         // Keep the remote surface at the bottom of the holder's child z-order.
 

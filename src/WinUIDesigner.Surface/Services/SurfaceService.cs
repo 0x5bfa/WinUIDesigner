@@ -21,6 +21,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Windows.Foundation;
+using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -30,9 +31,6 @@ namespace WinUIDesigner.Surface.Services;
 /// </summary>
 internal sealed partial class SurfaceService : IDisposable
 {
-    private const int OnApplicationEventMessage = 521;
-    private const int SurfaceLayoutUpdatedMessage = 543;
-    private const int ConfigureAppResourcesMessage = 6001;
     private const int FreezeCompositionTimeoutMilliseconds = 200;
     private static readonly Size DefaultSurfaceSize = new(800, 600);
     private const string XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -69,14 +67,14 @@ internal sealed partial class SurfaceService : IDisposable
         // These numeric message IDs are the shared VS designer wire contract; the
         // matching request/response types come from the private VS contract assembly.
 
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>(516, HandleCreateSurfaceAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CloseDocumentRequestInfo, ResponseWithError>(517, HandleCloseDocumentAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetPanZoomTransformRequestInfo, ResponseWithError>(518, HandleSetPanZoomTransformAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetArtboardColorsRequestInfo, ResponseWithError>(519, HandleSetArtboardColorsAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetDeviceSizeRequestInfo, ResponseWithError>(520, HandleSetDeviceSizeAsync));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<SetFreezeStateInfo>(527, HandleSetFreezeState));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetSurfacePositionRequestInfo, ResponseWithError>(548, HandleSetSurfacePositionAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<AppResourcesRequest, ResponseWithError>(ConfigureAppResourcesMessage, HandleConfigureAppResourcesAsync));
+        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>((int)DesignerMessageId.CreateSurface, HandleCreateSurfaceAsync));
+        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CloseDocumentRequestInfo, ResponseWithError>((int)DesignerMessageId.CloseDocument, HandleCloseDocumentAsync));
+        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetPanZoomTransformRequestInfo, ResponseWithError>((int)DesignerMessageId.SetPanZoomTransform, HandleSetPanZoomTransformAsync));
+        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetArtboardColorsRequestInfo, ResponseWithError>((int)DesignerMessageId.SetArtboardColors, HandleSetArtboardColorsAsync));
+        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetDeviceSizeRequestInfo, ResponseWithError>((int)DesignerMessageId.SetDeviceSize, HandleSetDeviceSizeAsync));
+        registrationIds.Add(protocolHandler.RegisterMessageObserver<SetFreezeStateInfo>((int)DesignerMessageId.SetFreezeState, HandleSetFreezeState));
+        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetSurfacePositionRequestInfo, ResponseWithError>((int)DesignerMessageId.SetSurfacePosition, HandleSetSurfacePositionAsync));
+        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<ConfigureAppResourcesRequest, ResponseWithError>((int)DesignerMessageId.ConfigureAppResources, HandleConfigureAppResourcesAsync));
 
         hitTestService = new HitTestService(protocolHandler, dispatcherQueue, objectIdentity);
         snapLineService = new SnapLineService(protocolHandler, dispatcherQueue, objectIdentity);
@@ -177,11 +175,11 @@ internal sealed partial class SurfaceService : IDisposable
 
             if (ex is DocumentConstructionException constructionError)
             {
-                protocolHandler.PostMessage(535, new InstanceBuildingErrors { DocumentId = document?.DocumentId ?? 0, Errors = constructionError.SerializedErrors });
+                protocolHandler.PostMessage((int)DesignerMessageId.InstanceBuildingErrors, new InstanceBuildingErrors { DocumentId = document?.DocumentId ?? 0, Errors = constructionError.SerializedErrors });
             }
             else
             {
-                protocolHandler.PostMessage(529, new UnhandledExceptionResponse
+                protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse
                 {
                     DocumentId = document?.DocumentId ?? 0, Message = ex.Message, CallStack = ex.ToString(), IsArtboardException = true,
                 });
@@ -231,7 +229,7 @@ internal sealed partial class SurfaceService : IDisposable
         CreateDocumentInfo actionsDocument = document;
         if (!document.HasActions)
         {
-            actionsDocument = await protocolHandler.SendMessageAsync<CreateDocumentInfo>(534,
+            actionsDocument = await protocolHandler.SendMessageAsync<CreateDocumentInfo>((int)DesignerMessageId.GetDocumentBuildingActions,
                 new GetDocumentBuildingActionsRequest { DocumentId = document.DocumentId })
                 .WaitAsync(TimeSpan.FromSeconds(30), protocolHandler.CancellationToken).ConfigureAwait(false);
         }
@@ -342,7 +340,7 @@ internal sealed partial class SurfaceService : IDisposable
             var surface = new DesignerSurface(root, DefaultSurfaceSize.Width, DefaultSurfaceSize.Height);
             surface.BoundsInvalidated += (_, _) => PublishSurfaceBoundsIfCurrent(documentId, surface);
             surface.SurfaceLayoutUpdated += (_, _) => PublishSurfaceLayoutUpdatedIfCurrent(documentId, surface);
-            surface.DpiChanged += dpi => protocolHandler.PostMessage(530, new SurfaceDpiChangedEvent { DocumentId = documentId, SurfaceDpi = dpi });
+            surface.DpiChanged += dpi => protocolHandler.PostMessage((int)DesignerMessageId.SurfaceDpiChanged, new SurfaceDpiChangedEvent { DocumentId = documentId, SurfaceDpi = dpi });
             surface.SetRequestedTheme(appRequestedTheme);
             surfaces[documentId] = surface;
 
@@ -363,7 +361,7 @@ internal sealed partial class SurfaceService : IDisposable
 
                 using var scope = objectIdentity.EnterDocument(documentId);
                 PublishVisualTreeMutation(root, VisualMutationType.Add);
-                protocolHandler.PostMessage(OnApplicationEventMessage, new OnApplicationEventResponse { EventName = "OnIdle" });
+                protocolHandler.PostMessage((int)DesignerMessageId.OnApplicationEvent, new OnApplicationEventResponse { EventName = "OnIdle" });
             });
 
             return new CreateSurfaceResponseInfo { DispatcherHandle = dispatcherHandle, RootVisualHandle = rootVisualHandle };
@@ -548,7 +546,7 @@ internal sealed partial class SurfaceService : IDisposable
             surface = new DesignerSurface(root, DefaultSurfaceSize.Width, DefaultSurfaceSize.Height);
             surface.BoundsInvalidated += (_, _) => PublishSurfaceBoundsIfCurrent(documentId, surface);
             surface.SurfaceLayoutUpdated += (_, _) => PublishSurfaceLayoutUpdatedIfCurrent(documentId, surface);
-            surface.DpiChanged += dpi => protocolHandler.PostMessage(530, new SurfaceDpiChangedEvent { DocumentId = documentId, SurfaceDpi = dpi });
+            surface.DpiChanged += dpi => protocolHandler.PostMessage((int)DesignerMessageId.SurfaceDpiChanged, new SurfaceDpiChangedEvent { DocumentId = documentId, SurfaceDpi = dpi });
             surface.SetRequestedTheme(appRequestedTheme);
             surfaces[documentId] = surface;
         }
@@ -680,7 +678,7 @@ internal sealed partial class SurfaceService : IDisposable
             return await InvokeOnDispatcher(() =>
             {
                 CloseSurfaceDocument(request.DocumentId);
-                WinUIDesignerLogger.LogTrace("Surface", $"CloseDocument (517) completed for document {request.DocumentId}.");
+                WinUIDesignerLogger.LogTrace("Surface", $"CloseDocument ({(int)DesignerMessageId.CloseDocument}) completed for document {request.DocumentId}.");
                 return Success;
             }, CreateResponseFailure).ConfigureAwait(false);
         }
@@ -689,7 +687,7 @@ internal sealed partial class SurfaceService : IDisposable
 
     private Task<ResponseWithError> HandleSetPanZoomTransformAsync(SetPanZoomTransformRequestInfo request)
     {
-        return InvokeSurfaceAsync(request.DocumentId, surface => surface.SetPanZoomTransform(request.OffsetX, request.OffsetY, request.Scale), "SetPanZoomTransform (518)");
+        return InvokeSurfaceAsync(request.DocumentId, surface => surface.SetPanZoomTransform(request.OffsetX, request.OffsetY, request.Scale), $"SetPanZoomTransform ({(int)DesignerMessageId.SetPanZoomTransform})");
     }
 
     private Task<ResponseWithError> HandleSetArtboardColorsAsync(SetArtboardColorsRequestInfo request)
@@ -701,10 +699,10 @@ internal sealed partial class SurfaceService : IDisposable
                 {
                     surface.SetCheckerboardColors(color1, color2);
                 }
-            }, "SetArtboardColors (519)");
+            }, $"SetArtboardColors ({(int)DesignerMessageId.SetArtboardColors})");
     }
 
-    private Task<ResponseWithError> HandleConfigureAppResourcesAsync(AppResourcesRequest request)
+    private Task<ResponseWithError> HandleConfigureAppResourcesAsync(ConfigureAppResourcesRequest request)
     {
         return InvokeOnDispatcher(() =>
             {
@@ -726,7 +724,7 @@ internal sealed partial class SurfaceService : IDisposable
             {
                 surface.SetDeviceSize(request.Width, request.Height);
                 PublishSurfaceBounds(request.DocumentId, surface);
-            }, "SetDeviceSize (520)");
+            }, $"SetDeviceSize ({(int)DesignerMessageId.SetDeviceSize})");
     }
 
     private void HandleSetFreezeState(SetFreezeStateInfo request)
@@ -734,7 +732,7 @@ internal sealed partial class SurfaceService : IDisposable
         if (dispatcherQueue.HasThreadAccess)
         {
             ApplyFreezeState(request.DocumentIdToFreeze);
-            WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState (527): document={request.DocumentIdToFreeze}, handled directly on UI thread.");
+            WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}): document={request.DocumentIdToFreeze}, handled directly on UI thread.");
             return;
         }
 
@@ -754,11 +752,11 @@ internal sealed partial class SurfaceService : IDisposable
         {
             bool completed = targetSurface.WaitForUnfreezeComposition(FreezeCompositionTimeoutMilliseconds);
             WinUIDesignerLogger.LogTrace("Surface",
-                $"SetFreezeState (527) composition barrier: document={request.DocumentIdToFreeze}, completed={completed}.");
+                $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}) composition barrier: document={request.DocumentIdToFreeze}, completed={completed}.");
         }
 
         InvokeOnDispatcher(() => ApplyFreezeState(request.DocumentIdToFreeze));
-        WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState (527): document={request.DocumentIdToFreeze}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}): document={request.DocumentIdToFreeze}.");
     }
 
     private void ApplyFreezeState(int documentIdToFreeze)
@@ -790,7 +788,7 @@ internal sealed partial class SurfaceService : IDisposable
                 long rootHandle = objectIdentity.GetHandle(surface.Content);
                 PublishVisualTreeMutation(surface.Content, VisualMutationType.Add);
                 PublishSurfaceBounds(request.DocumentId, surface);
-            }, "SetSurfacePosition (548)");
+            }, $"SetSurfacePosition ({(int)DesignerMessageId.SetSurfacePosition})");
     }
 
     private void LoadAppResourcesIfNeeded()
@@ -893,7 +891,7 @@ internal sealed partial class SurfaceService : IDisposable
             return;
         }
 
-        protocolHandler.PostMessage(SurfaceLayoutUpdatedMessage, new SurfaceLayoutUpdatedEvent
+        protocolHandler.PostMessage((int)DesignerMessageId.SurfaceLayoutUpdated, new SurfaceLayoutUpdatedEvent
         {
             DocumentId = documentId,
         });
@@ -907,19 +905,19 @@ internal sealed partial class SurfaceService : IDisposable
         if (publishedSurfaceBounds.TryGetValue(documentId, out SurfaceBoundsSnapshot publishedBounds)
             && publishedBounds.Equals(currentBounds))
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"SurfaceBoundsChanged (531) skipped: bounds unchanged for document={documentId}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"SurfaceBoundsChanged ({(int)DesignerMessageId.SurfaceBoundsChanged}) skipped: bounds unchanged for document={documentId}.");
             return;
         }
 
         publishedSurfaceBounds[documentId] = currentBounds;
-        protocolHandler.PostMessage(531, new SurfaceBoundsChangedEventContract
+        protocolHandler.PostMessage((int)DesignerMessageId.SurfaceBoundsChanged, new SurfaceBoundsChangedEventContract
         {
             DocumentId = documentId,
             ContentBounds = RectContract.FromRect(contentBounds),
             DocumentBounds = RectContract.FromRect(documentBounds),
         });
         WinUIDesignerLogger.LogTrace("Surface",
-            $"SurfaceBoundsChanged (531) posted: document={documentId}, " +
+            $"SurfaceBoundsChanged ({(int)DesignerMessageId.SurfaceBoundsChanged}) posted: document={documentId}, " +
             $"content={contentBounds.X},{contentBounds.Y},{contentBounds.Width},{contentBounds.Height}, " +
             $"document={documentBounds.X},{documentBounds.Y},{documentBounds.Width},{documentBounds.Height}.");
     }
@@ -929,7 +927,7 @@ internal sealed partial class SurfaceService : IDisposable
         long rootHandle = objectIdentity.GetHandle(root);
         if (mutationType == VisualMutationType.Remove)
         {
-            protocolHandler.PostMessage(9, new MutationList
+            protocolHandler.PostMessage((int)DesignerMessageId.VisualTreeMutations, new MutationList
             {
                 Mutations =
                 [
@@ -937,20 +935,20 @@ internal sealed partial class SurfaceService : IDisposable
                 ],
             });
             publishedVisualTreeTopologies.Remove(rootHandle);
-            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation (9) posted: {mutationType} root handle={rootHandle}, type={root.GetType().FullName}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) posted: {mutationType} root handle={rootHandle}, type={root.GetType().FullName}.");
             return;
         }
 
         var mutations = new List<VisualTreeMutationEvent>();
         AppendVisualMutations(root, rootHandle, 0, 0, isRoot: true, mutations);
 
-        protocolHandler.PostMessage(9, new MutationList
+        protocolHandler.PostMessage((int)DesignerMessageId.VisualTreeMutations, new MutationList
         {
             Mutations = mutations,
         });
 
         publishedVisualTreeTopologies[rootHandle] = CaptureVisualTreeTopology(root);
-        WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation (9) posted: Add {mutations.Count} visual(s), root handle={rootHandle}, type={root.GetType().FullName}.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) posted: Add {mutations.Count} visual(s), root handle={rootHandle}, type={root.GetType().FullName}.");
     }
 
     private void PublishVisualTreeMutationIfChanged(FrameworkElement root)
@@ -961,7 +959,7 @@ internal sealed partial class SurfaceService : IDisposable
         if (publishedVisualTreeTopologies.TryGetValue(rootHandle, out VisualTreeTopologyEntry[]? publishedTopology)
             && publishedTopology.AsSpan().SequenceEqual(currentTopology))
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation (9) skipped: topology unchanged for root handle={rootHandle}.");
+            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) skipped: topology unchanged for root handle={rootHandle}.");
             return;
         }
 
@@ -981,7 +979,7 @@ internal sealed partial class SurfaceService : IDisposable
                 }).ToList();
             if (mutations.Count != 0)
             {
-                protocolHandler.PostMessage(9, new MutationList { Mutations = mutations });
+                protocolHandler.PostMessage((int)DesignerMessageId.VisualTreeMutations, new MutationList { Mutations = mutations });
             }
             // Keep detached object handles alive until document close: Undo can
             // reconnect an existing proxy. Visual-tree deletion is not object release.
