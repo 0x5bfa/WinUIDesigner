@@ -2,6 +2,8 @@
 
 ![preview](https://github.com/0x5bfa/WinUIDesigner/blob/main/src/WinUIDesigner.Vsix/Resources/preview.png?raw=true)
 
+Having trouble? Please [report a bug on GitHub](https://github.com/0x5bfa/WinUIDesigner/issues/new?template=bug_report.yml).
+
 ## Limitations
 
 - Only C# WinUI projects are supported.

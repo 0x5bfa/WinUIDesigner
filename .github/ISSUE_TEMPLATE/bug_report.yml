@@ -1,0 +1,90 @@
+name: Bug report
+description: Report a problem with WinUI Designer
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [README limitations](https://github.com/0x5bfa/WinUIDesigner#limitations) first.
+        Remove personal information, file paths, or other sensitive data from logs before posting.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does the problem occur?
+      options:
+        - Installing or loading the extension
+        - Opening the XAML designer
+        - Rendering or updating the preview
+        - Toolbox or designer interaction
+        - Other or not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the exact error message and exit code, if shown.
+      placeholder: Describe the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we reproduce it?
+      description: List the steps and mention whether this happens in a new project.
+      placeholder: |
+        1. Create or open a project...
+        2. Open a XAML file...
+        3. Observe the error...
+    validations:
+      required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: WinUI Designer version
+      placeholder: "For example: 1.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: visual-studio
+    attributes:
+      label: Visual Studio version and channel
+      description: Include the full version/build and whether it is Stable, Preview, or Insider.
+      placeholder: "For example: 18.11.977.50084 (Insider)"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and architecture
+      description: Include the Windows build and whether the machine is x64 or ARM64.
+      placeholder: "For example: Windows 11 build 26100, x64"
+    validations:
+      required: true
+
+  - type: textarea
+    id: project-details
+    attributes:
+      label: Project details
+      description: Include the target framework, Windows App SDK version, and the root element of the XAML file (for example, Page or UserControl).
+      render: text
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste the relevant ActivityLog.xml entry and/or lines from %LOCALAPPDATA%\WinUIDesigner\Logs. Include the full exception and stack trace when available.
+      render: text
