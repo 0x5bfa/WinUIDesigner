@@ -43,6 +43,7 @@ internal sealed class WinUIDesignerInstanceManager(
         ISurfaceProcessDocument targetDocument,
         IReadOnlyList<ISurfaceProcessDocument> preparedDocuments)
     {
+        var provider = MarkupProvider as WinUISurfaceProcessMarkupProvider;
 
         try
         {
@@ -52,7 +53,12 @@ internal sealed class WinUIDesignerInstanceManager(
             var projectDirectory = Path.GetDirectoryName(projectPath);
             var appXamlPath = projectDirectory is null ? null : Path.Combine(projectDirectory, "App.xaml");
 
-            var appXaml = appXamlPath is not null && File.Exists(appXamlPath) ? XDocument.Load(appXamlPath) : null;
+            if (provider is { AppXaml: null } && appXamlPath is not null && File.Exists(appXamlPath))
+                provider.PrepareApplicationDocumentsForLoading(ignoreAppXbf: true);
+
+            // Use the provider's document so these settings match the App.xaml sent to the surface.
+            var appXamlText = provider?.AppXaml?.Document.Text;
+            var appXaml = appXamlText is null ? null : XDocument.Parse(appXamlText);
 
             var hasXamlControlsResources = appXaml is not null &&
                 appXaml.Descendants()
@@ -88,13 +94,8 @@ internal sealed class WinUIDesignerInstanceManager(
             Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions),
         };
 
-        if (MarkupProvider is WinUISurfaceProcessMarkupProvider provider)
+        if (provider is not null)
         {
-            string? appDirectory = Path.GetDirectoryName(targetDocument.Document.DocumentContext?.Project?.ProjectPath);
-
-            if (provider.AppXaml is null && appDirectory is not null && File.Exists(Path.Combine(appDirectory, "App.xaml")))
-                provider.PrepareApplicationDocumentsForLoading(ignoreAppXbf: true);
-
             if (provider.AppXaml is { } application)
                 request.Application = MakeCreateDocumentInfo(application, includeInstanceBuildingActions);
 
