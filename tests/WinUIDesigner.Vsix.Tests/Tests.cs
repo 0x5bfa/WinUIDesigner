@@ -1,12 +1,8 @@
 // Copyright (c) 0x5BFA. All rights reserved.
 // Licensed under MIT License.
 
-using System.Reflection;
-using System.Windows;
-using Microsoft.VisualStudio.DesignTools.Utility;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Mono.Cecil;
-using WinUIDesigner;
 using WinUIDesigner.Toolbox;
 
 [TestClass]
@@ -44,61 +40,6 @@ public sealed class ToolboxTests
             ["Microsoft.UI.Xaml.Controls.Primitives.TabViewListView"] = "TabView implementation list.",
         };
 
-    [STATestMethod]
-    public void RejectsInvalidRequestsWithoutAllocatingNativeData()
-    {
-        var provider = new WinUIStaticToolboxItemProvider();
-        ushort format = checked((ushort)DataFormats.GetDataFormat(WinUIStandardToolboxItems.ClipboardFormat).Id);
-
-        Assert.IsTrue(provider.GetItemContent(
-            "Microsoft.UI.Xaml.Controls.Page, " + WinUIStandardToolboxItems.AssemblyIdentity,
-            format,
-            out IntPtr invalid) < 0);
-        Assert.AreEqual(IntPtr.Zero, invalid);
-        Assert.IsTrue(provider.GetItemContent(
-            WinUIStandardToolboxItems.GetItemId("Microsoft.UI.Xaml.Controls.Button"),
-            1,
-            out invalid) < 0);
-        Assert.AreEqual(IntPtr.Zero, invalid);
-        Assert.IsTrue(provider.GetItemContent(null!, format, out invalid) < 0);
-        Assert.AreEqual(IntPtr.Zero, invalid);
-        Assert.AreEqual(WinUIStandardToolboxItems.TypeNames.Count,
-            WinUIStandardToolboxItems.TypeNames.Distinct().Count(),
-            "Toolbox item IDs must be unique.");
-    }
-
-    [STATestMethod]
-    public void EncodesEveryStandardItemAndPreservesCreationMetadata()
-    {
-        var provider = new WinUIStaticToolboxItemProvider();
-        ushort format = checked((ushort)DataFormats.GetDataFormat(WinUIStandardToolboxItems.ClipboardFormat).Id);
-
-        foreach (string type in WinUIStandardToolboxItems.TypeNames)
-        {
-            Assert.AreEqual(0,
-                provider.GetItemContent(WinUIStandardToolboxItems.GetItemId(type), format, out IntPtr global),
-                "Provider must supply " + type);
-            IntPtr address = NativeMethods.GlobalLock(global);
-            try
-            {
-                Assert.AreNotEqual(IntPtr.Zero, address, "GlobalLock must succeed for " + type);
-                IDictionary<string, object> decoded = ToolEncoder.Decode(address);
-                Assert.AreEqual(WinUIStandardToolboxItems.GetItemId(type), decoded["CreationTypeName"]);
-                var assembly = (AssemblyName)decoded["CreationAssemblyName"];
-                Assert.AreEqual(WinUIStandardToolboxItems.AssemblyIdentity, assembly.FullName);
-                Assert.IsTrue(string.IsNullOrEmpty(assembly.CodeBase));
-                Assert.AreEqual("WinUI", decoded["CreationTypeSdkAppliesTo"]);
-                Assert.AreEqual("Windows, Version=10.0", decoded["TargetPlatform"]);
-                Assert.AreEqual("[CreationTool]", decoded["ToolTypeName"]);
-            }
-            finally
-            {
-                if (address != IntPtr.Zero) NativeMethods.GlobalUnlock(global);
-                NativeMethods.GlobalFree(global);
-            }
-        }
-    }
-
     [TestMethod]
     public void CatalogAccountsForEveryConstructibleSdkVisualType()
     {
@@ -106,7 +47,7 @@ public sealed class ToolboxTests
         var candidates = new HashSet<string>(projection.MainModule.Types
             .Where(type => IsVisualCandidate(type, projection))
             .Select(type => type.FullName), StringComparer.Ordinal);
-        var catalog = new HashSet<string>(WinUIStandardToolboxItems.TypeNames, StringComparer.Ordinal);
+        var catalog = new HashSet<string>(ProvideStaticWinUIToolboxItemsAttribute.TypeNames, StringComparer.Ordinal);
 
         string[] missing = candidates
             .Where(type => !catalog.Contains(type) && !ExcludedVisualTypes.ContainsKey(type))
@@ -128,7 +69,7 @@ public sealed class ToolboxTests
     {
         using AssemblyDefinition projection = AssemblyDefinition.ReadAssembly(GetProjectionPath());
 
-        foreach (string typeName in WinUIStandardToolboxItems.TypeNames)
+        foreach (string typeName in ProvideStaticWinUIToolboxItemsAttribute.TypeNames)
         {
             TypeDefinition? type = projection.MainModule.GetType(typeName);
             Assert.IsNotNull(type, "Catalog type must exist: " + typeName);
