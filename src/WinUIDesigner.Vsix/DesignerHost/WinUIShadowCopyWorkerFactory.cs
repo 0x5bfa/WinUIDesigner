@@ -1,18 +1,13 @@
 // Copyright (c) 0x5BFA. All rights reserved.
 // Licensed under MIT License.
 
+using Microsoft.VisualStudio.DesignTools.DesignerContract;
+using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.VisualStudio.DesignTools.DesignerContract;
-using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
-using Microsoft.VisualStudio.DesignTools.XamlDesignerHost.Platform.ShadowCopy;
-using Microsoft.VisualStudio.DesignTools.Utility.IO;
-using Microsoft.VisualStudio.DesignTools.Xaml.LanguageService;
 
 namespace WinUIDesigner.DesignerHost;
 

@@ -6,7 +6,10 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Shared;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Action = System.Action;
 using WinUIDesigner.Surface;
-using WinUIDesigner.Surface.Services;
+using WinUIDesigner.Surface.Transport;
+using WinUIDesigner.Surface.Runtime;
+using WinUIDesigner.Surface.Designer.Shared;
+using WinUIDesigner.Surface.Designer.Surface;
 
 [TestClass]
 public sealed class SurfaceTests

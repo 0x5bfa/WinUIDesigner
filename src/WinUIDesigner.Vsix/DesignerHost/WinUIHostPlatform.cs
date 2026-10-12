@@ -1,15 +1,15 @@
 // Copyright (c) 0x5BFA. All rights reserved.
 // Licensed under MIT License.
 
+using Microsoft.VisualStudio.DesignTools.DesignerContract;
+using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
+using Microsoft.VisualStudio.DesignTools.Utility;
+using Microsoft.VisualStudio.DesignTools.WpfDesignerHost;
 using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Threading;
-using Microsoft.VisualStudio.DesignTools.DesignerContract;
-using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
-using Microsoft.VisualStudio.DesignTools.Utility;
-using Microsoft.VisualStudio.DesignTools.WpfDesignerHost;
 
 namespace WinUIDesigner.DesignerHost;
 

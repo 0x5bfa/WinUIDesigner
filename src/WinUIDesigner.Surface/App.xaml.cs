@@ -11,8 +11,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
-using WinUIDesigner.Surface.Services;
 using WinUIDesigner.Protocol;
+using WinUIDesigner.Surface.Designer.Shared;
+using WinUIDesigner.Surface.Designer.Surface;
+using WinUIDesigner.Surface.Runtime;
+using WinUIDesigner.Surface.Transport;
 
 namespace WinUIDesigner.Surface;
 
