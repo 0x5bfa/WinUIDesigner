@@ -803,17 +803,13 @@ internal sealed partial class SurfaceService : IDisposable
 
         try
         {
-            var resources = new ResourceDictionary
-            {
-                Source = new Uri("ms-appx:///DesignerResources.xaml"),
-            };
-            Application.Current.Resources.MergedDictionaries.Add(resources);
+            Application.Current.Resources.MergedDictionaries.Add(new XamlControlsResources());
             appResourcesLoaded = true;
-            WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources loaded into Application resources.");
+            WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources added to Application resources.");
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"XamlControlsResources could not be loaded: {ex}");
+            WinUIDesignerLogger.LogTrace("Surface", $"XamlControlsResources could not be added: {ex}");
             throw;
         }
     }
