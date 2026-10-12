@@ -162,7 +162,9 @@ internal sealed partial class WinUIIsolatedImageHost
                                 $"liveRootChildren={liveRoot.Children.Count()}, " +
                                 $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
 
+#if DEBUG
                             imageHost.ScheduleGeometryDiagnostic();
+#endif
                         }));
                     });
                 }
