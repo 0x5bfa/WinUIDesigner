@@ -23,21 +23,21 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        RegisterVisualStudioAssemblyResolver();
-
-        ProjectRuntimeResolver.Initialize(ContentDirectory);
-
         WinUIDesignerLogger.LogTrace("Surface", $"Main entered with {args.Length} arguments.");
 
-        Assembly surfaceAssembly = typeof(Program).Assembly;
-
-        WinUIDesignerLogger.LogTrace("Surface", $"Surface assembly='{surfaceAssembly.Location}'; content directory='{ContentDirectory}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
-
-        if (args.Length != 4 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
+        if (args.Length != 5 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
         {
             WinUIDesignerLogger.LogTrace("Surface", "Invalid startup arguments.");
             return 1;
         }
+
+        RegisterVisualStudioAssemblyResolver(args[4]);
+
+        ProjectRuntimeResolver.Initialize(ContentDirectory);
+
+        Assembly surfaceAssembly = typeof(Program).Assembly;
+
+        WinUIDesignerLogger.LogTrace("Surface", $"Surface assembly='{surfaceAssembly.Location}'; content directory='{ContentDirectory}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
 
         WinUIDesignerLogger.LogTrace("Surface", $"WinUISurface started for host PID {hostProcessId}; TAP='{args[1]}'.");
 
@@ -83,9 +83,8 @@ internal static class Program
         }
     }
 
-    private static void RegisterVisualStudioAssemblyResolver()
+    private static void RegisterVisualStudioAssemblyResolver(string installRoot)
     {
-        string? installRoot = Environment.GetEnvironmentVariable("WINUIDESIGNER_VS_INSTALL_ROOT");
         if (string.IsNullOrWhiteSpace(installRoot))
         {
             return;

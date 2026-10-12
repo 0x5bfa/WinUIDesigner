@@ -65,15 +65,18 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
     private static Process StartSurfaceProcess(string path, string tapPath, string initializationData)
     {
         using Process currentProcess = Process.GetCurrentProcess();
+        var visualStudioInstallRoot = GetVisualStudioInstallRoot() ?? string.Empty;
+
         // Keep this argument order in sync with Surface.Program.Main: VS host PID,
-        // diagnostics TAP path, serialized pipe handles, then the inherited flag.
+        // diagnostics TAP path, serialized pipe handles, inherited DPI context, then VS root.
         var arguments = string.Format(
             CultureInfo.InvariantCulture,
-            "{0} {1} {2} {3}",
+            "{0} {1} {2} {3} {4}",
             currentProcess.Id,
             WpfHostPlatform.ShellEscape(tapPath),
             WpfHostPlatform.ShellEscape(initializationData),
-            NativeMethods.GetThreadDpiAwarenessContext().ToInt64());
+            NativeMethods.GetThreadDpiAwarenessContext().ToInt64(),
+            WpfHostPlatform.ShellEscape(visualStudioInstallRoot));
 
         var process = new Process()
         {
@@ -85,12 +88,6 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             },
             EnableRaisingEvents = true,
         };
-
-        var visualStudioInstallRoot = GetVisualStudioInstallRoot();
-        if (!string.IsNullOrWhiteSpace(visualStudioInstallRoot))
-        {
-            process.StartInfo.EnvironmentVariables["WINUIDESIGNER_VS_INSTALL_ROOT"] = visualStudioInstallRoot;
-        }
 
         process.ErrorDataReceived += (_, e) =>
         {
