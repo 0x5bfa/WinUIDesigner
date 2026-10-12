@@ -9,6 +9,7 @@
     <Import_RootNamespace>WinUIDesigner</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Interop\NativeMethods.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Protocol\DesignerMessageId.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Protocol\ConfigureAppResourcesRequest.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Diagnostics\WinUIDesignerLogger.cs" />

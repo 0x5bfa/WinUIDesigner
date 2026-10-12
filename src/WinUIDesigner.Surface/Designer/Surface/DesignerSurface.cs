@@ -13,7 +13,7 @@ using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.Graphics;
-using WinUIDesigner.Surface.Interop;
+using WinUIDesigner;
 using WinUIDesigner.Surface.Designer.Operations;
 
 namespace WinUIDesigner.Surface.Designer.Surface;

@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
-using WinUIDesigner.Surface.Interop;
+using WinUIDesigner;
 
 namespace WinUIDesigner.Surface.Designer.Operations;
 

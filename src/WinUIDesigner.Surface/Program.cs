@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
-using WinUIDesigner.Surface.Interop;
+using WinUIDesigner;
 using WinUIDesigner.Surface.Runtime;
 
 namespace WinUIDesigner.Surface;
