@@ -1,0 +1,130 @@
+// Copyright (c) 0x5BFA. All rights reserved.
+// Licensed under MIT License.
+
+using Microsoft.VisualStudio.DesignTools.DesignerContract;
+using Microsoft.VisualStudio.DesignTools.Utility.IO;
+using Microsoft.VisualStudio.DesignTools.Xaml.LanguageService;
+using Microsoft.VisualStudio.DesignTools.XamlDesignerHost.Platform.ShadowCopy;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace WinUIDesigner.DesignerHost;
+
+// Reuse the generic desktop shadow-copy mechanics without WpfCore's separate
+// WPF payload and framework-dependent runtimeconfig/deps handling.
+internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, IHostProject hostProject, IEnumerable<string> controlAssembliesForShadowCopy, string payloadSurface)
+    : WpfHostShadowCopyWorker(surfaceInfo, hostProject, controlAssembliesForShadowCopy)
+{
+    private readonly string[] projectAssemblies = [.. hostProject.References.Select(reference => reference.Path)
+        .Concat([hostProject.TargetAssemblyPath]).Where(path => !string.IsNullOrEmpty(path))
+        .Distinct(StringComparer.OrdinalIgnoreCase)];
+
+    private readonly IHostProject hostProject = hostProject;
+    private readonly string payloadSurface = payloadSurface;
+
+    protected override string RuntimeMoniker => ".NETCoreApp";
+
+    protected override string RuntimeVersion => SurfaceInfo.PlatformIdentifier?.TargetFrameworkVersion?.ToString() ?? string.Empty;
+
+    public override string CopySurfaceProcessPayload(CancellationToken cancelToken)
+    {
+        cancelToken.ThrowIfCancellationRequested();
+
+        if (!File.Exists(payloadSurface))
+        {
+            throw new FileNotFoundException($"WinUI surface payload was not found: {payloadSurface}", payloadSurface);
+        }
+
+        cancelToken.ThrowIfCancellationRequested();
+        SurfaceInfo.ShadowCacheContent.AddItem(payloadSurface, "WinUISurface.exe", forceCopyNow: true);
+
+        // ProjectRuntimeResolver loads these as fallback resource maps when a
+        // project/control resource is absent from the surface's primary map.
+        foreach (var assembly in projectAssemblies)
+        {
+            cancelToken.ThrowIfCancellationRequested();
+
+            var directory = Path.GetDirectoryName(assembly);
+
+            if (!Directory.Exists(directory))
+            {
+                continue;
+            }
+
+            foreach (var pri in Directory.EnumerateFiles(directory, "*.pri"))
+            {
+                var target = Path.Combine("ProjectResources", Path.GetFileNameWithoutExtension(assembly), Path.GetFileName(pri));
+
+                SurfaceInfo.ShadowCacheContent.AddItem(pri, target, forceCopyNow: true);
+            }
+        }
+
+        var cachedSurface = SurfaceInfo.ShadowCacheContent.FindCachedItem("WinUISurface.exe");
+        if (string.IsNullOrWhiteSpace(cachedSurface))
+        {
+            throw new FileNotFoundException("WinUISurface.exe was not staged into the designer shadow cache.");
+        }
+
+        return cachedSurface;
+    }
+
+    public override async Task CopyProjectContentAsync(CancellationToken cancelToken)
+    {
+        await base.CopyProjectContentAsync(cancelToken).ConfigureAwait(false);
+
+        // UWP stages media even in platform-only mode. WPF's worker only copies
+        // the output directory in All mode, so it cannot provide these assets.
+        foreach (IHostSourceItem item in hostProject.Items ?? Enumerable.Empty<IHostSourceItem>())
+        {
+            cancelToken.ThrowIfCancellationRequested();
+
+            if (!MediaFileExtensions.IsMediaFile(item.Path) || !File.Exists(item.Path))
+            {
+                continue;
+            }
+
+            var relativePath = UwpUriResolver.GetDeploymentRelativePath(hostProject, item.RelativePath, isForRuntime: false)
+                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            SurfaceInfo.ShadowCacheContent.AddItem(item.Path, relativePath, forceCopyNow: true);
+
+            WinUIDesignerLogger.LogInformation("Host", $"Project media staged: '{item.Path}' -> '{relativePath}'; mode={SurfaceInfo.ShadowCopyType}.");
+        }
+    }
+
+    protected override bool ShouldCopy(string file)
+    {
+        // The self-contained surface does not use the target project's runtime files.
+        if (file.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase) ||
+            file.EndsWith(".runtimeconfig.dev.json", StringComparison.OrdinalIgnoreCase) ||
+            file.EndsWith(".deps.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    public override void EnsureTapAssemblyInFolder(string xamlDiagnosticFolder)
+    {
+        // Stage the diagnostics files beside the shadow-copied surface. The attach
+        // API needs the matching architecture's WinUI3 TAP payload at startup.
+        var sourceFolder = SurfaceInfo.TapAssemblyFolder;
+        if (string.IsNullOrWhiteSpace(sourceFolder))
+        {
+            sourceFolder = Path.Combine(xamlDiagnosticFolder, SurfaceInfo.RuntimeArchitecture, "WinUI3");
+        }
+
+        foreach (var file in Directory.EnumerateFiles(sourceFolder))
+        {
+            var fileName = Path.GetFileName(file);
+            SurfaceInfo.ShadowCacheContent.AddItem(file, fileName, forceCopyNow: true);
+        }
+
+        SurfaceInfo.TapAssemblyFolder = SurfaceInfo.ShadowCacheContent.ShadowCacheFolder;
+    }
+}

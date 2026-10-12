@@ -8,9 +8,6 @@ namespace WinUIDesigner;
 
 internal static class NativeMethods
 {
-    [DllImport("user32.dll")]
-    internal static extern IntPtr GetThreadDpiAwarenessContext();
-
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     internal static extern int GetWindowLong(IntPtr hwnd, int index);
 

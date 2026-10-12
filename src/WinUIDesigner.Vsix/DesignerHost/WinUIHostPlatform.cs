@@ -13,8 +13,9 @@ using Microsoft.VisualStudio.DesignTools.WpfDesignerHost;
 
 namespace WinUIDesigner.DesignerHost;
 
-// Reuse VS's WPF/.NET host services for process lifetime and IPC, while supplying
-// our own WinUI surface executable and payload staging policy.
+// WinUI and WPF both host desktop XAML surfaces in isolated processes, so WinUI can
+// reuse WPF's process-lifetime and IPC services. UWP uses its DesignerAppView-based
+// hosting flow and therefore has a separate host implementation.
 public sealed class WinUIHostPlatform : WpfHostPlatform
 {
     protected override IShadowCopyWorkerFactory ShadowCopyWorkerFactory { get; } = new WinUIShadowCopyWorkerFactory();
@@ -25,14 +26,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         WinUIDesignerLogger.LogInformation("Host", $"WinUIHostPlatform instantiated for '{platformIdentifier.Identifier}' (XamlRuntime={platformIdentifier.XamlRuntime}).");
     }
 
-    protected override ISurfaceProcess ActivateSurface(
-        IServiceProvider serviceProvider,
-        Guid surfaceProcessId,
-        string path,
-        string tapPath,
-        IPipeDataBridge dataBridge,
-        bool inhibitStartupWatsons,
-        CancellationToken cancelToken)
+    protected override ISurfaceProcess ActivateSurface(IServiceProvider serviceProvider, Guid surfaceProcessId, string path, string tapPath, IPipeDataBridge dataBridge, bool inhibitStartupWatsons, CancellationToken cancelToken)
     {
         cancelToken.ThrowIfCancellationRequested();
 
@@ -65,18 +59,29 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
     private static Process StartSurfaceProcess(string path, string tapPath, string initializationData)
     {
         using Process currentProcess = Process.GetCurrentProcess();
-        var visualStudioInstallRoot = GetVisualStudioInstallRoot() ?? string.Empty;
 
-        // Keep this argument order in sync with Surface.Program.Main: VS host PID,
-        // diagnostics TAP path, serialized pipe handles, inherited DPI context, then VS root.
+        var ideDirectory = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
+        var commonDirectory = ideDirectory is null ? null : Directory.GetParent(ideDirectory)?.FullName;
+        var installRoot = commonDirectory is null ? null : Directory.GetParent(commonDirectory)?.FullName;
+
+        installRoot = installRoot is not null && Directory.Exists(Path.Combine(installRoot, "Common7", "IDE", "PrivateAssemblies"))
+            ? installRoot
+            : throw new FileNotFoundException("The Visual Studio installation root did not found.");
+
+        // Keep this argument order in sync with WinUIDesignerSurface.exe!Program.Main:
+        // 1. VS host PID
+        // 2. Path to the TAP dll
+        // 3. serialized pipe initialization data
+        // 4. inherited DPI awareness context
+        // 5. Path to the VS install root for private contract DLL resolution
         var arguments = string.Format(
             CultureInfo.InvariantCulture,
             "{0} {1} {2} {3} {4}",
             currentProcess.Id,
-            WpfHostPlatform.ShellEscape(tapPath),
-            WpfHostPlatform.ShellEscape(initializationData),
-            NativeMethods.GetThreadDpiAwarenessContext().ToInt64(),
-            WpfHostPlatform.ShellEscape(visualStudioInstallRoot));
+            ShellEscape(tapPath),
+            ShellEscape(initializationData),
+            DpiHelper.GetProcessDpiAwarenessContext().ToInt64(),
+            ShellEscape(installRoot));
 
         var process = new Process()
         {
@@ -100,10 +105,9 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         {
             try
             {
-                int exitCode = process.ExitCode;
-                var exitMessage = $"WinUISurface.exe exited (PID={process.Id}, ExitCode={exitCode}).";
+                var exitMessage = $"WinUISurface.exe exited (PID={process.Id}, ExitCode={process.ExitCode}).";
 
-                if (exitCode == 0)
+                if (process.ExitCode == 0)
                 {
                     WinUIDesignerLogger.LogInformation("Host", exitMessage);
                 }
@@ -129,18 +133,5 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         WinUIDesignerLogger.LogError("Host", $"Failed to start WinUISurface.exe at '{path}'.");
 
         throw new InvalidProgramException(path);
-    }
-
-    private static string? GetVisualStudioInstallRoot()
-    {
-        // The isolated Surface process is outside devenv's probing paths. Pass the
-        // discovered VS root so it can resolve the private Designer contract DLLs.
-        var ideDirectory = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule?.FileName);
-        var commonDirectory = ideDirectory is null ? null : Directory.GetParent(ideDirectory)?.FullName;
-        var installRoot = commonDirectory is null ? null : Directory.GetParent(commonDirectory)?.FullName;
-
-        return installRoot is not null && Directory.Exists(Path.Combine(installRoot, "Common7", "IDE", "PrivateAssemblies"))
-            ? installRoot
-            : null;
     }
 }
