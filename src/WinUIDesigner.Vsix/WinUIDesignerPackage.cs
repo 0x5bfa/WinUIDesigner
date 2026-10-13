@@ -198,7 +198,7 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
         properties["TargetPlatform"] = "Windows, Version=10.0";
 
         byte[] bytes = ToolEncoder.Encode(properties);
-        IntPtr allocation = NativeMethods.GlobalAlloc(0x0002 /* GMEM_FIXED | GMEM_MOVEABLE */, new UIntPtr((uint)bytes.Length));
+        IntPtr allocation = NativeMethods.GlobalAlloc(NativeMethods.GMEM_MOVEABLE, new UIntPtr((uint)bytes.Length));
         IntPtr address = NativeMethods.GlobalLock(allocation);
         try
         {

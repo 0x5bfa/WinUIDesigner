@@ -52,7 +52,11 @@ internal static class Program
                 throw new ArgumentException("Invalid DPI awareness context.");
             }
 
-            if (NativeMethods.SetThreadDpiAwarenessContext((nint)(dpiContext == 0 ? -4 : dpiContext)) == 0)
+            IntPtr dpiAwarenessContext = dpiContext == 0
+                ? NativeMethods.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+                : new IntPtr(dpiContext);
+
+            if (NativeMethods.SetThreadDpiAwarenessContext(dpiAwarenessContext) == IntPtr.Zero)
             {
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
             }

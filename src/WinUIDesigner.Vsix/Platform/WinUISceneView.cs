@@ -102,7 +102,7 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
 #if DEBUG
     private IntPtr PresentationSourceHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == 0x0201 || msg == 0x0202)
+        if (msg == NativeMethods.WM_LBUTTONDOWN || msg == NativeMethods.WM_LBUTTONUP)
         {
             WinUIDesignerLogger.LogTrace("Platform",
                 $"Presentation source raw mouse: hwnd=0x{hwnd.ToInt64():X}, msg=0x{msg:X}, " +

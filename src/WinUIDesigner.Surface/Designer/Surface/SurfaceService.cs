@@ -820,7 +820,7 @@ internal sealed partial class SurfaceService : IDisposable
         {
             if (!surfaces.TryGetValue(documentId, out DesignerSurface? surface))
             {
-                return new ResponseWithError { HResult = unchecked((int)0x80070057) };
+                return new ResponseWithError { HResult = NativeMethods.E_INVALIDARG };
             }
 
             action(surface);

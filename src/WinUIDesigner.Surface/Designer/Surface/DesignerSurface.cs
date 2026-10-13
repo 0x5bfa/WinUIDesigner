@@ -25,15 +25,6 @@ namespace WinUIDesigner.Surface.Designer.Surface;
 /// </summary>
 internal sealed partial class DesignerSurface : IDisposable
 {
-    private const uint WsPopup = 0x80000000;
-    private const uint WsChild = 0x40000000;
-    private const uint WsVisible = 0x10000000;
-    private const uint WsClipChildren = 0x02000000;
-    private const uint WsClipSiblings = 0x04000000;
-    private const int GwlStyle = -16;
-    private const uint SwpFrameChanged = 0x0020;
-    private static readonly IntPtr HwndBottom = new(1);
-
     private readonly Grid viewportRoot;
     private readonly Canvas transformRoot;
     private readonly ManualResetEventSlim unfreezeCompositionCompleted = new(initialState: true);
@@ -144,9 +135,9 @@ internal sealed partial class DesignerSurface : IDisposable
 
         if (parentWindow != parentHwnd)
         {
-            nint style = NativeMethods.GetWindowLongPtr(hostWindow, GwlStyle);
-            nint childStyle = (nint)((style.ToInt64() & ~(long)WsPopup) | WsChild | WsVisible | WsClipChildren | WsClipSiblings);
-            _ = NativeMethods.SetWindowLongPtr(hostWindow, GwlStyle, childStyle);
+            nint style = NativeMethods.GetWindowLongPtr(hostWindow, NativeMethods.GWL_STYLE);
+            nint childStyle = (nint)((style.ToInt64() & ~(long)NativeMethods.WS_POPUP) | NativeMethods.WS_CHILD | NativeMethods.WS_VISIBLE | NativeMethods.WS_CLIPCHILDREN | NativeMethods.WS_CLIPSIBLINGS);
+            _ = NativeMethods.SetWindowLongPtr(hostWindow, NativeMethods.GWL_STYLE, childStyle);
             _ = NativeMethods.SetParent(hostWindow, parentHwnd);
             parentWindow = parentHwnd;
         }
@@ -155,7 +146,7 @@ internal sealed partial class DesignerSurface : IDisposable
         // HWND_TOP here can run after that step and cover the grid/selection adorners.
         // Keep the remote surface at the bottom of the holder's child z-order.
 
-        _ = NativeMethods.SetWindowPos(hostWindow, HwndBottom, 0, 0, width, height, SwpFrameChanged);
+        _ = NativeMethods.SetWindowPos(hostWindow, NativeMethods.HWND_BOTTOM, 0, 0, width, height, NativeMethods.SWP_FRAMECHANGED);
         xamlSource!.SiteBridge.MoveAndResize(new RectInt32(0, 0, width, height));
 
         viewportRoot.Width = Math.Max(1, width);
@@ -404,7 +395,7 @@ internal sealed partial class DesignerSurface : IDisposable
             0,
             "STATIC",
             "WinUIDesigner.RemoteSurface",
-            WsPopup | WsClipChildren | WsClipSiblings,
+            NativeMethods.WS_POPUP | NativeMethods.WS_CLIPCHILDREN | NativeMethods.WS_CLIPSIBLINGS,
             0,
             0,
             1,

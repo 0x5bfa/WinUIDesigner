@@ -17,10 +17,6 @@ namespace WinUIDesigner.Surface.Designer.Operations;
 /// </summary>
 internal sealed class DiagnosticsPropertySourceService
 {
-    private const int S_OK = 0;
-    private const int E_PENDING = unchecked((int)0x8000000A);
-    private const int NativeVisualStateSource = 14;
-
     private int initializationStarted;
     private volatile bool nativeUnavailable;
     private long retryAfter;
@@ -84,12 +80,12 @@ internal sealed class DiagnosticsPropertySourceService
             // so temporarily marshal the managed DependencyObject to its ABI pointer.
             inspectable = WinRT.MarshalInspectable<object>.FromManaged(target, true);
             int hr = NativeMethods.WinUIDesignerDiagnostics_GetPropertySource(inspectable, propertyName, out int nativeSource);
-            if (hr == E_PENDING)
+            if (hr == NativeMethods.E_PENDING)
             {
                 return false;
             }
 
-            if (hr != S_OK)
+            if (hr != NativeMethods.S_OK)
             {
                 if (hr < 0)
                 {
@@ -99,7 +95,7 @@ internal sealed class DiagnosticsPropertySourceService
                 return false;
             }
 
-            if (nativeSource == NativeVisualStateSource)
+            if (nativeSource == NativeMethods.XAML_DIAGNOSTICS_VALUE_SOURCE_VISUAL_STATE)
             {
                 // Windows XAML Diagnostics uses 14 for VisualState, while the VS protocol uses 14 for Accessibility.
                 valueSource = BaseValueSource.Unknown;
@@ -143,7 +139,7 @@ internal sealed class DiagnosticsPropertySourceService
 
             WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics rendering switch: enabled={enabled}, hr=0x{hr:X8}.");
 
-            return hr == S_OK;
+            return hr == NativeMethods.S_OK;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
