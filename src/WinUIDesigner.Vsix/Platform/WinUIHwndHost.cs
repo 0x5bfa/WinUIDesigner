@@ -135,7 +135,7 @@ internal sealed partial class WinUIIsolatedImageHost
 
         protected override void InitializeSurfaceHwnd(IntPtr parentHwnd)
         {
-            this._parentHwnd = parentHwnd.ToInt32();
+            _parentHwnd = parentHwnd.ToInt32();
 
             WinUIDesignerLogger.LogTrace(
                 "Platform", $"WinUI artboard HWND initialized: parent=0x{parentHwnd.ToInt64():X}, document={_surfaceDocumentId}.");

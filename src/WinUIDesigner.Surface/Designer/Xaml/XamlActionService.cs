@@ -37,10 +37,10 @@ internal sealed partial class XamlActionService : IDisposable
         ObjectIdentityRegistry objectIdentity,
         SurfaceService surfaceService)
     {
-        this._protocolHandler = protocolHandler;
-        this._dispatcherQueue = dispatcherQueue;
-        this._objectIdentity = objectIdentity;
-        this._surfaceService = surfaceService;
+        _protocolHandler = protocolHandler;
+        _dispatcherQueue = dispatcherQueue;
+        _objectIdentity = objectIdentity;
+        _surfaceService = surfaceService;
         _resourceScopes = new ResourceScopeService(objectIdentity);
         _registrationId = protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, ResponseWithError>((int)DesignerMessageId.ExecuteXamlActions, HandleExecuteActions);
     }

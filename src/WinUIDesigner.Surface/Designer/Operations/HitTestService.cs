@@ -27,9 +27,9 @@ internal sealed partial class HitTestService : IDisposable
 
     public HitTestService(ProtocolHandler protocolHandler, DispatcherQueue dispatcherQueue, ObjectIdentityRegistry objectIdentity)
     {
-        this._protocolHandler = protocolHandler;
-        this._dispatcherQueue = dispatcherQueue;
-        this._objectIdentity = objectIdentity;
+        _protocolHandler = protocolHandler;
+        _dispatcherQueue = dispatcherQueue;
+        _objectIdentity = objectIdentity;
         // Visual Studio's HitTestRequest uses System.Windows.Point/Rect even for the
         // platform-neutral wire protocol. Keep the WinUI surface independent of WPF
         // by deserializing the same DataContract JSON shape into local DTOs.

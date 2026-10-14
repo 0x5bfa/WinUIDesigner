@@ -45,10 +45,10 @@ internal sealed partial class PropertyService : IDisposable
         ObjectIdentityRegistry objectIdentity,
         XamlActionService xamlActionService)
     {
-        this._protocolHandler = protocolHandler;
-        this._dispatcherQueue = dispatcherQueue;
-        this._objectIdentity = objectIdentity;
-        this._xamlActionService = xamlActionService;
+        _protocolHandler = protocolHandler;
+        _dispatcherQueue = dispatcherQueue;
+        _objectIdentity = objectIdentity;
+        _xamlActionService = xamlActionService;
         _diagnosticsPropertySource = new DiagnosticsPropertySourceService();
         _diagnosticsPropertySource.StartInitialization();
         _serializer = new LiveValueSerializer(objectIdentity);

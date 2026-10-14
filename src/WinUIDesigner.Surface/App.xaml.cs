@@ -40,15 +40,15 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
     // Resolve it at runtime because this source must compile before that generated member exists.
     // This provider describes the designer surface app; project-assembly providers are queried as fallback below.
     private IXamlMetadataProvider GeneratedMetadata =>
-        (IXamlMetadataProvider)(this.GetType().GetProperty("_AppProvider", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(this)
+        (IXamlMetadataProvider)(GetType().GetProperty("_AppProvider", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(this)
             ?? throw new InvalidOperationException("The generated XAML metadata provider was not found."));
 
     public App(int hostProcessId, string tapPath, string bridgeInitializationData, DispatcherQueue dispatcherQueue)
     {
-        this._hostProcessId = hostProcessId;
-        this._tapPath = tapPath;
-        this._bridgeInitializationData = bridgeInitializationData;
-        this._dispatcherQueue = dispatcherQueue;
+        _hostProcessId = hostProcessId;
+        _tapPath = tapPath;
+        _bridgeInitializationData = bridgeInitializationData;
+        _dispatcherQueue = dispatcherQueue;
 
         ResourceManagerRequested += (_, args) => args.CustomResourceManager = ProjectRuntimeResolver.CreateResourceManager();
 

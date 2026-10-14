@@ -29,9 +29,9 @@ internal sealed partial class SnapLineService : IDisposable
 
     public SnapLineService(ProtocolHandler protocolHandler, DispatcherQueue dispatcherQueue, ObjectIdentityRegistry objectIdentity)
     {
-        this._protocolHandler = protocolHandler;
-        this._dispatcherQueue = dispatcherQueue;
-        this._objectIdentity = objectIdentity;
+        _protocolHandler = protocolHandler;
+        _dispatcherQueue = dispatcherQueue;
+        _objectIdentity = objectIdentity;
 
         _snapLinesRegistrationId = protocolHandler.RegisterMessageObserver<GetSnapLinesRequest, GetSnapLinesResponse>((int)DesignerMessageId.GetSnapLines, HandleGetSnapLines);
         _elementDataRegistrationId = protocolHandler.RegisterMessageObserver<GetElementSnapDataRequest, GetElementSnapDataResponse>((int)DesignerMessageId.GetElementSnapData, HandleGetElementSnapData);

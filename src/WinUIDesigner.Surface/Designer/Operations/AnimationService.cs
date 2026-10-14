@@ -33,9 +33,9 @@ internal sealed partial class AnimationService : IDisposable
         DispatcherQueue dispatcherQueue,
         ObjectIdentityRegistry objectIdentity)
     {
-        this._protocolHandler = protocolHandler;
-        this._dispatcherQueue = dispatcherQueue;
-        this._objectIdentity = objectIdentity;
+        _protocolHandler = protocolHandler;
+        _dispatcherQueue = dispatcherQueue;
+        _objectIdentity = objectIdentity;
         _visualStateRegistrationId = protocolHandler.RegisterMessageObserver<GoToStateRequest, ResponseWithError>((int)DesignerMessageId.GoToState, HandleGoToState);
         _storyboardRegistrationId = protocolHandler.RegisterMessageObserver<StoryboardRequest, ResponseWithError>((int)DesignerMessageId.Storyboard, HandleStoryboardAction);
     }

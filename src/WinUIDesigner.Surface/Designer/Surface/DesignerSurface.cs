@@ -48,7 +48,7 @@ internal sealed partial class DesignerSurface : IDisposable
 
     public DesignerSurface(FrameworkElement content, double width, double height)
     {
-        this._content = content;
+        _content = content;
         // Keep the HWND-sized viewport separate from the design surface itself.
         // The Visual Studio artboard sends pan/zoom for the design surface; applying
         // that transform to the XamlSource root also moves the viewport and breaks
