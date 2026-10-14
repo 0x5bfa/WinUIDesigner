@@ -25,8 +25,8 @@ namespace WinUIDesigner.Surface.Designer.Xaml;
 /// </summary>
 internal static class XamlRuntimeUtilities
 {
-    private static readonly ConditionalWeakTable<FrameworkElement, Dictionary<string, object?>> NameChanges = new();
-    private static readonly ConditionalWeakTable<FrameworkElement, object> NameScopeRoots = new();
+    private static readonly ConditionalWeakTable<FrameworkElement, Dictionary<string, object?>> NameChanges = [];
+    private static readonly ConditionalWeakTable<FrameworkElement, object> NameScopeRoots = [];
 
     public static void RegisterNameScope(FrameworkElement root)
     {

@@ -270,7 +270,7 @@ internal sealed partial class HitTestService : IDisposable
         return type.FullName;
     }
 
-    private static HitResponse Empty => new() { Hits = new List<LiveValueHitEntry>() };
+    private static HitResponse Empty => new() { Hits = [] };
 
     public void Dispose()
     {

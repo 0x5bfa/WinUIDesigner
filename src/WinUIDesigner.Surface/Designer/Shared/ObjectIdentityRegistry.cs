@@ -14,19 +14,19 @@ namespace WinUIDesigner.Surface.Designer.Shared;
 /// </summary>
 internal sealed partial class ObjectIdentityRegistry
 {
-    private readonly Dictionary<object, long> objectToHandle = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, long> objectToHandle = [with(ReferenceEqualityComparer.Instance)];
 
-    private readonly Dictionary<long, object> handleToObject = new();
+    private readonly Dictionary<long, object> handleToObject = [];
 
-    private readonly Dictionary<object, SourceInfo> sourceInfo = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, SourceInfo> sourceInfo = [with(ReferenceEqualityComparer.Instance)];
 
     private long nextHandle = 1;
 
     private int currentDocument;
 
-    private readonly Dictionary<int, HashSet<object>> documents = new();
+    private readonly Dictionary<int, HashSet<object>> documents = [];
 
-    private readonly Dictionary<object, HashSet<int>> owners = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<object, HashSet<int>> owners = [with(ReferenceEqualityComparer.Instance)];
 
     public IDisposable EnterDocument(int documentId)
     {
@@ -50,14 +50,14 @@ internal sealed partial class ObjectIdentityRegistry
 
         if (!documents.TryGetValue(currentDocument, out var objects))
         {
-            documents[currentDocument] = objects = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            documents[currentDocument] = objects = [with(ReferenceEqualityComparer.Instance)];
         }
 
         objects.Add(value);
 
         if (!owners.TryGetValue(value, out var ids))
         {
-            owners[value] = ids = new HashSet<int>();
+            owners[value] = ids = [];
         }
 
         ids.Add(currentDocument);

@@ -39,14 +39,14 @@ internal sealed partial class SurfaceService : IDisposable
     private readonly ProtocolHandler protocolHandler;
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ObjectIdentityRegistry objectIdentity;
-    private readonly Dictionary<int, DesignerSurface> surfaces = new();
+    private readonly Dictionary<int, DesignerSurface> surfaces = [];
     private readonly SemaphoreSlim constructionGate = new(1, 1);
-    private readonly Dictionary<int, ResourceDictionary> resourceDocuments = new();
-    private readonly Dictionary<int, HashSet<int>> documentResources = new();
+    private readonly Dictionary<int, ResourceDictionary> resourceDocuments = [];
+    private readonly Dictionary<int, HashSet<int>> documentResources = [];
     // Application and design-time resource dictionaries outlive individual target surfaces.
-    private readonly HashSet<int> sharedResourceDocuments = new();
-    private readonly Dictionary<int, SurfaceBoundsSnapshot> publishedSurfaceBounds = new();
-    private readonly List<int> registrationIds = new();
+    private readonly HashSet<int> sharedResourceDocuments = [];
+    private readonly Dictionary<int, SurfaceBoundsSnapshot> publishedSurfaceBounds = [];
+    private readonly List<int> registrationIds = [];
     private readonly VisualTreeService visualTreeService;
     private readonly HitTestService hitTestService;
     private readonly SnapLineService snapLineService;
@@ -68,9 +68,9 @@ internal sealed partial class SurfaceService : IDisposable
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
         visualTreeService = new(protocolHandler, objectIdentity);
+
         // These numeric message IDs are the shared VS designer wire contract; the
         // matching request/response types come from the private VS contract assembly.
-
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>((int)DesignerMessageId.CreateSurface, HandleCreateSurfaceAsync));
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CloseDocumentRequestInfo, ResponseWithError>((int)DesignerMessageId.CloseDocument, HandleCloseDocumentAsync));
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetPanZoomTransformRequestInfo, ResponseWithError>((int)DesignerMessageId.SetPanZoomTransform, HandleSetPanZoomTransformAsync));
@@ -78,6 +78,7 @@ internal sealed partial class SurfaceService : IDisposable
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetDeviceSizeRequestInfo, ResponseWithError>((int)DesignerMessageId.SetDeviceSize, HandleSetDeviceSizeAsync));
         registrationIds.Add(protocolHandler.RegisterMessageObserver<SetFreezeStateInfo>((int)DesignerMessageId.SetFreezeState, HandleSetFreezeState));
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetSurfacePositionRequestInfo, ResponseWithError>((int)DesignerMessageId.SetSurfacePosition, HandleSetSurfacePositionAsync));
+
         hitTestService = new HitTestService(protocolHandler, dispatcherQueue, objectIdentity);
         snapLineService = new SnapLineService(protocolHandler, dispatcherQueue, objectIdentity);
         xamlActionService = new XamlActionService(protocolHandler, dispatcherQueue, objectIdentity, this);
@@ -256,7 +257,7 @@ internal sealed partial class SurfaceService : IDisposable
             // Isolate action-built App resources from the designer's own dictionary.
 
             ResourceDictionary previous = Application.Current.Resources;
-            Application.Current.Resources = new ResourceDictionary();
+            Application.Current.Resources = [];
             try
             {
                 object root = xamlActionService.BuildDocument(actionsDocument);
@@ -272,7 +273,7 @@ internal sealed partial class SurfaceService : IDisposable
     private void TrackResourceDocument(int documentId, int resourceId)
     {
         if (!documentResources.TryGetValue(documentId, out var ids))
-            documentResources[documentId] = ids = new HashSet<int>();
+            documentResources[documentId] = ids = [];
         ids.Add(resourceId);
     }
 

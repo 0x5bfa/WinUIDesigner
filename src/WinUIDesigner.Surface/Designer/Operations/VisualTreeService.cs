@@ -24,7 +24,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
 {
     private const string XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
 
-    private readonly Dictionary<long, VisualTreeTopologyEntry[]> publishedTopologies = new();
+    private readonly Dictionary<long, VisualTreeTopologyEntry[]> publishedTopologies = [];
 
     public void RegisterSourceInfo(CreateDocumentInfo? document, string? preparedXaml, FrameworkElement root)
     {
@@ -242,7 +242,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
 
     private static void AppendAuthoredElements(DependencyObject element, List<DependencyObject> elements, HashSet<object>? visited = null)
     {
-        visited ??= new HashSet<object>(ReferenceEqualityComparer.Instance);
+        visited ??= [with(ReferenceEqualityComparer.Instance)];
         if (!visited.Add(element))
         {
             return;

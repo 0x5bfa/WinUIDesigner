@@ -27,8 +27,8 @@ internal sealed partial class XamlActionService : IDisposable
     private readonly ObjectIdentityRegistry objectIdentity;
     private readonly SurfaceService surfaceService;
     private readonly ResourceScopeService resourceScopes;
-    private readonly Dictionary<long, object?> actionObjects = new();
-    private readonly Dictionary<long, object?> trackedActionObjects = new();
+    private readonly Dictionary<long, object?> actionObjects = [];
+    private readonly Dictionary<long, object?> trackedActionObjects = [];
     private readonly int registrationId;
 
     public XamlActionService(
@@ -513,10 +513,10 @@ internal sealed partial class XamlActionService : IDisposable
         return new()
         {
             HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
-            Error = action is null ? exception.ToString() : ActionErrorJsonSerializer.Serialize(new List<ActionError>
-            {
+            Error = action is null ? exception.ToString() : ActionErrorJsonSerializer.Serialize(
+            [
                 new() { XamlAction = action, Error = exception.ToString() },
-            }),
+            ]),
         };
     }
 
