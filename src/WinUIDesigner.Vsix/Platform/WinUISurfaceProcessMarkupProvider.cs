@@ -13,7 +13,8 @@ internal sealed class WinUISurfaceProcessMarkupProvider : UwpSurfaceProcessMarku
     public override void PrepareApplicationDocumentsForLoading(bool ignoreAppXbf)
     {
         base.PrepareApplicationDocumentsForLoading(ignoreAppXbf: true);
-
-        DesignTimeResources = Project.DesignTimeResources is { } resources ? PrepareDocumentForLoading(resources) : null;
+        DesignTimeResources = Project.DesignTimeResources is { } resources
+            ? PrepareDocumentForLoading(resources)
+            : null;
     }
 }

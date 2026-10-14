@@ -43,6 +43,8 @@ internal sealed partial class SurfaceService : IDisposable
     private readonly SemaphoreSlim constructionGate = new(1, 1);
     private readonly Dictionary<int, ResourceDictionary> resourceDocuments = new();
     private readonly Dictionary<int, HashSet<int>> documentResources = new();
+    // Application and design-time resource dictionaries outlive individual target surfaces.
+    private readonly HashSet<int> sharedResourceDocuments = new();
     private readonly Dictionary<int, SurfaceBoundsSnapshot> publishedSurfaceBounds = new();
     private readonly List<int> registrationIds = new();
     private readonly VisualTreeService visualTreeService;
@@ -51,8 +53,10 @@ internal sealed partial class SurfaceService : IDisposable
     private readonly PropertyService propertyService;
     private readonly XamlActionService xamlActionService;
     private readonly AnimationService animationService;
+    private ResourceDictionary? xamlControlsResources;
+    private int? applicationResourceDocumentId;
+    private int? designTimeResourceDocumentId;
     private bool hasXamlControlsResources;
-    private bool appResourcesLoaded;
     private ElementTheme appRequestedTheme = ElementTheme.Default;
 
     public SurfaceService(
@@ -117,43 +121,37 @@ internal sealed partial class SurfaceService : IDisposable
 
             await InvokeOnDispatcher(() =>
             {
-                ConfigureApplicationResources(requestInfo.Application);
-                return true;
-            }, ex => throw ex).ConfigureAwait(false);
-
-            await InvokeOnDispatcher(() =>
-            {
                 CloseSurfaceDocument(document.DocumentId);
                 return true;
             }, ex => throw ex).ConfigureAwait(false);
 
+            var resourceDocumentsToBuild = new List<CreateDocumentInfo>();
+            var resourceDocumentIds = new HashSet<int>();
             foreach (CreateDocumentInfo? resourceDocument in new[] { requestInfo.Application, requestInfo.DesignTimeResources })
             {
-                if (resourceDocument is null)
+                if (resourceDocument is null || !resourceDocumentIds.Add(resourceDocument.DocumentId))
                 {
                     continue;
                 }
 
-                bool cached = await InvokeOnDispatcher(() => resourceDocuments.ContainsKey(resourceDocument.DocumentId), ex => throw ex).ConfigureAwait(false);
-                if (cached)
-                {
-                    await InvokeOnDispatcher(() =>
-                    {
-                        TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId);
-                        return true;
-                    }, ex => throw ex).ConfigureAwait(false);
+                resourceDocumentsToBuild.Add(resourceDocument);
+            }
 
-                    continue;
-                }
-                // A resource build can fail before its dictionary is installed.
-                // Record ownership first so the failure path also releases the
-                // partially constructed nonvisual objects and action handles.
-
-                await InvokeOnDispatcher(() =>
+            await InvokeOnDispatcher(() =>
+            {
+                foreach (CreateDocumentInfo resourceDocument in resourceDocumentsToBuild)
                 {
+                    InvalidateResourceDocument(resourceDocument.DocumentId);
+                    xamlActionService.ReleaseDocument(resourceDocument.DocumentId);
                     TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId);
-                    return true;
-                }, ex => throw ex).ConfigureAwait(false);
+                }
+
+                ConfigureApplicationResources(requestInfo.Application);
+                return true;
+            }, ex => throw ex).ConfigureAwait(false);
+
+            foreach (CreateDocumentInfo resourceDocument in resourceDocumentsToBuild)
+            {
                 var resources = await BuildDocumentAsync(resourceDocument, resources: true).ConfigureAwait(false);
                 await InvokeOnDispatcher(() =>
                 {
@@ -163,9 +161,15 @@ internal sealed partial class SurfaceService : IDisposable
                         ResourceDictionary value => value,
                         _ => throw new InvalidOperationException("The resource document did not construct a ResourceDictionary."),
                     };
-                    Application.Current.Resources.MergedDictionaries.Add(dictionary);
+                    AddResourceDocumentDictionary(resourceDocument.DocumentId, dictionary, requestInfo);
                     resourceDocuments.Add(resourceDocument.DocumentId, dictionary);
-                    TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId);
+                    sharedResourceDocuments.Add(resourceDocument.DocumentId);
+
+                    if (requestInfo.DesignTimeResources?.DocumentId == resourceDocument.DocumentId)
+                    {
+                        designTimeResourceDocumentId = resourceDocument.DocumentId;
+                    }
+
                     return true;
                 }, ex => throw ex).ConfigureAwait(false);
             }
@@ -299,27 +303,23 @@ internal sealed partial class SurfaceService : IDisposable
     {
         // VS can close an application/resource document directly after an edit.
         // Keeping it in the cache would reuse its old dictionary on the next build.
-        if (resourceDocuments.Remove(documentId, out var closedResource))
-        {
-            Application.Current.Resources.MergedDictionaries.Remove(closedResource);
-            foreach (var ids in documentResources.Values)
-            {
-                ids.Remove(documentId);
-            }
-        }
+        InvalidateResourceDocument(documentId);
+
         if (documentResources.Remove(documentId, out var resourceIds))
         {
             foreach (int resourceId in resourceIds)
             {
+                if (sharedResourceDocuments.Contains(resourceId))
+                {
+                    continue;
+                }
+
                 if (documentResources.Values.Any(ids => ids.Contains(resourceId)))
                 {
                     continue;
                 }
 
-                if (resourceDocuments.Remove(resourceId, out var dictionary))
-                {
-                    Application.Current.Resources.MergedDictionaries.Remove(dictionary);
-                }
+                InvalidateResourceDocument(resourceId);
                 xamlActionService.ReleaseDocument(resourceId);
             }
         }
@@ -330,6 +330,56 @@ internal sealed partial class SurfaceService : IDisposable
         }
         publishedSurfaceBounds.Remove(documentId);
         xamlActionService.ReleaseDocument(documentId);
+    }
+
+    private void AddResourceDocumentDictionary(int documentId, ResourceDictionary dictionary, CreateSurfaceRequestInfo requestInfo)
+    {
+        IList<ResourceDictionary> mergedDictionaries = Application.Current.Resources.MergedDictionaries;
+        if (requestInfo.Application?.DocumentId == documentId
+            && designTimeResourceDocumentId is int designResourcesId
+            && resourceDocuments.TryGetValue(designResourcesId, out ResourceDictionary? designResources))
+        {
+            int designResourcesIndex = mergedDictionaries.IndexOf(designResources);
+            if (designResourcesIndex >= 0)
+            {
+                mergedDictionaries.Insert(designResourcesIndex, dictionary);
+                return;
+            }
+        }
+
+        mergedDictionaries.Add(dictionary);
+    }
+
+    private void InvalidateResourceDocument(int resourceDocumentId)
+    {
+        if (resourceDocuments.Remove(resourceDocumentId, out var dictionary))
+        {
+            Application.Current.Resources.MergedDictionaries.Remove(dictionary);
+        }
+
+        sharedResourceDocuments.Remove(resourceDocumentId);
+        foreach (var ids in documentResources.Values)
+        {
+            ids.Remove(resourceDocumentId);
+        }
+
+        if (applicationResourceDocumentId == resourceDocumentId)
+        {
+            applicationResourceDocumentId = null;
+            hasXamlControlsResources = false;
+            appRequestedTheme = ElementTheme.Default;
+            LoadAppResourcesIfNeeded();
+
+            foreach (DesignerSurface surface in surfaces.Values)
+            {
+                surface.SetRequestedTheme(appRequestedTheme);
+            }
+        }
+
+        if (designTimeResourceDocumentId == resourceDocumentId)
+        {
+            designTimeResourceDocumentId = null;
+        }
     }
 
     private CreateSurfaceResponseInfo CreateSurface(CreateSurfaceRequestInfo requestInfo, object content, string? preparedXaml)
@@ -550,17 +600,21 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void ConfigureApplicationResources(CreateDocumentInfo? applicationDocument)
     {
-        string? appXaml = TryReadPreparedXaml(applicationDocument) ?? applicationDocument?.InitialXamlContent;
-        XDocument? appDocument = string.IsNullOrWhiteSpace(appXaml) ? null : XDocument.Parse(appXaml);
+        if (applicationDocument is not null)
+        {
+            string? appXaml = TryReadPreparedXaml(applicationDocument) ?? applicationDocument.InitialXamlContent;
+            XDocument? appDocument = string.IsNullOrWhiteSpace(appXaml) ? null : XDocument.Parse(appXaml);
 
-        hasXamlControlsResources = appDocument?.Root?.DescendantsAndSelf()
-            .Any(element => element.Name.LocalName == "XamlControlsResources"
-                && element.Name.NamespaceName == "using:Microsoft.UI.Xaml.Controls") == true;
+            hasXamlControlsResources = appDocument?.Root?.DescendantsAndSelf()
+                .Any(element => element.Name.LocalName == "XamlControlsResources"
+                    && element.Name.NamespaceName == "using:Microsoft.UI.Xaml.Controls") == true;
 
-        string? requestedTheme = (string?)appDocument?.Root?.Attribute("RequestedTheme");
-        appRequestedTheme = Enum.TryParse(requestedTheme, true, out ElementTheme theme)
-            ? theme
-            : ElementTheme.Default;
+            string? requestedTheme = (string?)appDocument?.Root?.Attribute("RequestedTheme");
+            appRequestedTheme = Enum.TryParse(requestedTheme, true, out ElementTheme theme)
+                ? theme
+                : ElementTheme.Default;
+            applicationResourceDocumentId = applicationDocument.DocumentId;
+        }
 
         LoadAppResourcesIfNeeded();
         foreach (DesignerSurface surface in surfaces.Values)
@@ -570,7 +624,7 @@ internal sealed partial class SurfaceService : IDisposable
 
         WinUIDesignerLogger.LogTrace(
             "Surface",
-            $"Application resources prepared from CreateSurface request: XamlControlsResources={hasXamlControlsResources}, RequestedTheme={requestedTheme ?? "Default"}.");
+            $"Application resources configured: documentProvided={applicationDocument is not null}, XamlControlsResources={hasXamlControlsResources}, RequestedTheme={appRequestedTheme}.");
     }
 
     private Task<ResponseWithError> HandleSetDeviceSizeAsync(SetDeviceSizeRequestInfo request)
@@ -648,15 +702,45 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void LoadAppResourcesIfNeeded()
     {
-        if (!hasXamlControlsResources || appResourcesLoaded)
+        if (!hasXamlControlsResources)
+        {
+            if (xamlControlsResources is not null)
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(xamlControlsResources);
+                xamlControlsResources = null;
+                WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources removed from Application resources.");
+            }
+
+            return;
+        }
+
+        if (xamlControlsResources is not null)
         {
             return;
         }
 
         try
         {
-            Application.Current.Resources.MergedDictionaries.Add(new XamlControlsResources());
-            appResourcesLoaded = true;
+            xamlControlsResources = new XamlControlsResources();
+            IList<ResourceDictionary> mergedDictionaries = Application.Current.Resources.MergedDictionaries;
+            if (designTimeResourceDocumentId is int designResourcesId
+                && resourceDocuments.TryGetValue(designResourcesId, out ResourceDictionary? designResources))
+            {
+                int designResourcesIndex = mergedDictionaries.IndexOf(designResources);
+                if (designResourcesIndex >= 0)
+                {
+                    mergedDictionaries.Insert(designResourcesIndex, xamlControlsResources);
+                }
+                else
+                {
+                    mergedDictionaries.Add(xamlControlsResources);
+                }
+            }
+            else
+            {
+                mergedDictionaries.Add(xamlControlsResources);
+            }
+
             WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources added to Application resources.");
         }
         catch (Exception ex)
@@ -805,6 +889,18 @@ internal sealed partial class SurfaceService : IDisposable
             Application.Current.Resources.MergedDictionaries.Remove(dictionary);
         resourceDocuments.Clear();
         documentResources.Clear();
+        sharedResourceDocuments.Clear();
+
+        if (xamlControlsResources is not null)
+        {
+            Application.Current.Resources.MergedDictionaries.Remove(xamlControlsResources);
+            xamlControlsResources = null;
+        }
+
+        applicationResourceDocumentId = null;
+        designTimeResourceDocumentId = null;
+        hasXamlControlsResources = false;
+        appRequestedTheme = ElementTheme.Default;
 
         publishedSurfaceBounds.Clear();
         visualTreeService.Clear();
