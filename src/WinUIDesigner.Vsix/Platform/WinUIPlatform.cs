@@ -27,8 +27,8 @@ namespace WinUIDesigner.Platform;
 /// </summary>
 public sealed class WinUIPlatform : XamlPlatform
 {
-    private UwpDisplaySettingsProvider? displaySettingsProvider;
-    private PlatformPaneModel? platformPaneModel;
+    private UwpDisplaySettingsProvider? _displaySettingsProvider;
+    private PlatformPaneModel? _platformPaneModel;
 
     protected override bool SupportsSharedResourceDictionaries => false;
 
@@ -36,15 +36,15 @@ public sealed class WinUIPlatform : XamlPlatform
     {
         get
         {
-            if (displaySettingsProvider is null)
+            if (_displaySettingsProvider is null)
             {
-                displaySettingsProvider = new WinUIDisplaySettingsProvider(DesignerContext.PlatformService);
-                displaySettingsProvider.Initialize();
+                _displaySettingsProvider = new WinUIDisplaySettingsProvider(DesignerContext.PlatformService);
+                _displaySettingsProvider.Initialize();
 
                 WinUIDesignerLogger.LogInformation("Platform", "UWP device display settings initialized.");
             }
 
-            return displaySettingsProvider;
+            return _displaySettingsProvider;
         }
     }
 
@@ -56,15 +56,15 @@ public sealed class WinUIPlatform : XamlPlatform
     {
         get
         {
-            if (platformPaneModel is null)
+            if (_platformPaneModel is null)
             {
                 // TODO: This seems to be working fine for now, but we may need to implement WinUIPlatformPaneModel.
-                platformPaneModel = new UwpPlatformPaneModel(DesignerContext, DisplaySettingsProvider);
+                _platformPaneModel = new UwpPlatformPaneModel(DesignerContext, DisplaySettingsProvider);
 
                 WinUIDesignerLogger.LogDebug("Platform", "UwpPlatformPaneModel instantiated.");
             }
 
-            return platformPaneModel;
+            return _platformPaneModel;
         }
     }
 

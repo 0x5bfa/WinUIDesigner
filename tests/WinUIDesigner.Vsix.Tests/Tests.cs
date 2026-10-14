@@ -8,7 +8,7 @@ using WinUIDesigner.Toolbox;
 [TestClass]
 public sealed class ToolboxTests
 {
-    private static readonly IReadOnlyDictionary<string, string> ExcludedVisualTypes =
+    private static readonly IReadOnlyDictionary<string, string> _ExcludedVisualTypes =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["Microsoft.UI.Xaml.Controls.Page"] = "Document root; create a XAML document rather than insert a Page.",
@@ -50,13 +50,13 @@ public sealed class ToolboxTests
         var catalog = new HashSet<string>(ProvideStaticWinUIToolboxItemsAttribute.TypeNames, StringComparer.Ordinal);
 
         string[] missing = candidates
-            .Where(type => !catalog.Contains(type) && !ExcludedVisualTypes.ContainsKey(type))
+            .Where(type => !catalog.Contains(type) && !_ExcludedVisualTypes.ContainsKey(type))
             .OrderBy(type => type, StringComparer.Ordinal)
             .ToArray();
         Assert.AreEqual(0, missing.Length,
             "Unclassified SDK visual types (register or explicitly exclude them): " + string.Join(", ", missing));
 
-        foreach (var exclusion in ExcludedVisualTypes)
+        foreach (var exclusion in _ExcludedVisualTypes)
         {
             Assert.IsTrue(candidates.Contains(exclusion.Key), "Excluded type must exist: " + exclusion.Key);
             Assert.IsFalse(catalog.Contains(exclusion.Key), "Excluded type must not be registered: " + exclusion.Key);

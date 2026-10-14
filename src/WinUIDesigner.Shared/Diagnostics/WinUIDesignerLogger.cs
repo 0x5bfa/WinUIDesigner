@@ -13,9 +13,9 @@ namespace WinUIDesigner;
 /// </summary>
 internal static class WinUIDesignerLogger
 {
-    private static readonly int ProcessId = GetProcessId();
-    private static readonly string LogPath = CreateLogPath();
-    private static readonly Mutex LogMutex = new(false, $"Local\\WinUIDesignerLogger-{ProcessId}");
+    private static readonly int _ProcessId = GetProcessId();
+    private static readonly string _LogPath = CreateLogPath();
+    private static readonly Mutex _LogMutex = new(false, $"Local\\WinUIDesignerLogger-{_ProcessId}");
 
     public static void LogCritical(string category, string message, Exception? exception = null)
     {
@@ -71,7 +71,7 @@ internal static class WinUIDesignerLogger
         {
             try
             {
-                mutexAcquired = LogMutex.WaitOne();
+                mutexAcquired = _LogMutex.WaitOne();
             }
             catch (AbandonedMutexException)
             {
@@ -79,8 +79,8 @@ internal static class WinUIDesignerLogger
                 mutexAcquired = true;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-            File.AppendAllText(LogPath, entry + Environment.NewLine);
+            Directory.CreateDirectory(Path.GetDirectoryName(_LogPath)!);
+            File.AppendAllText(_LogPath, entry + Environment.NewLine);
         }
         catch (IOException)
         {
@@ -98,7 +98,7 @@ internal static class WinUIDesignerLogger
         {
             if (mutexAcquired)
             {
-                LogMutex.ReleaseMutex();
+                _LogMutex.ReleaseMutex();
             }
         }
     }
@@ -111,7 +111,7 @@ internal static class WinUIDesignerLogger
             basePath = Path.GetTempPath();
         }
 
-        return Path.Combine(basePath, "WinUIDesigner", "Logs", $"WinUIDesigner-{ProcessId}.log");
+        return Path.Combine(basePath, "WinUIDesigner", "Logs", $"WinUIDesigner-{_ProcessId}.log");
     }
 
     private static int GetProcessId()

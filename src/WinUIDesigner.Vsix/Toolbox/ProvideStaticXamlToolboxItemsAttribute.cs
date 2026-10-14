@@ -15,7 +15,7 @@ namespace WinUIDesigner.Toolbox;
 [AttributeUsage(AttributeTargets.Class)]
 internal abstract class ProvideStaticXamlToolboxItemsAttribute : RegistrationAttribute
 {
-    private List<RegistrationAttribute> registrationAttributes = null!;
+    private List<RegistrationAttribute> _registrationAttributes = null!;
 
     public abstract string ClipboardFormat { get; }
 
@@ -35,7 +35,7 @@ internal abstract class ProvideStaticXamlToolboxItemsAttribute : RegistrationAtt
     {
         EnsureRegistrationAttributesCreated();
 
-        foreach (var attribute in registrationAttributes)
+        foreach (var attribute in _registrationAttributes)
         {
             attribute.Register(context);
         }
@@ -45,7 +45,7 @@ internal abstract class ProvideStaticXamlToolboxItemsAttribute : RegistrationAtt
     {
         EnsureRegistrationAttributesCreated();
 
-        foreach (var attribute in Enumerable.Reverse(registrationAttributes))
+        foreach (var attribute in Enumerable.Reverse(_registrationAttributes))
         {
             attribute.Unregister(context);
         }
@@ -53,15 +53,15 @@ internal abstract class ProvideStaticXamlToolboxItemsAttribute : RegistrationAtt
 
     private void EnsureRegistrationAttributesCreated()
     {
-        if (registrationAttributes is not null)
+        if (_registrationAttributes is not null)
         {
             return;
         }
 
-        registrationAttributes = [];
+        _registrationAttributes = [];
 
         var commonGroup = new ProvideStaticToolboxGroupAttribute(CommonControlsGroupName, CommonControlsGroupId) { Index = 1000 };
-        registrationAttributes.Add(commonGroup);
+        _registrationAttributes.Add(commonGroup);
 
         int commonIndex = 1;
         foreach (ToolboxItemData item in ToolboxItems.Where(item => item.IsCommon))
@@ -70,7 +70,7 @@ internal abstract class ProvideStaticXamlToolboxItemsAttribute : RegistrationAtt
         }
 
         var allGroup = new ProvideStaticToolboxGroupAttribute(AllControlsGroupName, AllControlsGroupId) { Index = 2000 };
-        registrationAttributes.Add(allGroup);
+        _registrationAttributes.Add(allGroup);
 
         int allIndex = 1;
         foreach (ToolboxItemData item in ToolboxItems)
@@ -105,7 +105,7 @@ internal abstract class ProvideStaticXamlToolboxItemsAttribute : RegistrationAtt
 
         attribute.Index = index;
 
-        registrationAttributes.Add(attribute);
+        _registrationAttributes.Add(attribute);
     }
 
     private static string GetToolboxBitmapId(string unqualifiedTypeName)

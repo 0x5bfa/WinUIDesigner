@@ -17,15 +17,15 @@ namespace WinUIDesigner.Surface.Designer.Operations;
 /// </summary>
 internal sealed class DiagnosticsPropertySourceService
 {
-    private int initializationStarted;
-    private volatile bool nativeUnavailable;
-    private long retryAfter;
+    private int _initializationStarted;
+    private volatile bool _nativeUnavailable;
+    private long _retryAfter;
 
     public void StartInitialization()
     {
-        if (nativeUnavailable ||
-            Environment.TickCount64 < Interlocked.Read(ref retryAfter) ||
-            Interlocked.Exchange(ref initializationStarted, 1) != 0)
+        if (_nativeUnavailable ||
+            Environment.TickCount64 < Interlocked.Read(ref _retryAfter) ||
+            Interlocked.Exchange(ref _initializationStarted, 1) != 0)
         {
             return;
         }
@@ -44,17 +44,17 @@ internal sealed class DiagnosticsPropertySourceService
                 {
                     // Missing endpoints can be transient while the island starts.
                     // Missing DLLs/exports below are permanent for this process.
-                    Interlocked.Exchange(ref retryAfter, Environment.TickCount64 + 30_000);
+                    Interlocked.Exchange(ref _retryAfter, Environment.TickCount64 + 30_000);
                 }
             }
             catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
             {
-                nativeUnavailable = true;
+                _nativeUnavailable = true;
                 WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics TAP initialization unavailable: {ex}");
             }
             finally
             {
-                Interlocked.Exchange(ref initializationStarted, 0);
+                Interlocked.Exchange(ref _initializationStarted, 0);
             }
         });
     }
@@ -63,12 +63,12 @@ internal sealed class DiagnosticsPropertySourceService
     {
         valueSource = BaseValueSource.Unknown;
 
-        if (nativeUnavailable)
+        if (_nativeUnavailable)
         {
             return false;
         }
 
-        if (Environment.TickCount64 >= Interlocked.Read(ref retryAfter) && Interlocked.Read(ref retryAfter) != 0)
+        if (Environment.TickCount64 >= Interlocked.Read(ref _retryAfter) && Interlocked.Read(ref _retryAfter) != 0)
         {
             StartInitialization();
         }
@@ -116,7 +116,7 @@ internal sealed class DiagnosticsPropertySourceService
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
-            nativeUnavailable = true;
+            _nativeUnavailable = true;
 
             WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics property-source lookup unavailable: {ex}");
 

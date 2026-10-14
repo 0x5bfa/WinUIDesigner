@@ -15,12 +15,12 @@ namespace WinUIDesigner.Surface.Runtime;
 /// </summary>
 internal static class RuntimeTypeNameSerializer
 {
-    private static readonly Assembly CoreLibraryAssembly = typeof(object).Assembly;
+    private static readonly Assembly _CoreLibraryAssembly = typeof(object).Assembly;
 
-    private static readonly string SystemRuntimeAssemblyFullName =
-        $"System.Runtime, Version={CoreLibraryAssembly.GetName().Version}, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a";
+    private static readonly string _SystemRuntimeAssemblyFullName =
+        $"System.Runtime, Version={_CoreLibraryAssembly.GetName().Version}, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a";
 
-    private static readonly Type[] CollectionContracts =
+    private static readonly Type[] _CollectionContracts =
     [
         typeof(IDictionary<,>), typeof(IList<>), typeof(ICollection<>),
         typeof(IReadOnlyDictionary<,>), typeof(IReadOnlyList<>), typeof(IReadOnlyCollection<>),
@@ -41,7 +41,7 @@ internal static class RuntimeTypeNameSerializer
 
         var interfaces = type.GetInterfaces();
 
-        foreach (Type contract in CollectionContracts)
+        foreach (Type contract in _CollectionContracts)
         {
             var match = interfaces
                 .Where(candidate => candidate == contract || candidate.IsGenericType && candidate.GetGenericTypeDefinition() == contract)
@@ -91,10 +91,10 @@ internal static class RuntimeTypeNameSerializer
         // Preserve other assemblies rather than assuming every CoreLib type is
         // exported by that facade (List/Dictionary, for example, are not).
 
-        if (type.Assembly == CoreLibraryAssembly &&
+        if (type.Assembly == _CoreLibraryAssembly &&
             (type.IsPublic && !type.IsGenericType || type.IsInterface || type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>)))
         {
-            return SystemRuntimeAssemblyFullName;
+            return _SystemRuntimeAssemblyFullName;
         }
 
         return type.Assembly.FullName!;

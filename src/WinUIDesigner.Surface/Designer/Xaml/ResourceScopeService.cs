@@ -13,25 +13,25 @@ namespace WinUIDesigner.Surface.Designer.Xaml;
 /// </summary>
 internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 {
-    private readonly Dictionary<object, object> parents = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, object> _parents = [with(ReferenceEqualityComparer.Instance)];
 
-    private string? themeAssembly;
+    private string? _themeAssembly;
 
-    private string? themePath;
+    private string? _themePath;
 
-    private ResourceDictionary? themeResources;
+    private ResourceDictionary? _themeResources;
 
     public void SetParent(object child, object? parent)
     {
         if (parent is null)
         {
-            parents.Remove(child);
+            _parents.Remove(child);
 
             return;
         }
 
         var visited = new HashSet<object>(ReferenceEqualityComparer.Instance) { child };
-        for (object? current = parent; current is not null; current = parents.GetValueOrDefault(current))
+        for (object? current = parent; current is not null; current = _parents.GetValueOrDefault(current))
         {
             if (!visited.Add(current))
             {
@@ -39,19 +39,19 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
             }
         }
 
-        parents[child] = parent;
+        _parents[child] = parent;
     }
 
     public void SetThemeScope(string assembly, string relativePath)
     {
-        if (themeAssembly == assembly && themePath == relativePath)
+        if (_themeAssembly == assembly && _themePath == relativePath)
         {
             return;
         }
 
-        themeAssembly = assembly;
-        themePath = relativePath;
-        themeResources = string.IsNullOrEmpty(relativePath)
+        _themeAssembly = assembly;
+        _themePath = relativePath;
+        _themeResources = string.IsNullOrEmpty(relativePath)
             ? null
             : new ResourceDictionary() { Source = new Uri($"ms-appx:///{assembly.Split(',')[0]}/{relativePath.TrimStart('/')}") };
     }
@@ -66,7 +66,7 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
         var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
         for (object? current = owner;
             current is not null && visited.Add(current);
-            current = parents.TryGetValue(current, out object? parent)
+            current = _parents.TryGetValue(current, out object? parent)
                 ? parent
                 : (current as FrameworkElement)?.Parent)
         {
@@ -89,7 +89,7 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
             return applicationValue;
         }
 
-        if (themeResources is not null && themeResources.TryGetValue(key, out object? themeValue))
+        if (_themeResources is not null && _themeResources.TryGetValue(key, out object? themeValue))
         {
             return themeValue;
         }
@@ -103,7 +103,7 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 
         var dictionaries = new List<ResourceDictionary>();
         var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        for (object? current = owner; current is not null && visited.Add(current); current = parents.GetValueOrDefault(current))
+        for (object? current = owner; current is not null && visited.Add(current); current = _parents.GetValueOrDefault(current))
         {
             var dictionary = current switch
             {
@@ -122,9 +122,9 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 
         dictionaries.Reverse();
 
-        if (themeResources is not null && !dictionaries.Contains(themeResources))
+        if (_themeResources is not null && !dictionaries.Contains(_themeResources))
         {
-            dictionaries.Insert(0, themeResources);
+            dictionaries.Insert(0, _themeResources);
         }
 
         int originalCount = application.MergedDictionaries.Count;
@@ -136,9 +136,9 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
                 application.MergedDictionaries.Add(dictionary);
             }
 
-            if (!string.IsNullOrEmpty(themePath))
+            if (!string.IsNullOrEmpty(_themePath))
             {
-                WinUIDesignerLogger.LogTrace("Surface", $"Parsing resource in theme scope '{themeAssembly}/{themePath}'.");
+                WinUIDesignerLogger.LogTrace("Surface", $"Parsing resource in theme scope '{_themeAssembly}/{_themePath}'.");
             }
 
             return XamlRuntimeUtilities.ParseXaml(xaml) ?? throw new InvalidOperationException("XAML parsing returned no object.");
@@ -173,11 +173,11 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 
     public void RemoveObjects(HashSet<object> released)
     {
-        foreach (object key in new List<object>(parents.Keys))
+        foreach (object key in new List<object>(_parents.Keys))
         {
-            if (released.Contains(key) || released.Contains(parents[key]))
+            if (released.Contains(key) || released.Contains(_parents[key]))
             {
-                parents.Remove(key);
+                _parents.Remove(key);
             }
         }
     }

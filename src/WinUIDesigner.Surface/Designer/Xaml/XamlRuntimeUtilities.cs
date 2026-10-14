@@ -25,12 +25,12 @@ namespace WinUIDesigner.Surface.Designer.Xaml;
 /// </summary>
 internal static class XamlRuntimeUtilities
 {
-    private static readonly ConditionalWeakTable<FrameworkElement, Dictionary<string, object?>> NameChanges = [];
-    private static readonly ConditionalWeakTable<FrameworkElement, object> NameScopeRoots = [];
+    private static readonly ConditionalWeakTable<FrameworkElement, Dictionary<string, object?>> _NameChanges = [];
+    private static readonly ConditionalWeakTable<FrameworkElement, object> _NameScopeRoots = [];
 
     public static void RegisterNameScope(FrameworkElement root)
     {
-        NameScopeRoots.GetValue(root, _ => new object());
+        _NameScopeRoots.GetValue(root, _ => new object());
     }
 
     public static Type? ResolveType(string? serializedTypeName)
@@ -409,7 +409,7 @@ internal static class XamlRuntimeUtilities
         if (lookupContext is FrameworkElement frameworkElement)
         {
             FrameworkElement owner = FindVisualRoot(frameworkElement);
-            if (NameChanges.TryGetValue(owner, out var changes) && changes.TryGetValue(elementName, out var changed))
+            if (_NameChanges.TryGetValue(owner, out var changes) && changes.TryGetValue(elementName, out var changed))
             {
                 return changed;
             }
@@ -439,7 +439,7 @@ internal static class XamlRuntimeUtilities
             throw new InvalidOperationException($"The name '{newName}' is already registered in this scope.");
         }
 
-        var changes = NameChanges.GetOrCreateValue(scopeOwner);
+        var changes = _NameChanges.GetOrCreateValue(scopeOwner);
         if (!string.IsNullOrEmpty(oldName))
         {
             changes[oldName] = null;
@@ -760,7 +760,7 @@ internal static class XamlRuntimeUtilities
         FrameworkElement current = element;
         while (VisualTreeHelper.GetParent(current) is FrameworkElement parent)
         {
-            if (NameScopeRoots.TryGetValue(current, out _))
+            if (_NameScopeRoots.TryGetValue(current, out _))
             {
                 break;
             }
@@ -791,7 +791,7 @@ internal static class XamlRuntimeUtilities
 
         foreach (DependencyObject child in children)
         {
-            if (child is FrameworkElement boundary && NameScopeRoots.TryGetValue(boundary, out _))
+            if (child is FrameworkElement boundary && _NameScopeRoots.TryGetValue(boundary, out _))
             {
                 continue;
             }

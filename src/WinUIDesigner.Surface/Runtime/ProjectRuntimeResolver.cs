@@ -22,24 +22,24 @@ namespace WinUIDesigner.Surface.Runtime;
 /// </summary>
 internal static class ProjectRuntimeResolver
 {
-    private static readonly Dictionary<string, string> Assemblies = [with(StringComparer.OrdinalIgnoreCase)];
+    private static readonly Dictionary<string, string> _Assemblies = [with(StringComparer.OrdinalIgnoreCase)];
 
-    private static readonly Dictionary<string, string> Types = [with(StringComparer.Ordinal)];
+    private static readonly Dictionary<string, string> _Types = [with(StringComparer.Ordinal)];
 
-    private static readonly Dictionary<string, string> NativeLibraries = [with(StringComparer.OrdinalIgnoreCase)];
-    private static readonly List<string> PriFiles = [];
+    private static readonly Dictionary<string, string> _NativeLibraries = [with(StringComparer.OrdinalIgnoreCase)];
+    private static readonly List<string> _PriFiles = [];
 
-    private static readonly List<string> ProviderTypes = [];
+    private static readonly List<string> _ProviderTypes = [];
 
-    private static readonly List<IXamlMetadataProvider> Providers = [];
+    private static readonly List<IXamlMetadataProvider> _Providers = [];
 
-    private static bool providersInitialized;
+    private static bool _providersInitialized;
 
-    [ThreadStatic] private static HashSet<string>? resolving;
+    [ThreadStatic] private static HashSet<string>? _resolving;
 
     public static void Initialize(string directory)
     {
-        PriFiles.AddRange(Directory.EnumerateFiles(directory, "*.pri", SearchOption.AllDirectories));
+        _PriFiles.AddRange(Directory.EnumerateFiles(directory, "*.pri", SearchOption.AllDirectories));
 
         foreach (string file in Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories)
             .OrderBy(file => Path.GetRelativePath(directory, file).Count(character => character == Path.DirectorySeparatorChar))
@@ -54,7 +54,7 @@ internal static class ProjectRuntimeResolver
                 {
                     if (pe.PEHeaders.CoffHeader.Machine == Machine.Amd64)
                     {
-                        NativeLibraries.TryAdd(Path.GetFileNameWithoutExtension(file), file);
+                        _NativeLibraries.TryAdd(Path.GetFileNameWithoutExtension(file), file);
                     }
 
                     continue;
@@ -75,7 +75,7 @@ internal static class ProjectRuntimeResolver
                     continue;
                 }
 
-                Assemblies.TryAdd(assemblyName, file);
+                _Assemblies.TryAdd(assemblyName, file);
 
                 foreach (TypeDefinitionHandle handle in metadata.TypeDefinitions)
                 {
@@ -89,7 +89,7 @@ internal static class ProjectRuntimeResolver
                     }
 
                     var fullName = ns + "." + name;
-                    Types.TryAdd(fullName, assemblyName);
+                    _Types.TryAdd(fullName, assemblyName);
 
                     foreach (InterfaceImplementationHandle implementation in definition.GetInterfaceImplementations())
                     {
@@ -98,7 +98,7 @@ internal static class ProjectRuntimeResolver
                         if (type.Kind == HandleKind.TypeReference &&
                             metadata.GetString(metadata.GetTypeReference((TypeReferenceHandle)type).Name) == nameof(IXamlMetadataProvider))
                         {
-                            ProviderTypes.Add(fullName);
+                            _ProviderTypes.Add(fullName);
                         }
                     }
                 }
@@ -111,14 +111,14 @@ internal static class ProjectRuntimeResolver
 
         AssemblyLoadContext.Default.Resolving += (_, name) =>
         {
-            return name.Name is string simpleName && Assemblies.TryGetValue(simpleName, out string? file)
+            return name.Name is string simpleName && _Assemblies.TryGetValue(simpleName, out string? file)
                 ? AssemblyLoadContext.Default.LoadFromAssemblyPath(file)
                 : null;
         };
 
         AssemblyLoadContext.Default.ResolvingUnmanagedDll += (_, name) =>
         {
-            return NativeLibraries.TryGetValue(Path.GetFileNameWithoutExtension(name), out var file)
+            return _NativeLibraries.TryGetValue(Path.GetFileNameWithoutExtension(name), out var file)
                 ? NativeLibrary.Load(file)
                 : 0;
         };
@@ -129,7 +129,7 @@ internal static class ProjectRuntimeResolver
         var primary = new ResourceManager();
         var projects = new List<ResourceManager>();
 
-        foreach (string file in PriFiles)
+        foreach (string file in _PriFiles)
         {
             try
             {
@@ -168,21 +168,21 @@ internal static class ProjectRuntimeResolver
 
     public static Type? ResolveType(string fullName)
     {
-        return Types.TryGetValue(fullName, out string? name) && Assemblies.TryGetValue(name, out string? file)
+        return _Types.TryGetValue(fullName, out string? name) && _Assemblies.TryGetValue(name, out string? file)
             ? AssemblyLoadContext.Default.LoadFromAssemblyPath(file).GetType(fullName)
             : null;
     }
 
     private static void EnsureProviders()
     {
-        if (providersInitialized)
+        if (_providersInitialized)
         {
             return;
         }
 
-        providersInitialized = true;
+        _providersInitialized = true;
 
-        foreach (string name in ProviderTypes.Distinct())
+        foreach (string name in _ProviderTypes.Distinct())
         {
             var type = ResolveType(name);
             // A generated metadata provider is safe to construct independently;
@@ -195,15 +195,15 @@ internal static class ProjectRuntimeResolver
 
             if (Activator.CreateInstance(type) is IXamlMetadataProvider provider)
             {
-                Providers.Add(provider);
+                _Providers.Add(provider);
             }
         }
     }
 
     public static IXamlType? GetXamlType(string name)
     {
-        resolving ??= [with(StringComparer.Ordinal)];
-        if (!resolving.Add(name))
+        _resolving ??= [with(StringComparer.Ordinal)];
+        if (!_resolving.Add(name))
         {
             return null;
         }
@@ -212,7 +212,7 @@ internal static class ProjectRuntimeResolver
         {
             EnsureProviders();
 
-            foreach (IXamlMetadataProvider provider in Providers)
+            foreach (IXamlMetadataProvider provider in _Providers)
             {
                 if (provider.GetXamlType(name) is { } type) return type;
             }
@@ -221,7 +221,7 @@ internal static class ProjectRuntimeResolver
         }
         finally
         {
-            resolving.Remove(name);
+            _resolving.Remove(name);
         }
     }
 
@@ -229,6 +229,6 @@ internal static class ProjectRuntimeResolver
     {
         EnsureProviders();
 
-        return [.. Providers.SelectMany(value => value.GetXmlnsDefinitions() ?? [])];
+        return [.. _Providers.SelectMany(value => value.GetXmlnsDefinitions() ?? [])];
     }
 }

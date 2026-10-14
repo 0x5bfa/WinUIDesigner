@@ -13,7 +13,7 @@ namespace WinUIDesigner.Surface.Designer.Shared;
 /// </summary>
 internal static class DispatcherOperation
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan _Timeout = TimeSpan.FromSeconds(30);
 
     public static T Invoke<T>(DispatcherQueue queue, Func<T> callback, CancellationToken cancellationToken)
     {
@@ -39,7 +39,7 @@ internal static class DispatcherOperation
 
         try
         {
-            return await QueuedOperation.RunAsync(action => queue.TryEnqueue(() => action()), callback, Timeout, shutdown.Token)
+            return await QueuedOperation.RunAsync(action => queue.TryEnqueue(() => action()), callback, _Timeout, shutdown.Token)
                 .ConfigureAwait(false);
         }
         finally

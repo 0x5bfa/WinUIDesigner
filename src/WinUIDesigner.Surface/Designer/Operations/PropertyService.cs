@@ -25,19 +25,19 @@ namespace WinUIDesigner.Surface.Designer.Operations;
 /// </summary>
 internal sealed partial class PropertyService : IDisposable
 {
-    private readonly ProtocolHandler protocolHandler;
+    private readonly ProtocolHandler _protocolHandler;
 
-    private readonly DispatcherQueue dispatcherQueue;
+    private readonly DispatcherQueue _dispatcherQueue;
 
-    private readonly ObjectIdentityRegistry objectIdentity;
+    private readonly ObjectIdentityRegistry _objectIdentity;
 
-    private readonly XamlActionService xamlActionService;
+    private readonly XamlActionService _xamlActionService;
 
-    private readonly DiagnosticsPropertySourceService diagnosticsPropertySource;
+    private readonly DiagnosticsPropertySourceService _diagnosticsPropertySource;
 
-    private readonly LiveValueSerializer serializer;
+    private readonly LiveValueSerializer _serializer;
 
-    private readonly List<int> registrationIds = [];
+    private readonly List<int> _registrationIds = [];
 
     public PropertyService(
         ProtocolHandler protocolHandler,
@@ -45,19 +45,19 @@ internal sealed partial class PropertyService : IDisposable
         ObjectIdentityRegistry objectIdentity,
         XamlActionService xamlActionService)
     {
-        this.protocolHandler = protocolHandler;
-        this.dispatcherQueue = dispatcherQueue;
-        this.objectIdentity = objectIdentity;
-        this.xamlActionService = xamlActionService;
-        diagnosticsPropertySource = new DiagnosticsPropertySourceService();
-        diagnosticsPropertySource.StartInitialization();
-        serializer = new LiveValueSerializer(objectIdentity);
+        this._protocolHandler = protocolHandler;
+        this._dispatcherQueue = dispatcherQueue;
+        this._objectIdentity = objectIdentity;
+        this._xamlActionService = xamlActionService;
+        _diagnosticsPropertySource = new DiagnosticsPropertySourceService();
+        _diagnosticsPropertySource.StartInitialization();
+        _serializer = new LiveValueSerializer(objectIdentity);
 
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<PropertiesRequestInfo, LiveObjectState>((int)DesignerMessageId.GetProperties, HandleGetProperties));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<DefaultValueRequestInfo, LiveValueResponse>((int)DesignerMessageId.GetDefaultValue, HandleGetDefaultValue));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<UnderlyingValueSourceRequest, UnderlyingValueSourceInformation>((int)DesignerMessageId.GetUnderlyingValue, HandleGetUnderlyingValue));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, UnderlyingValueSourceInformation>((int)DesignerMessageId.ExecuteLookupActions, HandleExecuteLookupActions));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<EvaluateStaticExtensionRequest, LiveValue>((int)DesignerMessageId.EvaluateStaticExtension, HandleEvaluateStaticExtension));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<PropertiesRequestInfo, LiveObjectState>((int)DesignerMessageId.GetProperties, HandleGetProperties));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<DefaultValueRequestInfo, LiveValueResponse>((int)DesignerMessageId.GetDefaultValue, HandleGetDefaultValue));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<UnderlyingValueSourceRequest, UnderlyingValueSourceInformation>((int)DesignerMessageId.GetUnderlyingValue, HandleGetUnderlyingValue));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, UnderlyingValueSourceInformation>((int)DesignerMessageId.ExecuteLookupActions, HandleExecuteLookupActions));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<EvaluateStaticExtensionRequest, LiveValue>((int)DesignerMessageId.EvaluateStaticExtension, HandleEvaluateStaticExtension));
     }
 
     private LiveObjectState HandleGetProperties(PropertiesRequestInfo request)
@@ -78,12 +78,12 @@ internal sealed partial class PropertyService : IDisposable
             Items = [],
         };
 
-        if (!objectIdentity.TryGetObject(handle, out object? value) || value is null)
+        if (!_objectIdentity.TryGetObject(handle, out object? value) || value is null)
         {
             return response;
         }
 
-        using var scope = objectIdentity.EnterDocument(objectIdentity.GetDocumentId(value));
+        using var scope = _objectIdentity.EnterDocument(_objectIdentity.GetDocumentId(value));
         AddKnownProperties(value, response.Properties);
 
         if (value is FrameworkElement element)
@@ -95,7 +95,7 @@ internal sealed partial class PropertyService : IDisposable
         {
             foreach (object? item in enumerable)
             {
-                response.Items.Add(serializer.Serialize(item));
+                response.Items.Add(_serializer.Serialize(item));
             }
         }
 
@@ -215,7 +215,7 @@ internal sealed partial class PropertyService : IDisposable
             return;
         }
 
-        if (diagnosticsPropertySource.TryGetPropertySource(target, name, out BaseValueSource diagnosticsValueSource))
+        if (_diagnosticsPropertySource.TryGetPropertySource(target, name, out BaseValueSource diagnosticsValueSource))
         {
             // The frontend edits according to BaseValueSource, not only the current
             // value. Omit Default values so runtime defaults are not authored to XAML.
@@ -247,8 +247,8 @@ internal sealed partial class PropertyService : IDisposable
         properties.Add(new LiveObjectPropertyValue()
         {
             Property = LiveValueSerializer.SerializeProperty(name, declaringType),
-            BaseValue = serializer.Serialize(baseValue),
-            CurrentValue = serializer.Serialize(target.GetValue(property)),
+            BaseValue = _serializer.Serialize(baseValue),
+            CurrentValue = _serializer.Serialize(target.GetValue(property)),
             ValueSource = source,
         });
     }
@@ -263,8 +263,8 @@ internal sealed partial class PropertyService : IDisposable
         properties.Add(new LiveObjectPropertyValue()
         {
             Property = LiveValueSerializer.SerializeProperty(name, declaringType),
-            BaseValue = serializer.Serialize(value),
-            CurrentValue = serializer.Serialize(value),
+            BaseValue = _serializer.Serialize(value),
+            CurrentValue = _serializer.Serialize(value),
             ValueSource = valueSource,
         });
     }
@@ -278,8 +278,8 @@ internal sealed partial class PropertyService : IDisposable
         properties.Add(new LiveObjectPropertyValue()
         {
             Property = $"{name}:XSurfUwp.DT",
-            BaseValue = serializer.Serialize(value),
-            CurrentValue = serializer.Serialize(value),
+            BaseValue = _serializer.Serialize(value),
+            CurrentValue = _serializer.Serialize(value),
             ValueSource = valueSource,
         });
     }
@@ -375,7 +375,7 @@ internal sealed partial class PropertyService : IDisposable
     {
         WinUIDesignerLogger.LogTrace("Surface", $"GetDefaultValue ({(int)DesignerMessageId.GetDefaultValue}): property={request.FullPropertyName}, target={request.TargetTypeName}.");
 
-        var value = InvokeOnDispatcher(() => serializer.Serialize(GetDefaultValue(request.FullPropertyName, request.TargetTypeName)), () => new LiveValue());
+        var value = InvokeOnDispatcher(() => _serializer.Serialize(GetDefaultValue(request.FullPropertyName, request.TargetTypeName)), () => new LiveValue());
 
         return new LiveValueResponse() { Value = value };
     }
@@ -404,12 +404,12 @@ internal sealed partial class PropertyService : IDisposable
 
         var value = InvokeOnDispatcher(() =>
         {
-            if (!objectIdentity.TryGetObject(request.Object, out object? target) || target is null)
+            if (!_objectIdentity.TryGetObject(request.Object, out object? target) || target is null)
             {
                 return new LiveValue();
             }
 
-            return serializer.Serialize(XamlRuntimeUtilities.GetUnderlyingValue(target, request.Property));
+            return _serializer.Serialize(XamlRuntimeUtilities.GetUnderlyingValue(target, request.Property));
         }, () => new LiveValue(), request.Object);
 
         return new UnderlyingValueSourceInformation() { UnderlyingValue = value };
@@ -421,7 +421,7 @@ internal sealed partial class PropertyService : IDisposable
 
         return new UnderlyingValueSourceInformation()
         {
-            UnderlyingValue = InvokeOnDispatcher(() => xamlActionService.ExecuteLookupActions(request, serializer), () => new LiveValue()),
+            UnderlyingValue = InvokeOnDispatcher(() => _xamlActionService.ExecuteLookupActions(request, _serializer), () => new LiveValue()),
         };
     }
 
@@ -429,24 +429,24 @@ internal sealed partial class PropertyService : IDisposable
     {
         WinUIDesignerLogger.LogTrace("Surface", $"EvaluateStaticExtension ({(int)DesignerMessageId.EvaluateStaticExtension}): member={request.MemberName}, type={request.TypeName}.");
 
-        return InvokeOnDispatcher(() => serializer.Serialize(XamlRuntimeUtilities.ResolveMember(request.MemberName)), () => new LiveValue());
+        return InvokeOnDispatcher(() => _serializer.Serialize(XamlRuntimeUtilities.ResolveMember(request.MemberName)), () => new LiveValue());
     }
 
     private T InvokeOnDispatcher<T>(Func<T> callback, Func<T> failure, long handle = 0)
     {
         try
         {
-            return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken);
+            return DispatcherOperation.Invoke(_dispatcherQueue, callback, _protocolHandler.CancellationToken);
         }
         catch (Exception ex)
         {
             WinUIDesignerLogger.LogTrace("Surface", $"Property request failed: {ex}");
 
-            int documentId = objectIdentity.TryGetObject(handle, out var target) && target is not null
-                ? objectIdentity.GetDocumentId(target)
+            int documentId = _objectIdentity.TryGetObject(handle, out var target) && target is not null
+                ? _objectIdentity.GetDocumentId(target)
                 : 0;
 
-            protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
+            _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {
                 DocumentId = documentId, Handle = handle, Message = ex.Message,
                 CallStack = ex.ToString(), IsArtboardException = true,
@@ -458,9 +458,9 @@ internal sealed partial class PropertyService : IDisposable
 
     public void Dispose()
     {
-        foreach (int registrationId in registrationIds)
+        foreach (int registrationId in _registrationIds)
         {
-            protocolHandler.UnregisterMessageObserver(registrationId);
+            _protocolHandler.UnregisterMessageObserver(registrationId);
         }
     }
 }

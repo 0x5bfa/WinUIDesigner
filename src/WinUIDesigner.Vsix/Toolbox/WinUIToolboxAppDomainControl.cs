@@ -11,7 +11,7 @@ namespace WinUIDesigner.Toolbox;
 
 public sealed class WinUIToolboxAppDomainControl : IToolboxAppDomainControl
 {
-    private readonly ConcurrentDictionary<int, IsolatedObjectFactory> domains = new();
+    private readonly ConcurrentDictionary<int, IsolatedObjectFactory> _domains = new();
 
     public WinUIToolboxAppDomainControl()
     {
@@ -34,7 +34,7 @@ public sealed class WinUIToolboxAppDomainControl : IToolboxAppDomainControl
         try
         {
             AppDomain domain = factory.CreateInstance<IDesignTimeMetadataAppDomainInitializer>().InitializeAndGetAppDomain();
-            domains[domain.Id] = factory;
+            _domains[domain.Id] = factory;
 
             WinUIDesignerLogger.LogDebug("Toolbox", $"CreateAppDomain completed: id={domain.Id}, name={domain.FriendlyName}.");
 
@@ -54,7 +54,7 @@ public sealed class WinUIToolboxAppDomainControl : IToolboxAppDomainControl
     {
         WinUIDesignerLogger.LogDebug("Toolbox", $"UnloadAppDomain requested: id={domain?.Id}, name={domain?.FriendlyName}.");
 
-        if (domain is not null && domains.TryRemove(domain.Id, out var factory))
+        if (domain is not null && _domains.TryRemove(domain.Id, out var factory))
         {
             factory.Dispose();
         }

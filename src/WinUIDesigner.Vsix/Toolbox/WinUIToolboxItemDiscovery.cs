@@ -15,7 +15,7 @@ namespace WinUIDesigner.Toolbox;
 [Guid("BC1C0860-EB3A-4FA2-A9F2-F6F3840182B3")]
 public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext, IToolboxItemDiscoveryByName
 {
-    private static readonly Bitmap DefaultIcon = SystemIcons.Application.ToBitmap();
+    private static readonly Bitmap _DefaultIcon = SystemIcons.Application.ToBitmap();
 
     public IEnumerable<string> AdditionalAssemblyPaths => [];
 
@@ -55,7 +55,7 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
 
         return new XamlToolboxItemInfo(
             displayName,
-            DefaultIcon,
+            _DefaultIcon,
             Color.Transparent,
             [
                 new("OriginalPath", path),
@@ -132,7 +132,7 @@ public sealed class WinUIToolboxItemDiscovery : IToolboxItemDiscoveryWithContext
 
         return new XamlToolboxItemInfo(
             ToolboxUtilities.RemoveNamespaceQualification(type.Type.AssemblyQualifiedName!),
-            DefaultIcon,
+            _DefaultIcon,
             Color.Transparent,
             extraInfo,
             new Dictionary<string, string>()

@@ -21,25 +21,25 @@ namespace WinUIDesigner.Surface.Designer.Operations;
 /// </summary>
 internal sealed partial class SnapLineService : IDisposable
 {
-    private readonly ProtocolHandler protocolHandler;
-    private readonly DispatcherQueue dispatcherQueue;
-    private readonly ObjectIdentityRegistry objectIdentity;
-    private readonly int snapLinesRegistrationId;
-    private readonly int elementDataRegistrationId;
+    private readonly ProtocolHandler _protocolHandler;
+    private readonly DispatcherQueue _dispatcherQueue;
+    private readonly ObjectIdentityRegistry _objectIdentity;
+    private readonly int _snapLinesRegistrationId;
+    private readonly int _elementDataRegistrationId;
 
     public SnapLineService(ProtocolHandler protocolHandler, DispatcherQueue dispatcherQueue, ObjectIdentityRegistry objectIdentity)
     {
-        this.protocolHandler = protocolHandler;
-        this.dispatcherQueue = dispatcherQueue;
-        this.objectIdentity = objectIdentity;
+        this._protocolHandler = protocolHandler;
+        this._dispatcherQueue = dispatcherQueue;
+        this._objectIdentity = objectIdentity;
 
-        snapLinesRegistrationId = protocolHandler.RegisterMessageObserver<GetSnapLinesRequest, GetSnapLinesResponse>((int)DesignerMessageId.GetSnapLines, HandleGetSnapLines);
-        elementDataRegistrationId = protocolHandler.RegisterMessageObserver<GetElementSnapDataRequest, GetElementSnapDataResponse>((int)DesignerMessageId.GetElementSnapData, HandleGetElementSnapData);
+        _snapLinesRegistrationId = protocolHandler.RegisterMessageObserver<GetSnapLinesRequest, GetSnapLinesResponse>((int)DesignerMessageId.GetSnapLines, HandleGetSnapLines);
+        _elementDataRegistrationId = protocolHandler.RegisterMessageObserver<GetElementSnapDataRequest, GetElementSnapDataResponse>((int)DesignerMessageId.GetElementSnapData, HandleGetElementSnapData);
     }
 
     private GetSnapLinesResponse HandleGetSnapLines(GetSnapLinesRequest request)
     {
-        if (!dispatcherQueue.HasThreadAccess)
+        if (!_dispatcherQueue.HasThreadAccess)
         {
             return InvokeOnDispatcher(() => HandleGetSnapLines(request), GetSnapLinesResponse.Empty);
         }
@@ -79,7 +79,7 @@ internal sealed partial class SnapLineService : IDisposable
 
     private GetElementSnapDataResponse HandleGetElementSnapData(GetElementSnapDataRequest request)
     {
-        if (!dispatcherQueue.HasThreadAccess)
+        if (!_dispatcherQueue.HasThreadAccess)
         {
             return InvokeOnDispatcher(() => HandleGetElementSnapData(request), new GetElementSnapDataResponse());
         }
@@ -151,7 +151,7 @@ internal sealed partial class SnapLineService : IDisposable
 
     private bool TryGetElement(long handle, out FrameworkElement? element)
     {
-        if (objectIdentity.TryGetObject(handle, out object? value) && value is FrameworkElement frameworkElement)
+        if (_objectIdentity.TryGetObject(handle, out object? value) && value is FrameworkElement frameworkElement)
         {
             element = frameworkElement;
 
@@ -167,13 +167,13 @@ internal sealed partial class SnapLineService : IDisposable
     {
         try
         {
-            return DispatcherOperation.Invoke(dispatcherQueue, action, protocolHandler.CancellationToken);
+            return DispatcherOperation.Invoke(_dispatcherQueue, action, _protocolHandler.CancellationToken);
         }
         catch (Exception ex)
         {
             WinUIDesignerLogger.LogTrace("Surface", $"Snap request failed: {ex}");
 
-            protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse { Message = ex.Message, CallStack = ex.ToString() });
+            _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse { Message = ex.Message, CallStack = ex.ToString() });
 
             return fallback;
         }
@@ -181,7 +181,7 @@ internal sealed partial class SnapLineService : IDisposable
 
     public void Dispose()
     {
-        protocolHandler.UnregisterMessageObserver(snapLinesRegistrationId);
-        protocolHandler.UnregisterMessageObserver(elementDataRegistrationId);
+        _protocolHandler.UnregisterMessageObserver(_snapLinesRegistrationId);
+        _protocolHandler.UnregisterMessageObserver(_elementDataRegistrationId);
     }
 }

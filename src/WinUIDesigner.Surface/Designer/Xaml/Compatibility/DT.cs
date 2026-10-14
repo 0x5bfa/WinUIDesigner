@@ -13,7 +13,7 @@ namespace XSurfUwp;
 /// </summary>
 public static class DT
 {
-    private static readonly ConditionalWeakTable<FrameworkElement, Style> SuppressedStyles = [];
+    private static readonly ConditionalWeakTable<FrameworkElement, Style> _SuppressedStyles = [];
 
     public static readonly DependencyProperty ShouldDisableImplicitStyleProperty = DependencyProperty.RegisterAttached(
         "ShouldDisableImplicitStyle", typeof(bool), typeof(DT), new PropertyMetadata(false, (owner, args) =>
@@ -27,18 +27,18 @@ public static class DT
                 }
 
                 var style = new Style() { TargetType = element.GetType() };
-                SuppressedStyles.Remove(element);
-                SuppressedStyles.Add(element, style);
+                _SuppressedStyles.Remove(element);
+                _SuppressedStyles.Add(element, style);
                 element.Style = style;
             }
-            else if (SuppressedStyles.TryGetValue(element, out Style? style))
+            else if (_SuppressedStyles.TryGetValue(element, out Style? style))
             {
                 if (ReferenceEquals(element.Style, style))
                 {
                     element.ClearValue(FrameworkElement.StyleProperty);
                 }
 
-                SuppressedStyles.Remove(element);
+                _SuppressedStyles.Remove(element);
             }
         }));
 

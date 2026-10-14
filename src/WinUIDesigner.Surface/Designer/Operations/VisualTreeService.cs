@@ -22,9 +22,9 @@ namespace WinUIDesigner.Surface.Designer.Operations;
 /// </summary>
 internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectIdentityRegistry objectIdentity)
 {
-    private const string XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
+    private const string _XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
 
-    private readonly Dictionary<long, VisualTreeTopologyEntry[]> publishedTopologies = [];
+    private readonly Dictionary<long, VisualTreeTopologyEntry[]> _publishedTopologies = [];
 
     public void RegisterSourceInfo(CreateDocumentInfo? document, string? preparedXaml, FrameworkElement root)
     {
@@ -93,7 +93,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
                     CreateMutation(root, rootHandle, 0, 0, isRoot: true, mutationType),
                 ],
             });
-            publishedTopologies.Remove(rootHandle);
+            _publishedTopologies.Remove(rootHandle);
             WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) posted: {mutationType} root handle={rootHandle}, type={root.GetType().FullName}.");
             return;
         }
@@ -106,7 +106,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
             Mutations = mutations,
         });
 
-        publishedTopologies[rootHandle] = CaptureTopology(root);
+        _publishedTopologies[rootHandle] = CaptureTopology(root);
         WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) posted: Add {mutations.Count} visual(s), root handle={rootHandle}, type={root.GetType().FullName}.");
     }
 
@@ -115,7 +115,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
         long rootHandle = objectIdentity.GetHandle(root);
         VisualTreeTopologyEntry[] currentTopology = CaptureTopology(root);
 
-        if (publishedTopologies.TryGetValue(rootHandle, out VisualTreeTopologyEntry[]? publishedTopology)
+        if (_publishedTopologies.TryGetValue(rootHandle, out VisualTreeTopologyEntry[]? publishedTopology)
             && publishedTopology.AsSpan().SequenceEqual(currentTopology))
         {
             WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) skipped: topology unchanged for root handle={rootHandle}.");
@@ -160,7 +160,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
 
     public void Clear()
     {
-        publishedTopologies.Clear();
+        _publishedTopologies.Clear();
     }
 
     private VisualTreeTopologyEntry[] CaptureTopology(DependencyObject root)
@@ -298,7 +298,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
         HashSet<XElement> used)
     {
         string? runtimeName = (runtimeElement as FrameworkElement)?.Name;
-        XNamespace x = XamlNamespace;
+        XNamespace x = _XamlNamespace;
 
         if (!string.IsNullOrEmpty(runtimeName))
         {

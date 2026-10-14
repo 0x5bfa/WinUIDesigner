@@ -10,12 +10,12 @@ namespace WinUIDesigner.Surface.Designer.Shared;
 /// </summary>
 internal sealed class DocumentScope(Action restore) : IDisposable
 {
-    private Action? restoreAction = restore;
+    private Action? _restoreAction = restore;
 
     public void Dispose()
     {
-        var action = restoreAction;
-        restoreAction = null;
+        var action = _restoreAction;
+        _restoreAction = null;
         action?.Invoke();
     }
 }

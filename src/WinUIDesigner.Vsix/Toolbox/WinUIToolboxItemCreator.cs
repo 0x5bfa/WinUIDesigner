@@ -20,11 +20,11 @@ namespace WinUIDesigner.Toolbox;
 
 public sealed class WinUIToolboxItemCreator : IToolboxItemCreator, IToolboxItemCreationTypeInfo
 {
-    private IHostPlatformService platformService = null!;
+    private IHostPlatformService _platformService = null!;
 
-    private IVsDataObjectStringMapManager stringMap = null!;
+    private IVsDataObjectStringMapManager _stringMap = null!;
 
-    private int ClipboardFormat => DataFormats.GetDataFormat(platformService.GetProperty(
+    private int ClipboardFormat => DataFormats.GetDataFormat(_platformService.GetProperty(
         new PlatformIdentifier(PlatformNames.Windows10, "Managed", FrameworkNames.CurrentDotNetCore, XamlRuntimeNames.WinUI), "ClipboardFormat")).Id;
 
     public WinUIToolboxItemCreator(IServiceProvider serviceProvider)
@@ -38,8 +38,8 @@ public sealed class WinUIToolboxItemCreator : IToolboxItemCreator, IToolboxItemC
 
         ThreadHelperBase.RunOnUIThread(() =>
         {
-            platformService = serviceProvider.GetHostService<IHostPlatformService>();
-            stringMap = (IVsDataObjectStringMapManager)serviceProvider.GetService(typeof(SVsDataObjectStringMapManager));
+            _platformService = serviceProvider.GetHostService<IHostPlatformService>();
+            _stringMap = (IVsDataObjectStringMapManager)serviceProvider.GetService(typeof(SVsDataObjectStringMapManager));
         });
 
         WinUIDesignerLogger.LogDebug("Toolbox", $"ItemCreator initialized. ClipboardFormat={ClipboardFormat}.");
@@ -181,6 +181,6 @@ public sealed class WinUIToolboxItemCreator : IToolboxItemCreator, IToolboxItemC
 
         WinUIDesignerLogger.LogDebug("Toolbox", $"CreateToolboxItem completed: type={typeName}, codeBase={assembly.CodeBase ?? "<null>"}.");
 
-        return ToolDataObject.ToData(data, stringMap, ClipboardFormat);
+        return ToolDataObject.ToData(data, _stringMap, ClipboardFormat);
     }
 }

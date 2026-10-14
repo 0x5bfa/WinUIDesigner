@@ -19,12 +19,12 @@ namespace WinUIDesigner.DesignerHost;
 internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, IHostProject hostProject, IEnumerable<string> controlAssembliesForShadowCopy, string payloadSurface)
     : WpfHostShadowCopyWorker(surfaceInfo, hostProject, controlAssembliesForShadowCopy)
 {
-    private readonly string[] projectAssemblies = [.. hostProject.References.Select(reference => reference.Path)
+    private readonly string[] _projectAssemblies = [.. hostProject.References.Select(reference => reference.Path)
         .Concat([hostProject.TargetAssemblyPath]).Where(path => !string.IsNullOrEmpty(path))
         .Distinct(StringComparer.OrdinalIgnoreCase)];
 
-    private readonly IHostProject hostProject = hostProject;
-    private readonly string payloadSurface = payloadSurface;
+    private readonly IHostProject _hostProject = hostProject;
+    private readonly string _payloadSurface = payloadSurface;
 
     protected override string RuntimeMoniker => ".NETCoreApp";
 
@@ -34,17 +34,17 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, 
     {
         cancelToken.ThrowIfCancellationRequested();
 
-        if (!File.Exists(payloadSurface))
+        if (!File.Exists(_payloadSurface))
         {
-            throw new FileNotFoundException($"WinUI surface payload was not found: {payloadSurface}", payloadSurface);
+            throw new FileNotFoundException($"WinUI surface payload was not found: {_payloadSurface}", _payloadSurface);
         }
 
         cancelToken.ThrowIfCancellationRequested();
-        SurfaceInfo.ShadowCacheContent.AddItem(payloadSurface, "WinUISurface.exe", forceCopyNow: true);
+        SurfaceInfo.ShadowCacheContent.AddItem(_payloadSurface, "WinUISurface.exe", forceCopyNow: true);
 
         // ProjectRuntimeResolver loads these as fallback resource maps when a
         // project/control resource is absent from the surface's primary map.
-        foreach (var assembly in projectAssemblies)
+        foreach (var assembly in _projectAssemblies)
         {
             cancelToken.ThrowIfCancellationRequested();
 
@@ -78,7 +78,7 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, 
 
         // UWP stages media even in platform-only mode. WPF's worker only copies
         // the output directory in All mode, so it cannot provide these assets.
-        foreach (IHostSourceItem item in hostProject.Items ?? Enumerable.Empty<IHostSourceItem>())
+        foreach (IHostSourceItem item in _hostProject.Items ?? Enumerable.Empty<IHostSourceItem>())
         {
             cancelToken.ThrowIfCancellationRequested();
 
@@ -87,7 +87,7 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, 
                 continue;
             }
 
-            var relativePath = UwpUriResolver.GetDeploymentRelativePath(hostProject, item.RelativePath, isForRuntime: false)
+            var relativePath = UwpUriResolver.GetDeploymentRelativePath(_hostProject, item.RelativePath, isForRuntime: false)
                 .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
             SurfaceInfo.ShadowCacheContent.AddItem(item.Path, relativePath, forceCopyNow: true);

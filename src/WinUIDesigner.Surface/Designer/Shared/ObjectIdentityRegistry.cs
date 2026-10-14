@@ -14,66 +14,66 @@ namespace WinUIDesigner.Surface.Designer.Shared;
 /// </summary>
 internal sealed partial class ObjectIdentityRegistry
 {
-    private readonly Dictionary<object, long> objectToHandle = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, long> _objectToHandle = [with(ReferenceEqualityComparer.Instance)];
 
-    private readonly Dictionary<long, object> handleToObject = [];
+    private readonly Dictionary<long, object> _handleToObject = [];
 
-    private readonly Dictionary<object, SourceInfo> sourceInfo = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, SourceInfo> _sourceInfo = [with(ReferenceEqualityComparer.Instance)];
 
-    private long nextHandle = 1;
+    private long _nextHandle = 1;
 
-    private int currentDocument;
+    private int _currentDocument;
 
-    private readonly Dictionary<int, HashSet<object>> documents = [];
+    private readonly Dictionary<int, HashSet<object>> _documents = [];
 
-    private readonly Dictionary<object, HashSet<int>> owners = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, HashSet<int>> _owners = [with(ReferenceEqualityComparer.Instance)];
 
     public IDisposable EnterDocument(int documentId)
     {
-        int previous = currentDocument;
-        currentDocument = documentId;
+        int previous = _currentDocument;
+        _currentDocument = documentId;
 
-        return new DocumentScope(() => currentDocument = previous);
+        return new DocumentScope(() => _currentDocument = previous);
     }
 
     public int GetDocumentId(object value)
     {
-        return owners.TryGetValue(value, out var ids) ? ids.FirstOrDefault() : 0;
+        return _owners.TryGetValue(value, out var ids) ? ids.FirstOrDefault() : 0;
     }
 
     public void Track(object value)
     {
-        if (currentDocument == 0)
+        if (_currentDocument == 0)
         {
             return;
         }
 
-        if (!documents.TryGetValue(currentDocument, out var objects))
+        if (!_documents.TryGetValue(_currentDocument, out var objects))
         {
-            documents[currentDocument] = objects = [with(ReferenceEqualityComparer.Instance)];
+            _documents[_currentDocument] = objects = [with(ReferenceEqualityComparer.Instance)];
         }
 
         objects.Add(value);
 
-        if (!owners.TryGetValue(value, out var ids))
+        if (!_owners.TryGetValue(value, out var ids))
         {
-            owners[value] = ids = [];
+            _owners[value] = ids = [];
         }
 
-        ids.Add(currentDocument);
+        ids.Add(_currentDocument);
     }
 
     public HashSet<object> ReleaseDocument(int documentId)
     {
         var released = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        if (!documents.Remove(documentId, out var objects))
+        if (!_documents.Remove(documentId, out var objects))
         {
             return released;
         }
 
         foreach (object value in objects)
         {
-            if (!owners.TryGetValue(value, out var ids))
+            if (!_owners.TryGetValue(value, out var ids))
             {
                 continue;
             }
@@ -84,7 +84,7 @@ internal sealed partial class ObjectIdentityRegistry
                 continue;
             }
 
-            owners.Remove(value);
+            _owners.Remove(value);
             RemoveObject(value);
             released.Add(value);
         }
@@ -94,13 +94,13 @@ internal sealed partial class ObjectIdentityRegistry
 
     public void Clear()
     {
-        objectToHandle.Clear();
-        handleToObject.Clear();
-        sourceInfo.Clear();
+        _objectToHandle.Clear();
+        _handleToObject.Clear();
+        _sourceInfo.Clear();
 
-        documents.Clear();
-        owners.Clear();
-        currentDocument = 0;
+        _documents.Clear();
+        _owners.Clear();
+        _currentDocument = 0;
         // Never reuse a handle that the frontend may still have cached.
 
     }
@@ -111,19 +111,19 @@ internal sealed partial class ObjectIdentityRegistry
 
         Track(value);
 
-        if (objectToHandle.TryGetValue(value, out long handle))
+        if (_objectToHandle.TryGetValue(value, out long handle))
         {
             return handle;
         }
 
-        while (handleToObject.ContainsKey(nextHandle))
+        while (_handleToObject.ContainsKey(_nextHandle))
         {
-            nextHandle++;
+            _nextHandle++;
         }
 
-        handle = nextHandle++;
-        objectToHandle.Add(value, handle);
-        handleToObject.Add(handle, value);
+        handle = _nextHandle++;
+        _objectToHandle.Add(value, handle);
+        _handleToObject.Add(handle, value);
 
         return handle;
     }
@@ -136,22 +136,22 @@ internal sealed partial class ObjectIdentityRegistry
 
         ArgumentOutOfRangeException.ThrowIfZero(handle);
 
-        if (handleToObject.TryGetValue(handle, out object? oldValue) && !ReferenceEquals(oldValue, value))
+        if (_handleToObject.TryGetValue(handle, out object? oldValue) && !ReferenceEquals(oldValue, value))
         {
             RemoveObject(oldValue);
         }
 
-        if (objectToHandle.TryGetValue(value, out long oldHandle) && oldHandle != handle)
+        if (_objectToHandle.TryGetValue(value, out long oldHandle) && oldHandle != handle)
         {
-            handleToObject.Remove(oldHandle);
+            _handleToObject.Remove(oldHandle);
         }
 
-        objectToHandle[value] = handle;
-        handleToObject[handle] = value;
+        _objectToHandle[value] = handle;
+        _handleToObject[handle] = value;
 
-        if (handle >= nextHandle)
+        if (handle >= _nextHandle)
         {
-            nextHandle = handle + 1;
+            _nextHandle = handle + 1;
         }
     }
 
@@ -159,7 +159,7 @@ internal sealed partial class ObjectIdentityRegistry
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(info);
-        sourceInfo[value] = CloneSourceInfo(info);
+        _sourceInfo[value] = CloneSourceInfo(info);
         Track(value);
     }
 
@@ -167,7 +167,7 @@ internal sealed partial class ObjectIdentityRegistry
     {
         ArgumentNullException.ThrowIfNull(value);
         Track(value);
-        sourceInfo[value] = new SourceInfo
+        _sourceInfo[value] = new SourceInfo
         {
             MarkupHandle = markupHandle,
             ChangeVersion = changeVersion,
@@ -176,22 +176,22 @@ internal sealed partial class ObjectIdentityRegistry
 
     public SourceInfo? GetSourceInfo(object value)
     {
-        return sourceInfo.TryGetValue(value, out SourceInfo? info) ? CloneSourceInfo(info) : null;
+        return _sourceInfo.TryGetValue(value, out SourceInfo? info) ? CloneSourceInfo(info) : null;
     }
 
     public bool TryGetObject(long handle, out object? value)
     {
-        return handleToObject.TryGetValue(handle, out value);
+        return _handleToObject.TryGetValue(handle, out value);
     }
 
     public bool TryGetHandle(object value, out long handle)
     {
-        return objectToHandle.TryGetValue(value, out handle);
+        return _objectToHandle.TryGetValue(value, out handle);
     }
 
     public void RemoveHandle(long handle)
     {
-        if (handleToObject.TryGetValue(handle, out object? value))
+        if (_handleToObject.TryGetValue(handle, out object? value))
         {
             RemoveObject(value);
         }
@@ -199,18 +199,18 @@ internal sealed partial class ObjectIdentityRegistry
 
     public void RemoveObject(object value)
     {
-        if (objectToHandle.Remove(value, out long handle))
+        if (_objectToHandle.Remove(value, out long handle))
         {
-            handleToObject.Remove(handle);
+            _handleToObject.Remove(handle);
         }
 
-        sourceInfo.Remove(value);
+        _sourceInfo.Remove(value);
 
-        if (owners.Remove(value, out var ids))
+        if (_owners.Remove(value, out var ids))
         {
             foreach (int id in ids)
             {
-                if (documents.TryGetValue(id, out var objects))
+                if (_documents.TryGetValue(id, out var objects))
                 {
                     objects.Remove(value);
                 }

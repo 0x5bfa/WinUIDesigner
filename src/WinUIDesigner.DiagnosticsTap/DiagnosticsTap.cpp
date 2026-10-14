@@ -208,12 +208,12 @@ namespace
 
         ULONG STDMETHODCALLTYPE AddRef() override
         {
-            return ++referenceCount_;
+            return ++_referenceCount;
         }
 
         ULONG STDMETHODCALLTYPE Release() override
         {
-            const ULONG count = --referenceCount_;
+            const ULONG count = --_referenceCount;
             if (count == 0)
             {
                 delete this;
@@ -273,7 +273,7 @@ namespace
         }
 
     private:
-        std::atomic<ULONG> referenceCount_{ 1 };
+        std::atomic<ULONG> _referenceCount{ 1 };
     };
 
     class DiagnosticsTapFactory final : public IClassFactory
@@ -299,12 +299,12 @@ namespace
 
         ULONG STDMETHODCALLTYPE AddRef() override
         {
-            return ++referenceCount_;
+            return ++_referenceCount;
         }
 
         ULONG STDMETHODCALLTYPE Release() override
         {
-            const ULONG count = --referenceCount_;
+            const ULONG count = --_referenceCount;
             if (count == 0)
             {
                 delete this;
@@ -338,7 +338,7 @@ namespace
         }
 
     private:
-        std::atomic<ULONG> referenceCount_{ 1 };
+        std::atomic<ULONG> _referenceCount{ 1 };
     };
 }
 

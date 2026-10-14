@@ -17,21 +17,21 @@ internal sealed partial class WinUIIsolatedImageHost
     /// </summary>
     private sealed class WinUIHwndHost(WinUIIsolatedImageHost host) : IsolatedHwndHost(host)
     {
-        private readonly WinUIIsolatedImageHost imageHost = host;
-        private int parentHwnd;
-        private readonly int surfaceDocumentId = host.SurfaceDocument.DocumentId;
-        private int mutationObserverRegistrationId;
-        private System.Windows.Controls.Canvas? inputBridgeRoot;
-        private System.Windows.UIElement? inputBridgeAdornerLayer;
+        private readonly WinUIIsolatedImageHost _imageHost = host;
+        private int _parentHwnd;
+        private readonly int _surfaceDocumentId = host.SurfaceDocument.DocumentId;
+        private int _mutationObserverRegistrationId;
+        private System.Windows.Controls.Canvas? _inputBridgeRoot;
+        private System.Windows.UIElement? _inputBridgeAdornerLayer;
 
         protected override HandleRef BuildWindowCore(HandleRef hwndParent)
         {
             HandleRef handle = base.BuildWindowCore(hwndParent);
 
-            if (inputBridgeRoot is null && ExtensibilityLayerHwndSource?.HwndSource?.RootVisual is System.Windows.Controls.Canvas root)
+            if (_inputBridgeRoot is null && ExtensibilityLayerHwndSource?.HwndSource?.RootVisual is System.Windows.Controls.Canvas root)
             {
-                inputBridgeRoot = root;
-                inputBridgeAdornerLayer = root.Children.Count == 1 ? root.Children[0] : null;
+                _inputBridgeRoot = root;
+                _inputBridgeAdornerLayer = root.Children.Count == 1 ? root.Children[0] : null;
 
                 // The child HwndSource used by the VS designer is per-pixel transparent.
                 // A fully transparent root is skipped by Win32 hit testing, so mouse input
@@ -71,10 +71,10 @@ internal sealed partial class WinUIIsolatedImageHost
                     handledEventsToo: true);
 
                 WinUIDesignerLogger.LogTrace(
-                    "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
+                    "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={_inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
 
                 WinUIDesignerLogger.LogTrace(
-                    "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
+                    "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={_inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
             }
 
             return handle;
@@ -95,13 +95,13 @@ internal sealed partial class WinUIIsolatedImageHost
 
         protected override void DestroyWindowCore(HandleRef hwnd)
         {
-            if (mutationObserverRegistrationId != 0 && Host.Pipeline is InstanceBuilderPipeline pipeline)
+            if (_mutationObserverRegistrationId != 0 && Host.Pipeline is InstanceBuilderPipeline pipeline)
             {
-                pipeline.ProtocolHandler.UnregisterMessageObserver(mutationObserverRegistrationId);
-                mutationObserverRegistrationId = 0;
+                pipeline.ProtocolHandler.UnregisterMessageObserver(_mutationObserverRegistrationId);
+                _mutationObserverRegistrationId = 0;
             }
 
-            if (inputBridgeRoot is { } root)
+            if (_inputBridgeRoot is { } root)
             {
                 root.RemoveHandler(
                     System.Windows.Input.Mouse.PreviewMouseDownEvent,
@@ -126,8 +126,8 @@ internal sealed partial class WinUIIsolatedImageHost
                     new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor));
 
                 root.Background = null;
-                inputBridgeAdornerLayer = null;
-                inputBridgeRoot = null;
+                _inputBridgeAdornerLayer = null;
+                _inputBridgeRoot = null;
             }
 
             base.DestroyWindowCore(hwnd);
@@ -135,21 +135,21 @@ internal sealed partial class WinUIIsolatedImageHost
 
         protected override void InitializeSurfaceHwnd(IntPtr parentHwnd)
         {
-            this.parentHwnd = parentHwnd.ToInt32();
+            this._parentHwnd = parentHwnd.ToInt32();
 
             WinUIDesignerLogger.LogTrace(
-                "Platform", $"WinUI artboard HWND initialized: parent=0x{parentHwnd.ToInt64():X}, document={surfaceDocumentId}.");
+                "Platform", $"WinUI artboard HWND initialized: parent=0x{parentHwnd.ToInt64():X}, document={_surfaceDocumentId}.");
         }
 
         protected override void ResizeSurfaceHwnd(int width, int height)
         {
             if (Host.Pipeline is InstanceBuilderPipeline pipeline)
             {
-                if (mutationObserverRegistrationId == 0)
+                if (_mutationObserverRegistrationId == 0)
                 {
                     // Apply WinUI surface mutations to the Visual Studio live tree so
                     // selection and hit testing use the current runtime visual hierarchy.
-                    mutationObserverRegistrationId = pipeline.ProtocolHandler.RegisterMessageObserver<MutationList>((int)DesignerMessageId.VisualTreeMutations, mutations =>
+                    _mutationObserverRegistrationId = pipeline.ProtocolHandler.RegisterMessageObserver<MutationList>((int)DesignerMessageId.VisualTreeMutations, mutations =>
                     {
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
@@ -163,7 +163,7 @@ internal sealed partial class WinUIIsolatedImageHost
                                 $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
 
 #if DEBUG
-                            imageHost.ScheduleGeometryDiagnostic();
+                            _imageHost.ScheduleGeometryDiagnostic();
 #endif
                         }));
                     });
@@ -172,14 +172,14 @@ internal sealed partial class WinUIIsolatedImageHost
                 // This is the same as WPF
                 pipeline.ProtocolHandler.PostMessage((int)DesignerMessageId.SetSurfacePosition, new SetSurfacePositionRequestInfo()
                 {
-                    DocumentId = surfaceDocumentId,
-                    ParentWindow = parentHwnd,
+                    DocumentId = _surfaceDocumentId,
+                    ParentWindow = _parentHwnd,
                     Width = width,
                     Height = height,
                 });
 
                 WinUIDesignerLogger.LogTrace(
-                    "Platform", $"SetSurfacePosition ({(int)DesignerMessageId.SetSurfacePosition}) posted: document={surfaceDocumentId}, parent=0x{parentHwnd:X}, size={width}x{height}.");
+                    "Platform", $"SetSurfacePosition ({(int)DesignerMessageId.SetSurfacePosition}) posted: document={_surfaceDocumentId}, parent=0x{_parentHwnd:X}, size={width}x{height}.");
             }
         }
 
@@ -187,21 +187,21 @@ internal sealed partial class WinUIIsolatedImageHost
         {
             // Events from real adorner children already belong to the VS designer;
             // bridge only the blank overlay events that otherwise have no WPF target.
-            return inputBridgeRoot is not null &&
-                (ReferenceEquals(args.OriginalSource, inputBridgeRoot) || ReferenceEquals(args.OriginalSource, inputBridgeAdornerLayer));
+            return _inputBridgeRoot is not null &&
+                (ReferenceEquals(args.OriginalSource, _inputBridgeRoot) || ReferenceEquals(args.OriginalSource, _inputBridgeAdornerLayer));
         }
 
         private void InputBridge_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs args)
         {
-            imageHost.SceneView.WritePointerDiagnostic("Input bridge MouseDown", args);
+            _imageHost.SceneView.WritePointerDiagnostic("Input bridge MouseDown", args);
 
             WinUIDesignerLogger.LogTrace(
                 "Platform", $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, forward={ShouldForwardInput(args)}.");
             WinUIDesignerLogger.LogTrace(
                 "Platform",
                 $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, " +
-                $"forward={ShouldForwardInput(args)}, activeTool={imageHost.SceneView.DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
-                $"activeBehavior={imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+                $"forward={ShouldForwardInput(args)}, activeTool={_imageHost.SceneView.DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
+                $"activeBehavior={_imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
 
             if (!ShouldForwardInput(args))
             {
@@ -211,14 +211,14 @@ internal sealed partial class WinUIIsolatedImageHost
             var forwarded = new System.Windows.Input.MouseButtonEventArgs(args.MouseDevice, args.Timestamp, args.ChangedButton, args.StylusDevice)
             {
                 RoutedEvent = System.Windows.Input.Mouse.MouseDownEvent,
-                Source = imageHost.SceneView.Artboard,
+                Source = _imageHost.SceneView.Artboard,
             };
 
-            imageHost.SceneView.Artboard.RaiseEvent(forwarded);
+            _imageHost.SceneView.Artboard.RaiseEvent(forwarded);
 
             WinUIDesignerLogger.LogTrace("Platform",
                 $"Input bridge MouseDown forwarded: handled={forwarded.Handled}, " +
-                $"activeBehavior={imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+                $"activeBehavior={_imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
 
             args.Handled = forwarded.Handled;
         }
@@ -229,7 +229,7 @@ internal sealed partial class WinUIIsolatedImageHost
             // forwarded initial MouseDown. Once capture is anywhere inside the Artboard,
             // WPF already routes the physical move/up stream through the designer. Forwarding
             // the overlay event as well makes relocate/resize process every drag update twice.
-            if (ShouldForwardInput(args) && !imageHost.SceneView.Artboard.IsMouseCaptureWithin)
+            if (ShouldForwardInput(args) && !_imageHost.SceneView.Artboard.IsMouseCaptureWithin)
             {
                 ForwardMouseEvent(args, System.Windows.Input.Mouse.MouseMoveEvent);
             }
@@ -237,7 +237,7 @@ internal sealed partial class WinUIIsolatedImageHost
 
         private void InputBridge_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs args)
         {
-            if (!ShouldForwardInput(args) || imageHost.SceneView.Artboard.IsMouseCaptureWithin)
+            if (!ShouldForwardInput(args) || _imageHost.SceneView.Artboard.IsMouseCaptureWithin)
             {
                 return;
             }
@@ -245,10 +245,10 @@ internal sealed partial class WinUIIsolatedImageHost
             var forwarded = new System.Windows.Input.MouseButtonEventArgs(args.MouseDevice, args.Timestamp, args.ChangedButton, args.StylusDevice)
             {
                 RoutedEvent = System.Windows.Input.Mouse.MouseUpEvent,
-                Source = imageHost.SceneView.Artboard,
+                Source = _imageHost.SceneView.Artboard,
             };
 
-            imageHost.SceneView.Artboard.RaiseEvent(forwarded);
+            _imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Handled = forwarded.Handled;
         }
 
@@ -278,10 +278,10 @@ internal sealed partial class WinUIIsolatedImageHost
             var forwarded = new System.Windows.Input.MouseWheelEventArgs(args.MouseDevice, args.Timestamp, args.Delta)
             {
                 RoutedEvent = System.Windows.Input.Mouse.MouseWheelEvent,
-                Source = imageHost.SceneView.Artboard,
+                Source = _imageHost.SceneView.Artboard,
             };
 
-            imageHost.SceneView.Artboard.RaiseEvent(forwarded);
+            _imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Handled = forwarded.Handled;
         }
 
@@ -295,10 +295,10 @@ internal sealed partial class WinUIIsolatedImageHost
             var forwarded = new System.Windows.Input.QueryCursorEventArgs(args.MouseDevice, args.Timestamp)
             {
                 RoutedEvent = System.Windows.Input.Mouse.QueryCursorEvent,
-                Source = imageHost.SceneView.Artboard,
+                Source = _imageHost.SceneView.Artboard,
             };
 
-            imageHost.SceneView.Artboard.RaiseEvent(forwarded);
+            _imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Cursor = forwarded.Cursor;
             args.Handled = forwarded.Handled;
         }
@@ -308,10 +308,10 @@ internal sealed partial class WinUIIsolatedImageHost
             var forwarded = new System.Windows.Input.MouseEventArgs(args.MouseDevice, args.Timestamp, args.StylusDevice)
             {
                 RoutedEvent = routedEvent,
-                Source = imageHost.SceneView.Artboard,
+                Source = _imageHost.SceneView.Artboard,
             };
 
-            imageHost.SceneView.Artboard.RaiseEvent(forwarded);
+            _imageHost.SceneView.Artboard.RaiseEvent(forwarded);
             args.Handled = forwarded.Handled;
         }
     }

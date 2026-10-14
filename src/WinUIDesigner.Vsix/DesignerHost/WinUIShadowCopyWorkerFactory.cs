@@ -17,7 +17,7 @@ internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
 {
     // Microsoft.WindowsAppSDK 2.5.1 resolves to this Microsoft.WinUI.dll version.
     // The assembly is bundled inside WinUISurface.exe for VSIX single-file deployment.
-    private const string VerifiedWinUIRuntimeFileVersion = "3.0.0.2609";
+    private const string _VerifiedWinUIRuntimeFileVersion = "3.0.0.2609";
 
     public IHostShadowCopyWorker CreateWorker(SurfaceProcessInfo surfaceProcessInfo, IHostProject hostProject, IHostTelemetryService hostTelemetryService, IEnumerable<string> controlAssembliesForShadowCopy)
     {
@@ -52,9 +52,9 @@ internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
         {
             var actual = FileVersionInfo.GetVersionInfo(projectWinUI).FileVersion;
 
-            if (!string.Equals(VerifiedWinUIRuntimeFileVersion, actual, StringComparison.Ordinal))
+            if (!string.Equals(_VerifiedWinUIRuntimeFileVersion, actual, StringComparison.Ordinal))
             {
-                throw new NotSupportedException($"WinUI Designer requires Windows App SDK 2.5.1 (Microsoft.WinUI.dll {VerifiedWinUIRuntimeFileVersion}). Runtime: {actual}");
+                throw new NotSupportedException($"WinUI Designer requires Windows App SDK 2.5.1 (Microsoft.WinUI.dll {_VerifiedWinUIRuntimeFileVersion}). Runtime: {actual}");
             }
         }
 

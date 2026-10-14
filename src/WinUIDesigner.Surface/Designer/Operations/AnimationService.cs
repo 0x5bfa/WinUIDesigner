@@ -21,33 +21,33 @@ namespace WinUIDesigner.Surface.Designer.Operations;
 /// </summary>
 internal sealed partial class AnimationService : IDisposable
 {
-    private readonly ProtocolHandler protocolHandler;
-    private readonly DispatcherQueue dispatcherQueue;
-    private readonly ObjectIdentityRegistry objectIdentity;
-    private readonly int visualStateRegistrationId;
-    private readonly int storyboardRegistrationId;
-    private Storyboard? activeStoryboard;
+    private readonly ProtocolHandler _protocolHandler;
+    private readonly DispatcherQueue _dispatcherQueue;
+    private readonly ObjectIdentityRegistry _objectIdentity;
+    private readonly int _visualStateRegistrationId;
+    private readonly int _storyboardRegistrationId;
+    private Storyboard? _activeStoryboard;
 
     public AnimationService(
         ProtocolHandler protocolHandler,
         DispatcherQueue dispatcherQueue,
         ObjectIdentityRegistry objectIdentity)
     {
-        this.protocolHandler = protocolHandler;
-        this.dispatcherQueue = dispatcherQueue;
-        this.objectIdentity = objectIdentity;
-        visualStateRegistrationId = protocolHandler.RegisterMessageObserver<GoToStateRequest, ResponseWithError>((int)DesignerMessageId.GoToState, HandleGoToState);
-        storyboardRegistrationId = protocolHandler.RegisterMessageObserver<StoryboardRequest, ResponseWithError>((int)DesignerMessageId.Storyboard, HandleStoryboardAction);
+        this._protocolHandler = protocolHandler;
+        this._dispatcherQueue = dispatcherQueue;
+        this._objectIdentity = objectIdentity;
+        _visualStateRegistrationId = protocolHandler.RegisterMessageObserver<GoToStateRequest, ResponseWithError>((int)DesignerMessageId.GoToState, HandleGoToState);
+        _storyboardRegistrationId = protocolHandler.RegisterMessageObserver<StoryboardRequest, ResponseWithError>((int)DesignerMessageId.Storyboard, HandleStoryboardAction);
     }
 
     private ResponseWithError HandleGoToState(GoToStateRequest request)
     {
-        if (!dispatcherQueue.HasThreadAccess)
+        if (!_dispatcherQueue.HasThreadAccess)
         {
             return InvokeOnDispatcher(() => HandleGoToState(request));
         }
 
-        if (!objectIdentity.TryGetObject(request.RootHandle, out object? rootObject) || rootObject is not FrameworkElement root)
+        if (!_objectIdentity.TryGetObject(request.RootHandle, out object? rootObject) || rootObject is not FrameworkElement root)
         {
             return Failure($"Unable to find VisualState root handle {request.RootHandle}.");
         }
@@ -85,12 +85,12 @@ internal sealed partial class AnimationService : IDisposable
 
     private ResponseWithError HandleStoryboardAction(StoryboardRequest request)
     {
-        if (!dispatcherQueue.HasThreadAccess)
+        if (!_dispatcherQueue.HasThreadAccess)
         {
             return InvokeOnDispatcher(() => HandleStoryboardAction(request));
         }
 
-        if (!objectIdentity.TryGetObject(request.ObjectHandle, out object? storyboardObject) || storyboardObject is not Storyboard storyboard)
+        if (!_objectIdentity.TryGetObject(request.ObjectHandle, out object? storyboardObject) || storyboardObject is not Storyboard storyboard)
         {
             return Failure($"Unable to find Storyboard handle {request.ObjectHandle}.");
         }
@@ -121,7 +121,7 @@ internal sealed partial class AnimationService : IDisposable
                         }
                         break;
                     case 5:
-                        activeStoryboard = storyboard;
+                        _activeStoryboard = storyboard;
                         break;
                 }
             }
@@ -142,7 +142,7 @@ internal sealed partial class AnimationService : IDisposable
     {
         try
         {
-            return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken);
+            return DispatcherOperation.Invoke(_dispatcherQueue, callback, _protocolHandler.CancellationToken);
         }
         catch (Exception ex)
         {
@@ -159,7 +159,7 @@ internal sealed partial class AnimationService : IDisposable
 
     public void Dispose()
     {
-        protocolHandler.UnregisterMessageObserver(visualStateRegistrationId);
-        protocolHandler.UnregisterMessageObserver(storyboardRegistrationId);
+        _protocolHandler.UnregisterMessageObserver(_visualStateRegistrationId);
+        _protocolHandler.UnregisterMessageObserver(_storyboardRegistrationId);
     }
 }

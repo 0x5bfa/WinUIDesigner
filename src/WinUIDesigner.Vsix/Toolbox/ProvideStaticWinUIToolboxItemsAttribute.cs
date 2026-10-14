@@ -12,11 +12,11 @@ namespace WinUIDesigner.Toolbox;
 [AttributeUsage(AttributeTargets.Class)]
 internal sealed class ProvideStaticWinUIToolboxItemsAttribute : ProvideStaticXamlToolboxItemsAttribute
 {
-    private const string assemblyName = "Microsoft.WinUI, Version=3.0.0.0, Culture=neutral, PublicKeyToken=de31ebe4ad15742b";
-    private static readonly IEnumerable<PlatformName> anyWindows = [PlatformNames.CurrentWindows];
+    private const string _assemblyName = "Microsoft.WinUI, Version=3.0.0.0, Culture=neutral, PublicKeyToken=de31ebe4ad15742b";
+    private static readonly IEnumerable<PlatformName> _anyWindows = [PlatformNames.CurrentWindows];
 
     // Keep this explicit list in sync with the public, constructible WinUI projection types.
-    private static readonly ToolboxItemData[] toolboxItems =
+    private static readonly ToolboxItemData[] _toolboxItems =
     [
         CreateToolboxItemData(false, "Microsoft.UI.Xaml.Controls.AnimatedIcon"),
         CreateToolboxItemData(false, "Microsoft.UI.Xaml.Controls.AnimatedVisualPlayer"),
@@ -165,30 +165,30 @@ internal sealed class ProvideStaticWinUIToolboxItemsAttribute : ProvideStaticXam
 
     public override string AllControlsGroupId => "WindowsUIXaml Controls";
 
-    public override IEnumerable<ToolboxItemData> ToolboxItems => toolboxItems;
+    public override IEnumerable<ToolboxItemData> ToolboxItems => _toolboxItems;
 
     public override bool TargetPlatformSupported => true;
 
     internal const string ClipboardFormatName = "CF_WINDOWSUIXAML_TOOL";
 
-    internal static string AssemblyIdentity => assemblyName;
+    internal static string AssemblyIdentity => _assemblyName;
 
     internal static IReadOnlyList<string> TypeNames { get; } = Array.AsReadOnly(
-        toolboxItems.Select(item => item.NamespaceQualifiedTypeName).ToArray());
+        _toolboxItems.Select(item => item.NamespaceQualifiedTypeName).ToArray());
 
     internal static string GetItemId(string typeName)
     {
-        return Assembly.CreateQualifiedName(assemblyName, typeName);
+        return Assembly.CreateQualifiedName(_assemblyName, typeName);
     }
 
     private static ToolboxItemData CreateToolboxItemData(bool isCommon, string typeName)
     {
-        return CreateToolboxItemData(isCommon, typeName, anyWindows);
+        return CreateToolboxItemData(isCommon, typeName, _anyWindows);
     }
 
     private static ToolboxItemData CreateToolboxItemData(bool isCommon, string typeName, IEnumerable<PlatformName> targetPlatforms)
     {
-        string assemblyQualifiedTypeName = Assembly.CreateQualifiedName(assemblyName, typeName);
+        string assemblyQualifiedTypeName = Assembly.CreateQualifiedName(_assemblyName, typeName);
         return new ToolboxItemData(isCommon, assemblyQualifiedTypeName, null, targetPlatforms);
     }
 }

@@ -30,67 +30,67 @@ namespace WinUIDesigner.Surface.Designer.Surface;
 /// </summary>
 internal sealed partial class SurfaceService : IDisposable
 {
-    private const int FreezeCompositionTimeoutMilliseconds = 200;
-    private static readonly Size DefaultSurfaceSize = new(800, 600);
-    private const string XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
-    private const string BlendDesignNamespace = "http://schemas.microsoft.com/expression/blend/2008";
-    private const string XSurfUwpNamespace = "using:XSurfUwp";
+    private const int _FreezeCompositionTimeoutMilliseconds = 200;
+    private static readonly Size _DefaultSurfaceSize = new(800, 600);
+    private const string _XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
+    private const string _BlendDesignNamespace = "http://schemas.microsoft.com/expression/blend/2008";
+    private const string _XSurfUwpNamespace = "using:XSurfUwp";
 
-    private readonly ProtocolHandler protocolHandler;
-    private readonly DispatcherQueue dispatcherQueue;
-    private readonly ObjectIdentityRegistry objectIdentity;
-    private readonly Dictionary<int, DesignerSurface> surfaces = [];
-    private readonly SemaphoreSlim constructionGate = new(1, 1);
-    private readonly Dictionary<int, ResourceDictionary> resourceDocuments = [];
-    private readonly Dictionary<int, HashSet<int>> documentResources = [];
+    private readonly ProtocolHandler _protocolHandler;
+    private readonly DispatcherQueue _dispatcherQueue;
+    private readonly ObjectIdentityRegistry _objectIdentity;
+    private readonly Dictionary<int, DesignerSurface> _surfaces = [];
+    private readonly SemaphoreSlim _constructionGate = new(1, 1);
+    private readonly Dictionary<int, ResourceDictionary> _resourceDocuments = [];
+    private readonly Dictionary<int, HashSet<int>> _documentResources = [];
     // Application and design-time resource dictionaries outlive individual target surfaces.
-    private readonly HashSet<int> sharedResourceDocuments = [];
-    private readonly Dictionary<int, SurfaceBoundsSnapshot> publishedSurfaceBounds = [];
-    private readonly List<int> registrationIds = [];
-    private readonly VisualTreeService visualTreeService;
-    private readonly HitTestService hitTestService;
-    private readonly SnapLineService snapLineService;
-    private readonly PropertyService propertyService;
-    private readonly XamlActionService xamlActionService;
-    private readonly AnimationService animationService;
-    private ResourceDictionary? xamlControlsResources;
-    private int? applicationResourceDocumentId;
-    private int? designTimeResourceDocumentId;
-    private bool hasXamlControlsResources;
-    private ElementTheme appRequestedTheme = ElementTheme.Default;
+    private readonly HashSet<int> _sharedResourceDocuments = [];
+    private readonly Dictionary<int, SurfaceBoundsSnapshot> _publishedSurfaceBounds = [];
+    private readonly List<int> _registrationIds = [];
+    private readonly VisualTreeService _visualTreeService;
+    private readonly HitTestService _hitTestService;
+    private readonly SnapLineService _snapLineService;
+    private readonly PropertyService _propertyService;
+    private readonly XamlActionService _xamlActionService;
+    private readonly AnimationService _animationService;
+    private ResourceDictionary? _xamlControlsResources;
+    private int? _applicationResourceDocumentId;
+    private int? _designTimeResourceDocumentId;
+    private bool _hasXamlControlsResources;
+    private ElementTheme _appRequestedTheme = ElementTheme.Default;
 
     public SurfaceService(
         ProtocolHandler protocolHandler,
         DispatcherQueue dispatcherQueue,
         ObjectIdentityRegistry objectIdentity)
     {
-        this.protocolHandler = protocolHandler;
-        this.dispatcherQueue = dispatcherQueue;
-        this.objectIdentity = objectIdentity;
-        visualTreeService = new(protocolHandler, objectIdentity);
+        this._protocolHandler = protocolHandler;
+        this._dispatcherQueue = dispatcherQueue;
+        this._objectIdentity = objectIdentity;
+        _visualTreeService = new(protocolHandler, objectIdentity);
 
         // These numeric message IDs are the shared VS designer wire contract; the
         // matching request/response types come from the private VS contract assembly.
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>((int)DesignerMessageId.CreateSurface, HandleCreateSurfaceAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CloseDocumentRequestInfo, ResponseWithError>((int)DesignerMessageId.CloseDocument, HandleCloseDocumentAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetPanZoomTransformRequestInfo, ResponseWithError>((int)DesignerMessageId.SetPanZoomTransform, HandleSetPanZoomTransformAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetArtboardColorsRequestInfo, ResponseWithError>((int)DesignerMessageId.SetArtboardColors, HandleSetArtboardColorsAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetDeviceSizeRequestInfo, ResponseWithError>((int)DesignerMessageId.SetDeviceSize, HandleSetDeviceSizeAsync));
-        registrationIds.Add(protocolHandler.RegisterMessageObserver<SetFreezeStateInfo>((int)DesignerMessageId.SetFreezeState, HandleSetFreezeState));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetSurfacePositionRequestInfo, ResponseWithError>((int)DesignerMessageId.SetSurfacePosition, HandleSetSurfacePositionAsync));
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>((int)DesignerMessageId.CreateSurface, HandleCreateSurfaceAsync));
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CloseDocumentRequestInfo, ResponseWithError>((int)DesignerMessageId.CloseDocument, HandleCloseDocumentAsync));
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetPanZoomTransformRequestInfo, ResponseWithError>((int)DesignerMessageId.SetPanZoomTransform, HandleSetPanZoomTransformAsync));
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetArtboardColorsRequestInfo, ResponseWithError>((int)DesignerMessageId.SetArtboardColors, HandleSetArtboardColorsAsync));
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetDeviceSizeRequestInfo, ResponseWithError>((int)DesignerMessageId.SetDeviceSize, HandleSetDeviceSizeAsync));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<SetFreezeStateInfo>((int)DesignerMessageId.SetFreezeState, HandleSetFreezeState));
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetSurfacePositionRequestInfo, ResponseWithError>((int)DesignerMessageId.SetSurfacePosition, HandleSetSurfacePositionAsync));
 
-        hitTestService = new HitTestService(protocolHandler, dispatcherQueue, objectIdentity);
-        snapLineService = new SnapLineService(protocolHandler, dispatcherQueue, objectIdentity);
-        xamlActionService = new XamlActionService(protocolHandler, dispatcherQueue, objectIdentity, this);
-        propertyService = new PropertyService(protocolHandler, dispatcherQueue, objectIdentity, xamlActionService);
-        animationService = new AnimationService(protocolHandler, dispatcherQueue, objectIdentity);
+        _hitTestService = new HitTestService(protocolHandler, dispatcherQueue, objectIdentity);
+        _snapLineService = new SnapLineService(protocolHandler, dispatcherQueue, objectIdentity);
+        _xamlActionService = new XamlActionService(protocolHandler, dispatcherQueue, objectIdentity, this);
+        _propertyService = new PropertyService(protocolHandler, dispatcherQueue, objectIdentity, _xamlActionService);
+        _animationService = new AnimationService(protocolHandler, dispatcherQueue, objectIdentity);
     }
 
     private async Task<CreateSurfaceResponseInfo> HandleCreateSurfaceAsync(CreateSurfaceRequestInfo requestInfo)
     {
         try
         {
-            if (!await constructionGate.WaitAsync(TimeSpan.FromSeconds(30), protocolHandler.CancellationToken).ConfigureAwait(false))
+            if (!await _constructionGate.WaitAsync(TimeSpan.FromSeconds(30), _protocolHandler.CancellationToken).ConfigureAwait(false))
             {
                 throw new TimeoutException("Another document construction did not finish within 30 seconds.");
             }
@@ -105,7 +105,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
         finally
         {
-            constructionGate.Release();
+            _constructionGate.Release();
         }
     }
 
@@ -143,7 +143,7 @@ internal sealed partial class SurfaceService : IDisposable
                 foreach (CreateDocumentInfo resourceDocument in resourceDocumentsToBuild)
                 {
                     InvalidateResourceDocument(resourceDocument.DocumentId);
-                    xamlActionService.ReleaseDocument(resourceDocument.DocumentId);
+                    _xamlActionService.ReleaseDocument(resourceDocument.DocumentId);
                     TrackResourceDocument(document.DocumentId, resourceDocument.DocumentId);
                 }
 
@@ -163,12 +163,12 @@ internal sealed partial class SurfaceService : IDisposable
                         _ => throw new InvalidOperationException("The resource document did not construct a ResourceDictionary."),
                     };
                     AddResourceDocumentDictionary(resourceDocument.DocumentId, dictionary, requestInfo);
-                    resourceDocuments.Add(resourceDocument.DocumentId, dictionary);
-                    sharedResourceDocuments.Add(resourceDocument.DocumentId);
+                    _resourceDocuments.Add(resourceDocument.DocumentId, dictionary);
+                    _sharedResourceDocuments.Add(resourceDocument.DocumentId);
 
                     if (requestInfo.DesignTimeResources?.DocumentId == resourceDocument.DocumentId)
                     {
-                        designTimeResourceDocumentId = resourceDocument.DocumentId;
+                        _designTimeResourceDocumentId = resourceDocument.DocumentId;
                     }
 
                     return true;
@@ -184,11 +184,11 @@ internal sealed partial class SurfaceService : IDisposable
 
             if (ex is DocumentConstructionException constructionError)
             {
-                protocolHandler.PostMessage((int)DesignerMessageId.InstanceBuildingErrors, new InstanceBuildingErrors { DocumentId = document?.DocumentId ?? 0, Errors = constructionError.SerializedErrors });
+                _protocolHandler.PostMessage((int)DesignerMessageId.InstanceBuildingErrors, new InstanceBuildingErrors { DocumentId = document?.DocumentId ?? 0, Errors = constructionError.SerializedErrors });
             }
             else
             {
-                protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse
+                _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse
                 {
                     DocumentId = document?.DocumentId ?? 0, Message = ex.Message, CallStack = ex.ToString(), IsArtboardException = true,
                 });
@@ -215,7 +215,7 @@ internal sealed partial class SurfaceService : IDisposable
             {
                 return await InvokeOnDispatcher(() =>
                 {
-                    using var scope = objectIdentity.EnterDocument(document.DocumentId);
+                    using var scope = _objectIdentity.EnterDocument(document.DocumentId);
                     string xaml = TryReadPreparedXaml(document) ?? document.InitialXamlContent;
                     if (string.IsNullOrWhiteSpace(xaml))
                     {
@@ -224,7 +224,7 @@ internal sealed partial class SurfaceService : IDisposable
 
                     string runtimeXaml = resources ? ExtractResourceXaml(xaml) : xaml;
                     object root = XamlReader.Load(SanitizePreparedXaml(runtimeXaml));
-                    objectIdentity.Track(root);
+                    _objectIdentity.Track(root);
                     return (root, (string?)xaml);
                 }, ex => throw ex).ConfigureAwait(false);
             }
@@ -238,9 +238,9 @@ internal sealed partial class SurfaceService : IDisposable
         CreateDocumentInfo actionsDocument = document;
         if (!document.HasActions)
         {
-            actionsDocument = await protocolHandler.SendMessageAsync<CreateDocumentInfo>((int)DesignerMessageId.GetDocumentBuildingActions,
+            actionsDocument = await _protocolHandler.SendMessageAsync<CreateDocumentInfo>((int)DesignerMessageId.GetDocumentBuildingActions,
                 new GetDocumentBuildingActionsRequest { DocumentId = document.DocumentId })
-                .WaitAsync(TimeSpan.FromSeconds(30), protocolHandler.CancellationToken).ConfigureAwait(false);
+                .WaitAsync(TimeSpan.FromSeconds(30), _protocolHandler.CancellationToken).ConfigureAwait(false);
         }
 
         if (actionsDocument is null || actionsDocument.DocumentId != document.DocumentId || !actionsDocument.HasActions)
@@ -252,7 +252,7 @@ internal sealed partial class SurfaceService : IDisposable
         {
             if (!resources)
             {
-                return (xamlActionService.BuildDocument(actionsDocument), (string?)null);
+                return (_xamlActionService.BuildDocument(actionsDocument), (string?)null);
             }
             // Isolate action-built App resources from the designer's own dictionary.
 
@@ -260,7 +260,7 @@ internal sealed partial class SurfaceService : IDisposable
             Application.Current.Resources = [];
             try
             {
-                object root = xamlActionService.BuildDocument(actionsDocument);
+                object root = _xamlActionService.BuildDocument(actionsDocument);
                 return (root is Application app ? (object)app.Resources : root, (string?)null);
             }
             finally
@@ -272,8 +272,8 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void TrackResourceDocument(int documentId, int resourceId)
     {
-        if (!documentResources.TryGetValue(documentId, out var ids))
-            documentResources[documentId] = ids = [];
+        if (!_documentResources.TryGetValue(documentId, out var ids))
+            _documentResources[documentId] = ids = [];
         ids.Add(resourceId);
     }
 
@@ -306,39 +306,39 @@ internal sealed partial class SurfaceService : IDisposable
         // Keeping it in the cache would reuse its old dictionary on the next build.
         InvalidateResourceDocument(documentId);
 
-        if (documentResources.Remove(documentId, out var resourceIds))
+        if (_documentResources.Remove(documentId, out var resourceIds))
         {
             foreach (int resourceId in resourceIds)
             {
-                if (sharedResourceDocuments.Contains(resourceId))
+                if (_sharedResourceDocuments.Contains(resourceId))
                 {
                     continue;
                 }
 
-                if (documentResources.Values.Any(ids => ids.Contains(resourceId)))
+                if (_documentResources.Values.Any(ids => ids.Contains(resourceId)))
                 {
                     continue;
                 }
 
                 InvalidateResourceDocument(resourceId);
-                xamlActionService.ReleaseDocument(resourceId);
+                _xamlActionService.ReleaseDocument(resourceId);
             }
         }
-        if (surfaces.Remove(documentId, out DesignerSurface? surface))
+        if (_surfaces.Remove(documentId, out DesignerSurface? surface))
         {
-            visualTreeService.PublishMutation(surface.Content, VisualMutationType.Remove);
+            _visualTreeService.PublishMutation(surface.Content, VisualMutationType.Remove);
             surface.Dispose();
         }
-        publishedSurfaceBounds.Remove(documentId);
-        xamlActionService.ReleaseDocument(documentId);
+        _publishedSurfaceBounds.Remove(documentId);
+        _xamlActionService.ReleaseDocument(documentId);
     }
 
     private void AddResourceDocumentDictionary(int documentId, ResourceDictionary dictionary, CreateSurfaceRequestInfo requestInfo)
     {
         IList<ResourceDictionary> mergedDictionaries = Application.Current.Resources.MergedDictionaries;
         if (requestInfo.Application?.DocumentId == documentId
-            && designTimeResourceDocumentId is int designResourcesId
-            && resourceDocuments.TryGetValue(designResourcesId, out ResourceDictionary? designResources))
+            && _designTimeResourceDocumentId is int designResourcesId
+            && _resourceDocuments.TryGetValue(designResourcesId, out ResourceDictionary? designResources))
         {
             int designResourcesIndex = mergedDictionaries.IndexOf(designResources);
             if (designResourcesIndex >= 0)
@@ -353,33 +353,33 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void InvalidateResourceDocument(int resourceDocumentId)
     {
-        if (resourceDocuments.Remove(resourceDocumentId, out var dictionary))
+        if (_resourceDocuments.Remove(resourceDocumentId, out var dictionary))
         {
             Application.Current.Resources.MergedDictionaries.Remove(dictionary);
         }
 
-        sharedResourceDocuments.Remove(resourceDocumentId);
-        foreach (var ids in documentResources.Values)
+        _sharedResourceDocuments.Remove(resourceDocumentId);
+        foreach (var ids in _documentResources.Values)
         {
             ids.Remove(resourceDocumentId);
         }
 
-        if (applicationResourceDocumentId == resourceDocumentId)
+        if (_applicationResourceDocumentId == resourceDocumentId)
         {
-            applicationResourceDocumentId = null;
-            hasXamlControlsResources = false;
-            appRequestedTheme = ElementTheme.Default;
+            _applicationResourceDocumentId = null;
+            _hasXamlControlsResources = false;
+            _appRequestedTheme = ElementTheme.Default;
             LoadAppResourcesIfNeeded();
 
-            foreach (DesignerSurface surface in surfaces.Values)
+            foreach (DesignerSurface surface in _surfaces.Values)
             {
-                surface.SetRequestedTheme(appRequestedTheme);
+                surface.SetRequestedTheme(_appRequestedTheme);
             }
         }
 
-        if (designTimeResourceDocumentId == resourceDocumentId)
+        if (_designTimeResourceDocumentId == resourceDocumentId)
         {
-            designTimeResourceDocumentId = null;
+            _designTimeResourceDocumentId = null;
         }
     }
 
@@ -388,35 +388,35 @@ internal sealed partial class SurfaceService : IDisposable
         try
         {
             int documentId = requestInfo.Document?.DocumentId ?? 0;
-            using var scope = objectIdentity.EnterDocument(documentId);
+            using var scope = _objectIdentity.EnterDocument(documentId);
             FrameworkElement root = content as FrameworkElement
                 ?? throw new InvalidOperationException("The document root must be a WinUI FrameworkElement.");
             XamlRuntimeUtilities.RegisterNameScope(root);
-            var surface = new DesignerSurface(root, DefaultSurfaceSize.Width, DefaultSurfaceSize.Height);
+            var surface = new DesignerSurface(root, _DefaultSurfaceSize.Width, _DefaultSurfaceSize.Height);
             surface.BoundsInvalidated += (_, _) => PublishSurfaceBoundsIfCurrent(documentId, surface);
             surface.SurfaceLayoutUpdated += (_, _) => PublishSurfaceLayoutUpdatedIfCurrent(documentId, surface);
-            surface.DpiChanged += dpi => protocolHandler.PostMessage((int)DesignerMessageId.SurfaceDpiChanged, new SurfaceDpiChangedEvent { DocumentId = documentId, SurfaceDpi = dpi });
-            surface.SetRequestedTheme(appRequestedTheme);
-            surfaces[documentId] = surface;
+            surface.DpiChanged += dpi => _protocolHandler.PostMessage((int)DesignerMessageId.SurfaceDpiChanged, new SurfaceDpiChangedEvent { DocumentId = documentId, SurfaceDpi = dpi });
+            surface.SetRequestedTheme(_appRequestedTheme);
+            _surfaces[documentId] = surface;
 
-            visualTreeService.RegisterSourceInfo(requestInfo.Document, preparedXaml, root);
+            _visualTreeService.RegisterSourceInfo(requestInfo.Document, preparedXaml, root);
 
-            long dispatcherHandle = objectIdentity.GetHandle(dispatcherQueue);
-            long rootVisualHandle = objectIdentity.GetHandle(root);
-            visualTreeService.PublishMutation(root, VisualMutationType.Add);
+            long dispatcherHandle = _objectIdentity.GetHandle(_dispatcherQueue);
+            long rootVisualHandle = _objectIdentity.GetHandle(root);
+            _visualTreeService.PublishMutation(root, VisualMutationType.Add);
             PublishSurfaceBounds(documentId, surface);
             WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface completed: DocumentId={documentId}, DispatcherHandle={dispatcherHandle}, RootVisualHandle={rootVisualHandle}, DesiredSize={root.DesiredSize.Width}x{root.DesiredSize.Height}, ActualSize={root.ActualWidth}x{root.ActualHeight}.");
 
-            _ = dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            _ = _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
             {
-                if (!surfaces.TryGetValue(documentId, out var current) || !ReferenceEquals(current, surface))
+                if (!_surfaces.TryGetValue(documentId, out var current) || !ReferenceEquals(current, surface))
                 {
                     return;
                 }
 
-                using var scope = objectIdentity.EnterDocument(documentId);
-                visualTreeService.PublishMutation(root, VisualMutationType.Add);
-                protocolHandler.PostMessage((int)DesignerMessageId.OnApplicationEvent, new OnApplicationEventResponse { EventName = "OnIdle" });
+                using var scope = _objectIdentity.EnterDocument(documentId);
+                _visualTreeService.PublishMutation(root, VisualMutationType.Add);
+                _protocolHandler.PostMessage((int)DesignerMessageId.OnApplicationEvent, new OnApplicationEventResponse { EventName = "OnIdle" });
             });
 
             return new CreateSurfaceResponseInfo { DispatcherHandle = dispatcherHandle, RootVisualHandle = rootVisualHandle };
@@ -437,42 +437,42 @@ internal sealed partial class SurfaceService : IDisposable
             throw new InvalidOperationException($"Surface content for document {documentId} must be a FrameworkElement, got {content?.GetType().FullName ?? "<null>"}.");
         }
 
-        if (!surfaces.TryGetValue(documentId, out DesignerSurface? surface))
+        if (!_surfaces.TryGetValue(documentId, out DesignerSurface? surface))
         {
             XamlRuntimeUtilities.RegisterNameScope(root);
-            surface = new DesignerSurface(root, DefaultSurfaceSize.Width, DefaultSurfaceSize.Height);
+            surface = new DesignerSurface(root, _DefaultSurfaceSize.Width, _DefaultSurfaceSize.Height);
             surface.BoundsInvalidated += (_, _) => PublishSurfaceBoundsIfCurrent(documentId, surface);
             surface.SurfaceLayoutUpdated += (_, _) => PublishSurfaceLayoutUpdatedIfCurrent(documentId, surface);
-            surface.DpiChanged += dpi => protocolHandler.PostMessage((int)DesignerMessageId.SurfaceDpiChanged, new SurfaceDpiChangedEvent { DocumentId = documentId, SurfaceDpi = dpi });
-            surface.SetRequestedTheme(appRequestedTheme);
-            surfaces[documentId] = surface;
+            surface.DpiChanged += dpi => _protocolHandler.PostMessage((int)DesignerMessageId.SurfaceDpiChanged, new SurfaceDpiChangedEvent { DocumentId = documentId, SurfaceDpi = dpi });
+            surface.SetRequestedTheme(_appRequestedTheme);
+            _surfaces[documentId] = surface;
         }
         else if (!ReferenceEquals(surface.Content, root))
         {
             XamlRuntimeUtilities.RegisterNameScope(root);
             FrameworkElement oldRoot = surface.Content;
-            visualTreeService.PublishMutation(oldRoot, VisualMutationType.Remove);
+            _visualTreeService.PublishMutation(oldRoot, VisualMutationType.Remove);
             surface.ReplaceContent(root);
-            visualTreeService.RemoveIdentities(oldRoot);
+            _visualTreeService.RemoveIdentities(oldRoot);
         }
         else
         {
             surface.RefreshLayout();
         }
 
-        objectIdentity.GetHandle(root);
-        visualTreeService.PublishMutation(root, VisualMutationType.Add);
+        _objectIdentity.GetHandle(root);
+        _visualTreeService.PublishMutation(root, VisualMutationType.Add);
         PublishSurfaceBounds(documentId, surface);
         WinUIDesignerLogger.LogTrace("Surface", $"Action surface content applied: document={documentId}, root={root.GetType().FullName}.");
     }
 
     internal void CompleteActionBatch()
     {
-        foreach (var entry in surfaces)
+        foreach (var entry in _surfaces)
         {
-            using var scope = objectIdentity.EnterDocument(entry.Key);
+            using var scope = _objectIdentity.EnterDocument(entry.Key);
             entry.Value.RefreshLayout();
-            visualTreeService.PublishMutationIfChanged(entry.Value.Content);
+            _visualTreeService.PublishMutationIfChanged(entry.Value.Content);
             PublishSurfaceBounds(entry.Key, entry.Value);
         }
     }
@@ -512,7 +512,7 @@ internal sealed partial class SurfaceService : IDisposable
     private static string SanitizePreparedXaml(string xaml)
     {
         XDocument document = XDocument.Parse(xaml, LoadOptions.PreserveWhitespace);
-        XNamespace x = XamlNamespace;
+        XNamespace x = _XamlNamespace;
 
         document.Root?.Attribute(x + "Class")?.Remove();
 
@@ -534,7 +534,7 @@ internal sealed partial class SurfaceService : IDisposable
             }
             foreach (XAttribute attribute in new List<XAttribute>(element.Attributes()))
             {
-                if (!attribute.IsNamespaceDeclaration && attribute.Name.NamespaceName == XSurfUwpNamespace)
+                if (!attribute.IsNamespaceDeclaration && attribute.Name.NamespaceName == _XSurfUwpNamespace)
                 {
                     if (attribute.Name.LocalName is not (
                         "DT.RootWidth" or "DT.DesignWidth" or "DT.RuntimeWidth" or
@@ -546,11 +546,11 @@ internal sealed partial class SurfaceService : IDisposable
                     continue;
                 }
 
-                if (attribute.IsNamespaceDeclaration && attribute.Value == XSurfUwpNamespace)
+                if (attribute.IsNamespaceDeclaration && attribute.Value == _XSurfUwpNamespace)
                 {
                     if (attribute.Name.LocalName == "d")
                     {
-                        attribute.Value = BlendDesignNamespace;
+                        attribute.Value = _BlendDesignNamespace;
                     }
                 }
             }
@@ -563,7 +563,7 @@ internal sealed partial class SurfaceService : IDisposable
     {
         try
         {
-            if (!await constructionGate.WaitAsync(TimeSpan.FromSeconds(30), protocolHandler.CancellationToken).ConfigureAwait(false))
+            if (!await _constructionGate.WaitAsync(TimeSpan.FromSeconds(30), _protocolHandler.CancellationToken).ConfigureAwait(false))
                 throw new TimeoutException("The document construction did not finish before close.");
         }
         catch (Exception ex)
@@ -579,7 +579,7 @@ internal sealed partial class SurfaceService : IDisposable
                 return Success;
             }, CreateResponseFailure).ConfigureAwait(false);
         }
-        finally { constructionGate.Release(); }
+        finally { _constructionGate.Release(); }
     }
 
     private Task<ResponseWithError> HandleSetPanZoomTransformAsync(SetPanZoomTransformRequestInfo request)
@@ -606,26 +606,26 @@ internal sealed partial class SurfaceService : IDisposable
             string? appXaml = TryReadPreparedXaml(applicationDocument) ?? applicationDocument.InitialXamlContent;
             XDocument? appDocument = string.IsNullOrWhiteSpace(appXaml) ? null : XDocument.Parse(appXaml);
 
-            hasXamlControlsResources = appDocument?.Root?.DescendantsAndSelf()
+            _hasXamlControlsResources = appDocument?.Root?.DescendantsAndSelf()
                 .Any(element => element.Name.LocalName == "XamlControlsResources"
                     && element.Name.NamespaceName == "using:Microsoft.UI.Xaml.Controls") == true;
 
             string? requestedTheme = (string?)appDocument?.Root?.Attribute("RequestedTheme");
-            appRequestedTheme = Enum.TryParse(requestedTheme, true, out ElementTheme theme)
+            _appRequestedTheme = Enum.TryParse(requestedTheme, true, out ElementTheme theme)
                 ? theme
                 : ElementTheme.Default;
-            applicationResourceDocumentId = applicationDocument.DocumentId;
+            _applicationResourceDocumentId = applicationDocument.DocumentId;
         }
 
         LoadAppResourcesIfNeeded();
-        foreach (DesignerSurface surface in surfaces.Values)
+        foreach (DesignerSurface surface in _surfaces.Values)
         {
-            surface.SetRequestedTheme(appRequestedTheme);
+            surface.SetRequestedTheme(_appRequestedTheme);
         }
 
         WinUIDesignerLogger.LogTrace(
             "Surface",
-            $"Application resources configured: documentProvided={applicationDocument is not null}, XamlControlsResources={hasXamlControlsResources}, RequestedTheme={appRequestedTheme}.");
+            $"Application resources configured: documentProvided={applicationDocument is not null}, XamlControlsResources={_hasXamlControlsResources}, RequestedTheme={_appRequestedTheme}.");
     }
 
     private Task<ResponseWithError> HandleSetDeviceSizeAsync(SetDeviceSizeRequestInfo request)
@@ -639,7 +639,7 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void HandleSetFreezeState(SetFreezeStateInfo request)
     {
-        if (dispatcherQueue.HasThreadAccess)
+        if (_dispatcherQueue.HasThreadAccess)
         {
             ApplyFreezeState(request.DocumentIdToFreeze);
             WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}): document={request.DocumentIdToFreeze}, handled directly on UI thread.");
@@ -651,7 +651,7 @@ internal sealed partial class SurfaceService : IDisposable
         InvokeOnDispatcher(() =>
         {
             if (request.DocumentIdToFreeze != 0
-                && surfaces.TryGetValue(request.DocumentIdToFreeze, out DesignerSurface? surface))
+                && _surfaces.TryGetValue(request.DocumentIdToFreeze, out DesignerSurface? surface))
             {
                 targetSurface = surface;
                 waitForPreviousUnfreeze = !surface.IsFrozen;
@@ -660,7 +660,7 @@ internal sealed partial class SurfaceService : IDisposable
 
         if (waitForPreviousUnfreeze && targetSurface is not null)
         {
-            bool completed = targetSurface.WaitForUnfreezeComposition(FreezeCompositionTimeoutMilliseconds);
+            bool completed = targetSurface.WaitForUnfreezeComposition(_FreezeCompositionTimeoutMilliseconds);
             WinUIDesignerLogger.LogTrace("Surface",
                 $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}) composition barrier: document={request.DocumentIdToFreeze}, completed={completed}.");
         }
@@ -671,7 +671,7 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void ApplyFreezeState(int documentIdToFreeze)
     {
-        foreach ((int id, DesignerSurface surface) in surfaces)
+        foreach ((int id, DesignerSurface surface) in _surfaces)
         {
             if (id != documentIdToFreeze && surface.IsFrozen)
             {
@@ -682,7 +682,7 @@ internal sealed partial class SurfaceService : IDisposable
         // document before freezing the next one, regardless of dictionary order.
 
         if (documentIdToFreeze != 0
-            && surfaces.TryGetValue(documentIdToFreeze, out DesignerSurface? targetSurface)
+            && _surfaces.TryGetValue(documentIdToFreeze, out DesignerSurface? targetSurface)
             && !targetSurface.IsFrozen)
         {
             targetSurface.Freeze();
@@ -695,51 +695,51 @@ internal sealed partial class SurfaceService : IDisposable
             {
                 surface.SetSurfacePosition(new IntPtr(request.ParentWindow), request.Width, request.Height);
                 LoadAppResourcesIfNeeded();
-                long rootHandle = objectIdentity.GetHandle(surface.Content);
-                visualTreeService.PublishMutation(surface.Content, VisualMutationType.Add);
+                long rootHandle = _objectIdentity.GetHandle(surface.Content);
+                _visualTreeService.PublishMutation(surface.Content, VisualMutationType.Add);
                 PublishSurfaceBounds(request.DocumentId, surface);
             }, $"SetSurfacePosition ({(int)DesignerMessageId.SetSurfacePosition})");
     }
 
     private void LoadAppResourcesIfNeeded()
     {
-        if (!hasXamlControlsResources)
+        if (!_hasXamlControlsResources)
         {
-            if (xamlControlsResources is not null)
+            if (_xamlControlsResources is not null)
             {
-                Application.Current.Resources.MergedDictionaries.Remove(xamlControlsResources);
-                xamlControlsResources = null;
+                Application.Current.Resources.MergedDictionaries.Remove(_xamlControlsResources);
+                _xamlControlsResources = null;
                 WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources removed from Application resources.");
             }
 
             return;
         }
 
-        if (xamlControlsResources is not null)
+        if (_xamlControlsResources is not null)
         {
             return;
         }
 
         try
         {
-            xamlControlsResources = new XamlControlsResources();
+            _xamlControlsResources = new XamlControlsResources();
             IList<ResourceDictionary> mergedDictionaries = Application.Current.Resources.MergedDictionaries;
-            if (designTimeResourceDocumentId is int designResourcesId
-                && resourceDocuments.TryGetValue(designResourcesId, out ResourceDictionary? designResources))
+            if (_designTimeResourceDocumentId is int designResourcesId
+                && _resourceDocuments.TryGetValue(designResourcesId, out ResourceDictionary? designResources))
             {
                 int designResourcesIndex = mergedDictionaries.IndexOf(designResources);
                 if (designResourcesIndex >= 0)
                 {
-                    mergedDictionaries.Insert(designResourcesIndex, xamlControlsResources);
+                    mergedDictionaries.Insert(designResourcesIndex, _xamlControlsResources);
                 }
                 else
                 {
-                    mergedDictionaries.Add(xamlControlsResources);
+                    mergedDictionaries.Add(_xamlControlsResources);
                 }
             }
             else
             {
-                mergedDictionaries.Add(xamlControlsResources);
+                mergedDictionaries.Add(_xamlControlsResources);
             }
 
             WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources added to Application resources.");
@@ -755,7 +755,7 @@ internal sealed partial class SurfaceService : IDisposable
     {
         return InvokeOnDispatcher(() =>
         {
-            if (!surfaces.TryGetValue(documentId, out DesignerSurface? surface))
+            if (!_surfaces.TryGetValue(documentId, out DesignerSurface? surface))
             {
                 return new ResponseWithError { HResult = NativeMethods.E_INVALIDARG };
             }
@@ -770,7 +770,7 @@ internal sealed partial class SurfaceService : IDisposable
     {
         try
         {
-            return await DispatcherOperation.InvokeAsync(dispatcherQueue, callback, protocolHandler.CancellationToken).ConfigureAwait(false);
+            return await DispatcherOperation.InvokeAsync(_dispatcherQueue, callback, _protocolHandler.CancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -781,11 +781,11 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void InvokeOnDispatcher(Action callback)
     {
-        DispatcherOperation.Invoke(dispatcherQueue, () =>
+        DispatcherOperation.Invoke(_dispatcherQueue, () =>
         {
             callback();
             return true;
-        }, protocolHandler.CancellationToken);
+        }, _protocolHandler.CancellationToken);
     }
 
     private static bool TryParseColor(string? value, out Windows.UI.Color color)
@@ -812,7 +812,7 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void PublishSurfaceBoundsIfCurrent(int documentId, DesignerSurface surface)
     {
-        if (surfaces.TryGetValue(documentId, out DesignerSurface? currentSurface)
+        if (_surfaces.TryGetValue(documentId, out DesignerSurface? currentSurface)
             && ReferenceEquals(currentSurface, surface))
         {
             PublishSurfaceBounds(documentId, surface);
@@ -821,13 +821,13 @@ internal sealed partial class SurfaceService : IDisposable
 
     private void PublishSurfaceLayoutUpdatedIfCurrent(int documentId, DesignerSurface surface)
     {
-        if (!surfaces.TryGetValue(documentId, out DesignerSurface? currentSurface)
+        if (!_surfaces.TryGetValue(documentId, out DesignerSurface? currentSurface)
             || !ReferenceEquals(currentSurface, surface))
         {
             return;
         }
 
-        protocolHandler.PostMessage((int)DesignerMessageId.SurfaceLayoutUpdated, new SurfaceLayoutUpdatedEvent
+        _protocolHandler.PostMessage((int)DesignerMessageId.SurfaceLayoutUpdated, new SurfaceLayoutUpdatedEvent
         {
             DocumentId = documentId,
         });
@@ -838,15 +838,15 @@ internal sealed partial class SurfaceService : IDisposable
         Rect contentBounds = surface.GetContentBounds();
         Rect documentBounds = surface.GetDocumentBounds();
         var currentBounds = new SurfaceBoundsSnapshot(contentBounds, documentBounds);
-        if (publishedSurfaceBounds.TryGetValue(documentId, out SurfaceBoundsSnapshot publishedBounds)
+        if (_publishedSurfaceBounds.TryGetValue(documentId, out SurfaceBoundsSnapshot publishedBounds)
             && publishedBounds.Equals(currentBounds))
         {
             WinUIDesignerLogger.LogTrace("Surface", $"SurfaceBoundsChanged ({(int)DesignerMessageId.SurfaceBoundsChanged}) skipped: bounds unchanged for document={documentId}.");
             return;
         }
 
-        publishedSurfaceBounds[documentId] = currentBounds;
-        protocolHandler.PostMessage((int)DesignerMessageId.SurfaceBoundsChanged, new SurfaceBoundsChangedEventContract
+        _publishedSurfaceBounds[documentId] = currentBounds;
+        _protocolHandler.PostMessage((int)DesignerMessageId.SurfaceBoundsChanged, new SurfaceBoundsChangedEventContract
         {
             DocumentId = documentId,
             ContentBounds = RectContract.FromRect(contentBounds),
@@ -872,39 +872,39 @@ internal sealed partial class SurfaceService : IDisposable
 
     public void Dispose()
     {
-        animationService.Dispose();
-        xamlActionService.Dispose();
-        hitTestService.Dispose();
-        snapLineService.Dispose();
-        propertyService.Dispose();
-        foreach (int registrationId in registrationIds)
+        _animationService.Dispose();
+        _xamlActionService.Dispose();
+        _hitTestService.Dispose();
+        _snapLineService.Dispose();
+        _propertyService.Dispose();
+        foreach (int registrationId in _registrationIds)
         {
-            protocolHandler.UnregisterMessageObserver(registrationId);
+            _protocolHandler.UnregisterMessageObserver(registrationId);
         }
-        foreach (DesignerSurface surface in surfaces.Values)
+        foreach (DesignerSurface surface in _surfaces.Values)
         {
             surface.Dispose();
         }
-        surfaces.Clear();
-        foreach (var dictionary in resourceDocuments.Values)
+        _surfaces.Clear();
+        foreach (var dictionary in _resourceDocuments.Values)
             Application.Current.Resources.MergedDictionaries.Remove(dictionary);
-        resourceDocuments.Clear();
-        documentResources.Clear();
-        sharedResourceDocuments.Clear();
+        _resourceDocuments.Clear();
+        _documentResources.Clear();
+        _sharedResourceDocuments.Clear();
 
-        if (xamlControlsResources is not null)
+        if (_xamlControlsResources is not null)
         {
-            Application.Current.Resources.MergedDictionaries.Remove(xamlControlsResources);
-            xamlControlsResources = null;
+            Application.Current.Resources.MergedDictionaries.Remove(_xamlControlsResources);
+            _xamlControlsResources = null;
         }
 
-        applicationResourceDocumentId = null;
-        designTimeResourceDocumentId = null;
-        hasXamlControlsResources = false;
-        appRequestedTheme = ElementTheme.Default;
+        _applicationResourceDocumentId = null;
+        _designTimeResourceDocumentId = null;
+        _hasXamlControlsResources = false;
+        _appRequestedTheme = ElementTheme.Default;
 
-        publishedSurfaceBounds.Clear();
-        visualTreeService.Clear();
-        objectIdentity.Clear();
+        _publishedSurfaceBounds.Clear();
+        _visualTreeService.Clear();
+        _objectIdentity.Clear();
     }
 }

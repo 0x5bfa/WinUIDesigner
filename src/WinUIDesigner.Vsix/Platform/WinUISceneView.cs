@@ -17,7 +17,7 @@ namespace WinUIDesigner.Platform;
 /// </summary>
 internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView(viewModel)
 {
-    private static readonly FieldInfo ImageHostField = typeof(UwpSceneView).GetField("imageHost", BindingFlags.Instance | BindingFlags.NonPublic)
+    private static readonly FieldInfo _ImageHostField = typeof(UwpSceneView).GetField("imageHost", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingFieldException(typeof(UwpSceneView).FullName, "imageHost");
 
     protected override Artboard CreateArtboard()
@@ -26,7 +26,7 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
 
         // Use WinUI-specific isolated image host instance so that the artboard can render WinUI content via WinUIHwndHost.
         var imageHost = new WinUIIsolatedImageHost(this);
-        ImageHostField.SetValue(this, imageHost);
+        _ImageHostField.SetValue(this, imageHost);
 
         WinUIDesignerLogger.LogTrace("Platform", "Minimal WinUI isolated image host created.");
 

@@ -22,46 +22,46 @@ internal sealed partial class SurfaceAnonymousPipe : IDisposable
         Shutdown,
     }
 
-    private volatile bool done;
-    private readonly AutoResetEvent readEvent = new(initialState: false);
-    private readonly AutoResetEvent writeEvent = new(initialState: false);
-    private readonly AnonymousPipeServerStream readPipe;
-    private readonly AnonymousPipeClientStream writePipe;
-    private readonly int writeBufferSize;
+    private volatile bool _done;
+    private readonly AutoResetEvent _readEvent = new(initialState: false);
+    private readonly AutoResetEvent _writeEvent = new(initialState: false);
+    private readonly AnonymousPipeServerStream _readPipe;
+    private readonly AnonymousPipeClientStream _writePipe;
+    private readonly int _writeBufferSize;
 
     public SurfaceAnonymousPipe(IntPtr readEventHandle, IntPtr readPipeHandle, IntPtr writeEventHandle, IntPtr writePipeHandle)
     {
-        readEvent.SafeWaitHandle = new SafeWaitHandle(readEventHandle, ownsHandle: true);
-        writeEvent.SafeWaitHandle = new SafeWaitHandle(writeEventHandle, ownsHandle: true);
-        readPipe = new AnonymousPipeServerStream(
+        _readEvent.SafeWaitHandle = new SafeWaitHandle(readEventHandle, ownsHandle: true);
+        _writeEvent.SafeWaitHandle = new SafeWaitHandle(writeEventHandle, ownsHandle: true);
+        _readPipe = new AnonymousPipeServerStream(
             PipeDirection.In,
             new SafePipeHandle(readPipeHandle, ownsHandle: true),
             new SafePipeHandle(writePipeHandle, ownsHandle: true));
-        writePipe = new AnonymousPipeClientStream(PipeDirection.Out, readPipe.ClientSafePipeHandle);
+        _writePipe = new AnonymousPipeClientStream(PipeDirection.Out, _readPipe.ClientSafePipeHandle);
 
-        writeBufferSize = writePipe.OutBufferSize != 0 ? writePipe.OutBufferSize : readPipe.InBufferSize;
+        _writeBufferSize = _writePipe.OutBufferSize != 0 ? _writePipe.OutBufferSize : _readPipe.InBufferSize;
     }
 
     public void Close()
     {
-        done = true;
-        writeEvent.Set();
-        readEvent.Set();
+        _done = true;
+        _writeEvent.Set();
+        _readEvent.Set();
     }
 
     public int Read(byte[] buffer, int offset, int maxBytesToRead)
     {
         int totalBytesAvailable = 0;
-        if (!WaitForCondition(writeEvent, () =>
+        if (!WaitForCondition(_writeEvent, () =>
             {
-                if (done)
+                if (_done)
                 {
                     return ConditionResult.Shutdown;
                 }
 
                 int bytesRead = 0;
                 int bytesLeft = 0;
-                if (!NativeMethods.PeekNamedPipe(readPipe.SafePipeHandle, null, 0, ref bytesRead, ref totalBytesAvailable, ref bytesLeft))
+                if (!NativeMethods.PeekNamedPipe(_readPipe.SafePipeHandle, null, 0, ref bytesRead, ref totalBytesAvailable, ref bytesLeft))
                 {
                     return ConditionResult.Shutdown;
                 }
@@ -75,8 +75,8 @@ internal sealed partial class SurfaceAnonymousPipe : IDisposable
         }
 
         int count = Math.Min(maxBytesToRead, totalBytesAvailable);
-        int result = readPipe.Read(buffer, offset, count);
-        readEvent.Set();
+        int result = _readPipe.Read(buffer, offset, count);
+        _readEvent.Set();
 
         return result;
     }
@@ -86,44 +86,44 @@ internal sealed partial class SurfaceAnonymousPipe : IDisposable
         for (int offset = 0; offset < buffer.Length;)
         {
             int bytesToWrite = buffer.Length - offset;
-            if (writeBufferSize != 0)
+            if (_writeBufferSize != 0)
             {
                 int totalBytesAvailable = 0;
-                if (!WaitForCondition(readEvent, () =>
+                if (!WaitForCondition(_readEvent, () =>
                     {
-                        if (done)
+                        if (_done)
                         {
                             return ConditionResult.Shutdown;
                         }
 
                         int bytesRead = 0;
                         int bytesLeft = 0;
-                        if (!NativeMethods.PeekNamedPipe(readPipe.SafePipeHandle, null, 0, ref bytesRead, ref totalBytesAvailable, ref bytesLeft))
+                        if (!NativeMethods.PeekNamedPipe(_readPipe.SafePipeHandle, null, 0, ref bytesRead, ref totalBytesAvailable, ref bytesLeft))
                         {
                             return ConditionResult.Shutdown;
                         }
 
-                        return totalBytesAvailable < writeBufferSize ? ConditionResult.Success : ConditionResult.NotReadyYet;
+                        return totalBytesAvailable < _writeBufferSize ? ConditionResult.Success : ConditionResult.NotReadyYet;
                     }))
                 {
                     return;
                 }
 
-                bytesToWrite = Math.Min(writeBufferSize - totalBytesAvailable, bytesToWrite);
+                bytesToWrite = Math.Min(_writeBufferSize - totalBytesAvailable, bytesToWrite);
             }
 
-            writePipe.Write(buffer, offset, bytesToWrite);
+            _writePipe.Write(buffer, offset, bytesToWrite);
             offset += bytesToWrite;
-            writeEvent.Set();
+            _writeEvent.Set();
         }
     }
 
     public void Dispose()
     {
-        readEvent.Dispose();
-        readPipe.Dispose();
-        writeEvent.Dispose();
-        writePipe.Dispose();
+        _readEvent.Dispose();
+        _readPipe.Dispose();
+        _writeEvent.Dispose();
+        _writePipe.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -139,7 +139,7 @@ internal sealed partial class SurfaceAnonymousPipe : IDisposable
                     return false;
             }
         }
-        while (!done && WaitForSignal(waitHandle));
+        while (!_done && WaitForSignal(waitHandle));
 
         return false;
     }

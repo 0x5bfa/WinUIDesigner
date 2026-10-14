@@ -18,18 +18,18 @@ internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : Isol
     internal WinUISceneView SceneView { get; } = view;
 
 #if DEBUG
-    private bool geometryDiagnosticScheduled;
+    private bool _geometryDiagnosticScheduled;
 #endif
 
 #if DEBUG
     private void ScheduleGeometryDiagnostic()
     {
-        if (geometryDiagnosticScheduled)
+        if (_geometryDiagnosticScheduled)
         {
             return;
         }
 
-        geometryDiagnosticScheduled = true;
+        _geometryDiagnosticScheduled = true;
 
         var timer = new System.Windows.Threading.DispatcherTimer(
             TimeSpan.FromSeconds(1),
@@ -37,7 +37,7 @@ internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : Isol
             (sender, _) =>
             {
                 ((System.Windows.Threading.DispatcherTimer)sender).Stop();
-                geometryDiagnosticScheduled = false;
+                _geometryDiagnosticScheduled = false;
 
                 LogGeometry(SceneView.ViewModel.RootNode, 0);
 

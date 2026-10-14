@@ -41,22 +41,22 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 {
     // Visual Studio has a desktop WinUI configuration but no creator wired to this VSIX.
     // Match its stable prefix while allowing SDK and target-version suffixes.
-    private const string DesktopWinUISpecificationPrefix = "TargetPlatformIdentifier=Windows;TargetPlatformVersion=10.0-..;TargetRuntime=Managed,Native;TargetFrameworkIdentifier=.NETCoreApp;TargetFrameworkVersion=5.0-..;XamlRuntime=WinUI";
+    private const string _DesktopWinUISpecificationPrefix = "TargetPlatformIdentifier=Windows;TargetPlatformVersion=10.0-..;TargetRuntime=Managed,Native;TargetFrameworkIdentifier=.NETCoreApp;TargetFrameworkVersion=5.0-..;XamlRuntime=WinUI";
 
-    private static readonly ConditionalWeakTable<PlatformService, WinUIPlatformCreator> PlatformCreators = new();
+    private static readonly ConditionalWeakTable<PlatformService, WinUIPlatformCreator> _PlatformCreators = new();
 
-    private static readonly Dictionary<string, string?> OriginalBindings = [];
+    private static readonly Dictionary<string, string?> _OriginalBindings = [];
 
-    private static Hook? getPlatformCreatorHook;
+    private static Hook? _getPlatformCreatorHook;
 
-    private static PlatformConfiguration? modifiedConfiguration;
+    private static PlatformConfiguration? _modifiedConfiguration;
 
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {
         await base.InitializeAsync(cancellationToken, progress);
         await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-        if (getPlatformCreatorHook is not null)
+        if (_getPlatformCreatorHook is not null)
         {
             return;
         }
@@ -83,15 +83,15 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
             // Reuse Visual Studio's existing WinUI configuration to avoid competing creators.
             PlatformConfiguration configuration = PlatformConfigurationService
                 .GetConfigurations()
-                .SingleOrDefault(candidate => candidate.Specification.StartsWith(DesktopWinUISpecificationPrefix, StringComparison.Ordinal))
+                .SingleOrDefault(candidate => candidate.Specification.StartsWith(_DesktopWinUISpecificationPrefix, StringComparison.Ordinal))
                 ?? throw new InvalidOperationException("Visual Studio's desktop WinUI PlatformConfiguration was not found.");
 
             foreach (string key in new[] { "PlatformCreatorAssembly", "PlatformCreatorType", "HostPlatformAssembly", "HostPlatformType", "ToolboxPage" })
             {
-                OriginalBindings[key] = configuration.Properties.TryGetValue(key, out string? value) ? value : null;
+                _OriginalBindings[key] = configuration.Properties.TryGetValue(key, out string? value) ? value : null;
             }
 
-            modifiedConfiguration = configuration;
+            _modifiedConfiguration = configuration;
 
             try
             {
@@ -106,7 +106,7 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
                 WinUIDesignerLogger.LogInformation("VSIX", $"Injected WinUI designer bindings into '{configuration.Specification}'.");
 
                 // This VS build bypasses the configured creator for this runtime, so install a narrow fallback hook.
-                getPlatformCreatorHook ??= new Hook(method, GetPlatformCreatorHook);
+                _getPlatformCreatorHook ??= new Hook(method, GetPlatformCreatorHook);
                 WinUIDesignerLogger.LogInformation("VSIX", "Installed PlatformService.GetPlatformCreator fallback hook.");
             }
             catch
@@ -138,26 +138,26 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 
     private static void RestorePlatformRegistration()
     {
-        getPlatformCreatorHook?.Dispose();
-        getPlatformCreatorHook = null;
+        _getPlatformCreatorHook?.Dispose();
+        _getPlatformCreatorHook = null;
 
-        if (modifiedConfiguration is not null)
+        if (_modifiedConfiguration is not null)
         {
-            foreach (var entry in OriginalBindings)
+            foreach (var entry in _OriginalBindings)
             {
                 if (entry.Value is null)
                 {
-                    modifiedConfiguration.Properties.Remove(entry.Key);
+                    _modifiedConfiguration.Properties.Remove(entry.Key);
                 }
                 else
                 {
-                    modifiedConfiguration.Properties[entry.Key] = entry.Value;
+                    _modifiedConfiguration.Properties[entry.Key] = entry.Value;
                 }
             }
         }
 
-        OriginalBindings.Clear();
-        modifiedConfiguration = null;
+        _OriginalBindings.Clear();
+        _modifiedConfiguration = null;
     }
 
     private delegate IPlatformCreator? GetPlatformCreatorDelegate(PlatformService instance, PlatformIdentifier platformIdentifier);
@@ -172,7 +172,7 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
             return original(instance, platformIdentifier);
         }
 
-        var creator = PlatformCreators.GetValue(instance, static platformService => new WinUIPlatformCreator(platformService));
+        var creator = _PlatformCreators.GetValue(instance, static platformService => new WinUIPlatformCreator(platformService));
 
         WinUIDesignerLogger.LogDebug("VSIX", $"Supplied WinUIPlatformCreator for '{platformIdentifier.Identifier}'.");
 

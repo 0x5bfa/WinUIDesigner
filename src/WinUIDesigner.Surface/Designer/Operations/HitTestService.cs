@@ -20,21 +20,21 @@ namespace WinUIDesigner.Surface.Designer.Operations;
 /// </summary>
 internal sealed partial class HitTestService : IDisposable
 {
-    private readonly ProtocolHandler protocolHandler;
-    private readonly DispatcherQueue dispatcherQueue;
-    private readonly ObjectIdentityRegistry objectIdentity;
-    private readonly int registrationId;
+    private readonly ProtocolHandler _protocolHandler;
+    private readonly DispatcherQueue _dispatcherQueue;
+    private readonly ObjectIdentityRegistry _objectIdentity;
+    private readonly int _registrationId;
 
     public HitTestService(ProtocolHandler protocolHandler, DispatcherQueue dispatcherQueue, ObjectIdentityRegistry objectIdentity)
     {
-        this.protocolHandler = protocolHandler;
-        this.dispatcherQueue = dispatcherQueue;
-        this.objectIdentity = objectIdentity;
+        this._protocolHandler = protocolHandler;
+        this._dispatcherQueue = dispatcherQueue;
+        this._objectIdentity = objectIdentity;
         // Visual Studio's HitTestRequest uses System.Windows.Point/Rect even for the
         // platform-neutral wire protocol. Keep the WinUI surface independent of WPF
         // by deserializing the same DataContract JSON shape into local DTOs.
 
-        registrationId = protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>((int)DesignerMessageId.HitTest, request =>
+        _registrationId = protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>((int)DesignerMessageId.HitTest, request =>
         {
             try
             {
@@ -51,12 +51,12 @@ internal sealed partial class HitTestService : IDisposable
 
     private HitResponse HandleHit(HitTestRequestContract request)
     {
-        if (!dispatcherQueue.HasThreadAccess)
+        if (!_dispatcherQueue.HasThreadAccess)
         {
-            return DispatcherOperation.Invoke(dispatcherQueue, () => HandleHit(request), protocolHandler.CancellationToken);
+            return DispatcherOperation.Invoke(_dispatcherQueue, () => HandleHit(request), _protocolHandler.CancellationToken);
         }
 
-        if (!objectIdentity.TryGetObject(request.RootHandle, out object? rootObject) || rootObject is not UIElement root)
+        if (!_objectIdentity.TryGetObject(request.RootHandle, out object? rootObject) || rootObject is not UIElement root)
         {
             return Empty;
         }
@@ -82,9 +82,9 @@ internal sealed partial class HitTestService : IDisposable
             {
                 Element = new LiveValue()
                 {
-                    Handle = objectIdentity.GetHandle(candidate.Element),
+                    Handle = _objectIdentity.GetHandle(candidate.Element),
                     Type = GetDesignerTypeName(candidate.Element.GetType()),
-                    SourceInfo = objectIdentity.GetSourceInfo(candidate.Element),
+                    SourceInfo = _objectIdentity.GetSourceInfo(candidate.Element),
                 },
                 IsVisible = candidate.IsVisible,
             })
@@ -274,7 +274,7 @@ internal sealed partial class HitTestService : IDisposable
 
     public void Dispose()
     {
-        protocolHandler.UnregisterMessageObserver(registrationId);
+        _protocolHandler.UnregisterMessageObserver(_registrationId);
     }
 
 }

@@ -22,14 +22,14 @@ namespace WinUIDesigner.Surface.Designer.Xaml;
 /// </summary>
 internal sealed partial class XamlActionService : IDisposable
 {
-    private readonly ProtocolHandler protocolHandler;
-    private readonly DispatcherQueue dispatcherQueue;
-    private readonly ObjectIdentityRegistry objectIdentity;
-    private readonly SurfaceService surfaceService;
-    private readonly ResourceScopeService resourceScopes;
-    private readonly Dictionary<long, object?> actionObjects = [];
-    private readonly Dictionary<long, object?> trackedActionObjects = [];
-    private readonly int registrationId;
+    private readonly ProtocolHandler _protocolHandler;
+    private readonly DispatcherQueue _dispatcherQueue;
+    private readonly ObjectIdentityRegistry _objectIdentity;
+    private readonly SurfaceService _surfaceService;
+    private readonly ResourceScopeService _resourceScopes;
+    private readonly Dictionary<long, object?> _actionObjects = [];
+    private readonly Dictionary<long, object?> _trackedActionObjects = [];
+    private readonly int _registrationId;
 
     public XamlActionService(
         ProtocolHandler protocolHandler,
@@ -37,17 +37,17 @@ internal sealed partial class XamlActionService : IDisposable
         ObjectIdentityRegistry objectIdentity,
         SurfaceService surfaceService)
     {
-        this.protocolHandler = protocolHandler;
-        this.dispatcherQueue = dispatcherQueue;
-        this.objectIdentity = objectIdentity;
-        this.surfaceService = surfaceService;
-        resourceScopes = new ResourceScopeService(objectIdentity);
-        registrationId = protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, ResponseWithError>((int)DesignerMessageId.ExecuteXamlActions, HandleExecuteActions);
+        this._protocolHandler = protocolHandler;
+        this._dispatcherQueue = dispatcherQueue;
+        this._objectIdentity = objectIdentity;
+        this._surfaceService = surfaceService;
+        _resourceScopes = new ResourceScopeService(objectIdentity);
+        _registrationId = protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, ResponseWithError>((int)DesignerMessageId.ExecuteXamlActions, HandleExecuteActions);
     }
 
     private ResponseWithError HandleExecuteActions(ExecuteXamlActionsRequestInfo request)
     {
-        if (!dispatcherQueue.HasThreadAccess)
+        if (!_dispatcherQueue.HasThreadAccess)
         {
             return InvokeOnDispatcher(() => HandleExecuteActions(request));
         }
@@ -60,9 +60,9 @@ internal sealed partial class XamlActionService : IDisposable
             int documentId = 0;
             foreach (XamlAction action in actions)
             {
-                if (action is SetDispatcherAction dispatcher && objectIdentity.TryGetObject(dispatcher.DispatcherObjectHandle, out object? target) && target is not null)
+                if (action is SetDispatcherAction dispatcher && _objectIdentity.TryGetObject(dispatcher.DispatcherObjectHandle, out object? target) && target is not null)
                 {
-                    documentId = objectIdentity.GetDocumentId(target);
+                    documentId = _objectIdentity.GetDocumentId(target);
                 }
 
                 if (action is SetSurfaceContentAction content)
@@ -78,7 +78,7 @@ internal sealed partial class XamlActionService : IDisposable
 
             // Keep the wire order: later actions can refer to objects or names created
             // by earlier actions in this same transaction.
-            using var documentScope = objectIdentity.EnterDocument(documentId);
+            using var documentScope = _objectIdentity.EnterDocument(documentId);
             for (int index = 0; index < actions.Count; index++)
             {
                 if (request.Actions is { } serializedActions && index < serializedActions.Count)
@@ -91,7 +91,7 @@ internal sealed partial class XamlActionService : IDisposable
                 TrackActionObjects();
             }
 
-            surfaceService.CompleteActionBatch();
+            _surfaceService.CompleteActionBatch();
             WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) completed: count={actions.Count}.");
 
             return Success;
@@ -104,7 +104,7 @@ internal sealed partial class XamlActionService : IDisposable
             WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) failed: {ex}");
             try
             {
-                surfaceService.CompleteActionBatch();
+                _surfaceService.CompleteActionBatch();
             }
             catch (Exception layoutError)
             {
@@ -117,9 +117,9 @@ internal sealed partial class XamlActionService : IDisposable
 
     public LiveValue ExecuteLookupActions(ExecuteXamlActionsRequestInfo request, LiveValueSerializer serializer)
     {
-        if (!dispatcherQueue.HasThreadAccess)
+        if (!_dispatcherQueue.HasThreadAccess)
         {
-            return DispatcherOperation.Invoke(dispatcherQueue, () => ExecuteLookupActions(request, serializer), protocolHandler.CancellationToken);
+            return DispatcherOperation.Invoke(_dispatcherQueue, () => ExecuteLookupActions(request, serializer), _protocolHandler.CancellationToken);
         }
 
         object? captured = null;
@@ -134,7 +134,7 @@ internal sealed partial class XamlActionService : IDisposable
 
     public object BuildDocument(CreateDocumentInfo document)
     {
-        using var scope = objectIdentity.EnterDocument(document.DocumentId);
+        using var scope = _objectIdentity.EnterDocument(document.DocumentId);
 
         object? root = null;
         IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(document.Actions ?? []);
@@ -171,27 +171,27 @@ internal sealed partial class XamlActionService : IDisposable
 
     private void TrackActionObjects()
     {
-        foreach (var entry in actionObjects)
+        foreach (var entry in _actionObjects)
         {
-            if (entry.Value is not null && (!trackedActionObjects.TryGetValue(entry.Key, out var oldValue) || !ReferenceEquals(oldValue, entry.Value)))
+            if (entry.Value is not null && (!_trackedActionObjects.TryGetValue(entry.Key, out var oldValue) || !ReferenceEquals(oldValue, entry.Value)))
             {
-                objectIdentity.Track(entry.Value);
+                _objectIdentity.Track(entry.Value);
             }
 
-            trackedActionObjects[entry.Key] = entry.Value;
+            _trackedActionObjects[entry.Key] = entry.Value;
         }
     }
 
     public void ReleaseDocument(int documentId)
     {
-        var released = objectIdentity.ReleaseDocument(documentId);
-        resourceScopes.RemoveObjects(released);
-        foreach (long key in new List<long>(actionObjects.Keys))
+        var released = _objectIdentity.ReleaseDocument(documentId);
+        _resourceScopes.RemoveObjects(released);
+        foreach (long key in new List<long>(_actionObjects.Keys))
         {
-            if (actionObjects[key] is object value && released.Contains(value))
+            if (_actionObjects[key] is object value && released.Contains(value))
             {
-                actionObjects.Remove(key);
-                trackedActionObjects.Remove(key);
+                _actionObjects.Remove(key);
+                _trackedActionObjects.Remove(key);
             }
         }
     }
@@ -201,7 +201,7 @@ internal sealed partial class XamlActionService : IDisposable
         switch (action)
         {
             case ConnectToLiveTreeAction connect:
-                actionObjects[connect.ProxyHandle] = ResolveObject(connect.LiveHandle);
+                _actionObjects[connect.ProxyHandle] = ResolveObject(connect.LiveHandle);
                 break;
 
             case SetSurfaceContentAction setSurfaceContent:
@@ -212,7 +212,7 @@ internal sealed partial class XamlActionService : IDisposable
                 }
                 else
                 {
-                    surfaceService.SetSurfaceContent(setSurfaceContent.DocumentId, surfaceContent);
+                    _surfaceService.SetSurfaceContent(setSurfaceContent.DocumentId, surfaceContent);
                 }
                 break;
 
@@ -229,14 +229,14 @@ internal sealed partial class XamlActionService : IDisposable
                 break;
 
             case CreateArrayAction createArray:
-                actionObjects[createArray.LiveHandle] = XamlRuntimeUtilities.CreateArray(
+                _actionObjects[createArray.LiveHandle] = XamlRuntimeUtilities.CreateArray(
                     createArray.TypeName,
                     createArray.ItemHandles,
                     ResolveObject);
                 break;
 
             case TypeConvertInstanceAction convert:
-                actionObjects[convert.LiveHandle] = XamlRuntimeUtilities.ConvertString(convert.MemberName, convert.Value, convert.IsEnum);
+                _actionObjects[convert.LiveHandle] = XamlRuntimeUtilities.ConvertString(convert.MemberName, convert.Value, convert.IsEnum);
                 break;
 
             case XamlParseInstanceAction parse:
@@ -244,7 +244,7 @@ internal sealed partial class XamlActionService : IDisposable
                 break;
 
             case CreateImplicitDictionaryKeyAction implicitKey:
-                actionObjects[implicitKey.LiveHandle] = XamlRuntimeUtilities.CreateImplicitDictionaryKey(
+                _actionObjects[implicitKey.LiveHandle] = XamlRuntimeUtilities.CreateImplicitDictionaryKey(
                     implicitKey.Key,
                     implicitKey.KeyKind == ImplicitKeyKind.Type);
                 break;
@@ -254,7 +254,7 @@ internal sealed partial class XamlActionService : IDisposable
                 break;
 
             case GetPropertyAction getProperty:
-                actionObjects[getProperty.PropertyValueHandle] = XamlRuntimeUtilities.GetPropertyValue(RequireObject(getProperty.ParentHandle), getProperty.FullPropertyName);
+                _actionObjects[getProperty.PropertyValueHandle] = XamlRuntimeUtilities.GetPropertyValue(RequireObject(getProperty.ParentHandle), getProperty.FullPropertyName);
                 break;
 
             case SetPropertyAction setProperty:
@@ -289,7 +289,7 @@ internal sealed partial class XamlActionService : IDisposable
                 break;
 
             case GetChildAction getChild:
-                actionObjects[getChild.ChildHandle] = XamlRuntimeUtilities.GetChild(RequireObject(getChild.ParentHandle), getChild.Index);
+                _actionObjects[getChild.ChildHandle] = XamlRuntimeUtilities.GetChild(RequireObject(getChild.ParentHandle), getChild.Index);
                 break;
 
             case AddChildAction addChild:
@@ -302,7 +302,7 @@ internal sealed partial class XamlActionService : IDisposable
                 break;
 
             case GetDictionaryEntryAction getDictionaryEntry:
-                actionObjects[getDictionaryEntry.ValueHandle] = XamlRuntimeUtilities.GetDictionaryEntry(
+                _actionObjects[getDictionaryEntry.ValueHandle] = XamlRuntimeUtilities.GetDictionaryEntry(
                     RequireObject(getDictionaryEntry.DictionaryHandle),
                     ResolveObject(getDictionaryEntry.KeyHandle));
                 break;
@@ -330,19 +330,19 @@ internal sealed partial class XamlActionService : IDisposable
                 break;
 
             case NullReferenceAction nullReference:
-                actionObjects[nullReference.LiveHandle] = null;
+                _actionObjects[nullReference.LiveHandle] = null;
                 break;
 
             case MemberReferenceAction memberReference:
-                actionObjects[memberReference.LiveHandle] = XamlRuntimeUtilities.ResolveMember(memberReference.MemberName);
+                _actionObjects[memberReference.LiveHandle] = XamlRuntimeUtilities.ResolveMember(memberReference.MemberName);
                 break;
 
             case StaticReferenceAction staticReference:
-                actionObjects[staticReference.LiveHandle] = XamlRuntimeUtilities.ResolveMember(staticReference.MemberName);
+                _actionObjects[staticReference.LiveHandle] = XamlRuntimeUtilities.ResolveMember(staticReference.MemberName);
                 break;
 
             case FindElementAction findElement:
-                actionObjects[findElement.ElementHandle] = XamlRuntimeUtilities.FindElement(
+                _actionObjects[findElement.ElementHandle] = XamlRuntimeUtilities.FindElement(
                     RequireObject(findElement.LookupContextHandle),
                     findElement.ElementName)
                     ?? throw new InvalidOperationException($"Unable to find element '{findElement.ElementName}' from handle {findElement.LookupContextHandle}.");
@@ -356,7 +356,7 @@ internal sealed partial class XamlActionService : IDisposable
                 break;
 
             case InvokeMethodAction invoke:
-                actionObjects[invoke.LiveHandle] = XamlRuntimeUtilities.InvokeMethod(
+                _actionObjects[invoke.LiveHandle] = XamlRuntimeUtilities.InvokeMethod(
                     invoke.InstanceHandle == 0 ? null : ResolveObject(invoke.InstanceHandle),
                     invoke.DeclaringType,
                     invoke.MethodName,
@@ -366,13 +366,13 @@ internal sealed partial class XamlActionService : IDisposable
                 break;
 
             case UpdateResourceMutationsAction resources:
-                resourceScopes.UpdateResources(RequireObject(resources.Handle));
+                _resourceScopes.UpdateResources(RequireObject(resources.Handle));
                 break;
             case SetResourcesSearchParentAction parent:
-                resourceScopes.SetParent(RequireObject(parent.ChildHandle), parent.ParentHandle == 0 ? null : RequireObject(parent.ParentHandle));
+                _resourceScopes.SetParent(RequireObject(parent.ChildHandle), parent.ParentHandle == 0 ? null : RequireObject(parent.ParentHandle));
                 break;
             case SetThemeResourcesEditingScopeAction theme:
-                resourceScopes.SetThemeScope(theme.Assembly, theme.RelativePath);
+                _resourceScopes.SetThemeScope(theme.Assembly, theme.RelativePath);
                 break;
 
             case DisableXBindAction disableXBind:
@@ -433,42 +433,42 @@ internal sealed partial class XamlActionService : IDisposable
             throw new InvalidOperationException($"Failed to create '{runtimeType.FullName}'.");
         }
 
-        actionObjects[action.LiveHandle] = instance;
-        objectIdentity.GetHandle(instance);
+        _actionObjects[action.LiveHandle] = instance;
+        _objectIdentity.GetHandle(instance);
         if (action.MarkupHandle != 0)
         {
-            objectIdentity.RegisterMarkupInfo(instance, action.MarkupHandle, action.ChangeVersion);
+            _objectIdentity.RegisterMarkupInfo(instance, action.MarkupHandle, action.ChangeVersion);
         }
     }
 
     private void ExecuteXamlParseInstance(XamlParseInstanceAction action)
     {
-        object instance = resourceScopes.Parse(action.OwnerHandle == 0 ? null : RequireObject(action.OwnerHandle), action.Xaml);
-        actionObjects[action.LiveHandle] = instance;
-        objectIdentity.GetHandle(instance);
+        object instance = _resourceScopes.Parse(action.OwnerHandle == 0 ? null : RequireObject(action.OwnerHandle), action.Xaml);
+        _actionObjects[action.LiveHandle] = instance;
+        _objectIdentity.GetHandle(instance);
         if (action.MarkupHandle != 0)
         {
-            objectIdentity.RegisterMarkupInfo(instance, action.MarkupHandle, action.ChangeVersion);
+            _objectIdentity.RegisterMarkupInfo(instance, action.MarkupHandle, action.ChangeVersion);
         }
     }
 
     private object? ResolveObject(long handle)
     {
-        if (actionObjects.TryGetValue(handle, out object? value))
+        if (_actionObjects.TryGetValue(handle, out object? value))
         {
             if (value is not null)
             {
-                objectIdentity.Track(value);
+                _objectIdentity.Track(value);
             }
 
             return value;
         }
 
-        if (objectIdentity.TryGetObject(handle, out value))
+        if (_objectIdentity.TryGetObject(handle, out value))
         {
             if (value is not null)
             {
-                objectIdentity.Track(value);
+                _objectIdentity.Track(value);
             }
 
             return value;
@@ -483,8 +483,8 @@ internal sealed partial class XamlActionService : IDisposable
         if (value is StaticResourceReference reference)
         {
             // The native UWP TAP replaces the reference's object state with its value.
-            value = resourceScopes.ResolveStaticResource(owner, reference.ResourceKey);
-            actionObjects[handle] = value;
+            value = _resourceScopes.ResolveStaticResource(owner, reference.ResourceKey);
+            _actionObjects[handle] = value;
         }
         return value;
     }
@@ -498,7 +498,7 @@ internal sealed partial class XamlActionService : IDisposable
     {
         try
         {
-            return DispatcherOperation.Invoke(dispatcherQueue, callback, protocolHandler.CancellationToken);
+            return DispatcherOperation.Invoke(_dispatcherQueue, callback, _protocolHandler.CancellationToken);
         }
         catch (Exception ex)
         {
@@ -522,8 +522,8 @@ internal sealed partial class XamlActionService : IDisposable
 
     public void Dispose()
     {
-        actionObjects.Clear();
-        trackedActionObjects.Clear();
-        protocolHandler.UnregisterMessageObserver(registrationId);
+        _actionObjects.Clear();
+        _trackedActionObjects.Clear();
+        _protocolHandler.UnregisterMessageObserver(_registrationId);
     }
 }

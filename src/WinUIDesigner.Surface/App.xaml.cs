@@ -26,15 +26,15 @@ namespace WinUIDesigner.Surface;
 /// </summary>
 public sealed partial class App : Application, IXamlMetadataProvider, IDisposable
 {
-    private readonly int hostProcessId;
-    private readonly string tapPath;
-    private readonly string bridgeInitializationData;
-    private readonly DispatcherQueue dispatcherQueue;
-    private SurfacePipeDataBridge? dataBridge;
-    private ProtocolHandler? protocolHandler;
-    private ObjectIdentityRegistry? objectIdentity;
-    private SurfaceService? surfaceService;
-    private bool disposed;
+    private readonly int _hostProcessId;
+    private readonly string _tapPath;
+    private readonly string _bridgeInitializationData;
+    private readonly DispatcherQueue _dispatcherQueue;
+    private SurfacePipeDataBridge? _dataBridge;
+    private ProtocolHandler? _protocolHandler;
+    private ObjectIdentityRegistry? _objectIdentity;
+    private SurfaceService? _surfaceService;
+    private bool _disposed;
 
     // The XAML compiler generates this surface app metadata provider in a later build pass.
     // Resolve it at runtime because this source must compile before that generated member exists.
@@ -45,10 +45,10 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
 
     public App(int hostProcessId, string tapPath, string bridgeInitializationData, DispatcherQueue dispatcherQueue)
     {
-        this.hostProcessId = hostProcessId;
-        this.tapPath = tapPath;
-        this.bridgeInitializationData = bridgeInitializationData;
-        this.dispatcherQueue = dispatcherQueue;
+        this._hostProcessId = hostProcessId;
+        this._tapPath = tapPath;
+        this._bridgeInitializationData = bridgeInitializationData;
+        this._dispatcherQueue = dispatcherQueue;
 
         ResourceManagerRequested += (_, args) => args.CustomResourceManager = ProjectRuntimeResolver.CreateResourceManager();
 
@@ -60,7 +60,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         UnhandledException += (_, args) =>
         {
             WinUIDesignerLogger.LogTrace("Surface", $"WinUI unhandled exception: {args.Exception}");
-            protocolHandler?.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
+            _protocolHandler?.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {
                 Message = args.Exception.Message,
                 CallStack = args.Exception.ToString(),
@@ -68,15 +68,15 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
             });
         };
 
-        WinUIDesignerLogger.LogTrace("Surface", $"Microsoft.UI.Xaml.Application initialized; DispatcherQueue acquired; TAP='{tapPath}'.");
+        WinUIDesignerLogger.LogTrace("Surface", $"Microsoft.UI.Xaml.Application initialized; DispatcherQueue acquired; TAP='{_tapPath}'.");
 
-        dataBridge = new(bridgeInitializationData);
-        protocolHandler = new(dataBridge, tokenSource: null, shouldStart: false);
-        protocolHandler.OnUnhandledException += (_, exception) =>
+        _dataBridge = new(_bridgeInitializationData);
+        _protocolHandler = new(_dataBridge, tokenSource: null, shouldStart: false);
+        _protocolHandler.OnUnhandledException += (_, exception) =>
         {
             WinUIDesignerLogger.LogTrace("Surface", $"Asynchronous protocol request failed: {exception}");
 
-            protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
+            _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {
                 Message = exception.Message,
                 CallStack = exception.ToString(),
@@ -84,12 +84,12 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
             });
         };
 
-        objectIdentity = new();
-        surfaceService = new(protocolHandler, dispatcherQueue, objectIdentity);
+        _objectIdentity = new();
+        _surfaceService = new(_protocolHandler, _dispatcherQueue, _objectIdentity);
 
         WinUIDesignerLogger.LogTrace("Surface", $"PipeDataBridge, ProtocolHandler, and minimal SurfaceService initialized; message {(int)DesignerMessageId.CreateSurface} registered before protocol start.");
 
-        protocolHandler.Start();
+        _protocolHandler.Start();
 
         WinUIDesignerLogger.LogTrace("Surface", "ProtocolHandler started.");
 
@@ -101,8 +101,8 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
             {
                 try
                 {
-                    using var hostProcess = Process.GetProcessById(hostProcessId);
-                    while (protocolHandler is { IsShutdown: false } && !hostProcess.WaitForExit(250))
+                    using var hostProcess = Process.GetProcessById(_hostProcessId);
+                    while (_protocolHandler is { IsShutdown: false } && !hostProcess.WaitForExit(250))
                     {
                     }
                 }
@@ -111,7 +111,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
                     // The host exited before the watcher was attached.
                 }
 
-                dispatcherQueue.TryEnqueue(Exit);
+                _dispatcherQueue.TryEnqueue(Exit);
             },
             CancellationToken.None,
             TaskCreationOptions.LongRunning,
@@ -135,17 +135,17 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
 
     public void Dispose()
     {
-        if (disposed)
+        if (_disposed)
         {
             return;
         }
 
         // Shutdown cancels pending protocol/dispatcher requests before their
         // document state is released; closing only the pipes leaves them live.
-        disposed = true;
-        protocolHandler?.Shutdown();
-        surfaceService?.Dispose();
-        protocolHandler?.Dispose();
-        dataBridge?.Dispose();
+        _disposed = true;
+        _protocolHandler?.Shutdown();
+        _surfaceService?.Dispose();
+        _protocolHandler?.Dispose();
+        _dataBridge?.Dispose();
     }
 }

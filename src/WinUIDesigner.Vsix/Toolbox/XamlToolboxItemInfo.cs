@@ -10,7 +10,7 @@ namespace WinUIDesigner.Toolbox;
 internal sealed class XamlToolboxItemInfo(string displayName, Bitmap icon, Color transparentColor, IEnumerable<KeyValuePair<string, string>> extraInfo, IDictionary<string, string> properties)
     : IToolboxItemInfo
 {
-    private IDictionary<string, string> properties = properties;
+    private IDictionary<string, string> _properties = properties;
 
     public string DisplayName { get; private set; } = displayName;
 
@@ -22,6 +22,6 @@ internal sealed class XamlToolboxItemInfo(string displayName, Bitmap icon, Color
 
     public string GetPropertyValue(string name)
     {
-        return properties[name];
+        return _properties[name];
     }
 }

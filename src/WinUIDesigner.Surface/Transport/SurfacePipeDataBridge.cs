@@ -18,16 +18,16 @@ namespace WinUIDesigner.Surface.Transport;
 /// </summary>
 internal sealed partial class SurfacePipeDataBridge : IDataBridge, IDisposable
 {
-    private readonly SurfaceAnonymousPipe readPipe;
-    private readonly SurfaceAnonymousPipe writePipe;
-    private bool isFirstMessage = true;
-    private volatile bool closed;
+    private readonly SurfaceAnonymousPipe _readPipe;
+    private readonly SurfaceAnonymousPipe _writePipe;
+    private bool _isFirstMessage = true;
+    private volatile bool _closed;
 
     public ManualResetEvent ReadyEvent { get; } = new(initialState: true);
 
     public ManualResetEvent FirstMessageEvent { get; } = new(initialState: false);
 
-    public bool IsConnected => !closed;
+    public bool IsConnected => !_closed;
 
     public SurfacePipeDataBridge(string initializationData)
     {
@@ -42,21 +42,21 @@ internal sealed partial class SurfacePipeDataBridge : IDataBridge, IDisposable
             throw new ArgumentException("Expected eight inherited pipe handles.", nameof(initializationData));
         }
 
-        readPipe = new SurfaceAnonymousPipe(handles[0], handles[1], handles[2], handles[3]);
-        writePipe = new SurfaceAnonymousPipe(handles[4], handles[5], handles[6], handles[7]);
+        _readPipe = new SurfaceAnonymousPipe(handles[0], handles[1], handles[2], handles[3]);
+        _writePipe = new SurfaceAnonymousPipe(handles[4], handles[5], handles[6], handles[7]);
     }
 
     public void Close()
     {
-        if (closed) return;
-        closed = true;
-        readPipe.Close();
-        writePipe.Close();
+        if (_closed) return;
+        _closed = true;
+        _readPipe.Close();
+        _writePipe.Close();
     }
 
     public byte[] ReadMessage()
     {
-        if (closed)
+        if (_closed)
         {
             return null!;
         }
@@ -64,7 +64,7 @@ internal sealed partial class SurfacePipeDataBridge : IDataBridge, IDisposable
         byte[]? buffer;
         try
         {
-            buffer = MessageFrameReader.Read(readPipe.Read);
+            buffer = MessageFrameReader.Read(_readPipe.Read);
         }
         catch
         {
@@ -78,9 +78,9 @@ internal sealed partial class SurfacePipeDataBridge : IDataBridge, IDisposable
             return null!;
         }
 
-        if (isFirstMessage)
+        if (_isFirstMessage)
         {
-            isFirstMessage = false;
+            _isFirstMessage = false;
             FirstMessageEvent.Set();
 
             WinUIDesignerLogger.LogTrace("Surface", "First protocol message received from Visual Studio.");
@@ -91,14 +91,14 @@ internal sealed partial class SurfacePipeDataBridge : IDataBridge, IDisposable
 
     public void WriteMessage(byte[] buffer)
     {
-        writePipe.Write(buffer);
+        _writePipe.Write(buffer);
     }
 
     public bool VerifyConnected(CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
 
-        return !closed;
+        return !_closed;
     }
 
     public void Dispose()
@@ -106,8 +106,8 @@ internal sealed partial class SurfacePipeDataBridge : IDataBridge, IDisposable
         Close();
         ReadyEvent.Dispose();
         FirstMessageEvent.Dispose();
-        readPipe.Dispose();
-        writePipe.Dispose();
+        _readPipe.Dispose();
+        _writePipe.Dispose();
         GC.SuppressFinalize(this);
     }
 
