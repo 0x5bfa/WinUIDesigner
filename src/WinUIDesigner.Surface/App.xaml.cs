@@ -5,6 +5,7 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -25,32 +26,6 @@ namespace WinUIDesigner.Surface;
 /// </summary>
 public sealed partial class App : Application, IXamlMetadataProvider, IDisposable
 {
-    // The XAML compiler adds this provider after its first compilation pass.
-    // Resolve it at runtime so the explicit interface also compiles during pass one.
-    private IXamlMetadataProvider GeneratedMetadata
-    {
-        get
-        {
-            return (IXamlMetadataProvider)(GetType().GetProperty("_AppProvider", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(this)
-                ?? throw new InvalidOperationException("The generated XAML metadata provider was not found."));
-        }
-    }
-
-    IXamlType? IXamlMetadataProvider.GetXamlType(Type type)
-    {
-        return GeneratedMetadata.GetXamlType(type) ?? ProjectRuntimeResolver.GetXamlType(type.FullName!);
-    }
-
-    IXamlType? IXamlMetadataProvider.GetXamlType(string name)
-    {
-        return GeneratedMetadata.GetXamlType(name) ?? ProjectRuntimeResolver.GetXamlType(name);
-    }
-
-    XmlnsDefinition[] IXamlMetadataProvider.GetXmlnsDefinitions()
-    {
-        return GeneratedMetadata.GetXmlnsDefinitions().Concat(ProjectRuntimeResolver.GetXmlnsDefinitions()).ToArray();
-    }
-
     private readonly int hostProcessId;
     private readonly string tapPath;
     private readonly string bridgeInitializationData;
@@ -61,17 +36,22 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
     private SurfaceService? surfaceService;
     private bool disposed;
 
-    public App(
-        int hostProcessId,
-        string tapPath,
-        string bridgeInitializationData,
-        DispatcherQueue dispatcherQueue)
+    // The XAML compiler generates this surface app metadata provider in a later build pass.
+    // Resolve it at runtime because this source must compile before that generated member exists.
+    // This provider describes the designer surface app; project-assembly providers are queried as fallback below.
+    private IXamlMetadataProvider GeneratedMetadata =>
+        (IXamlMetadataProvider)(this.GetType().GetProperty("_AppProvider", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(this)
+            ?? throw new InvalidOperationException("The generated XAML metadata provider was not found."));
+
+    public App(int hostProcessId, string tapPath, string bridgeInitializationData, DispatcherQueue dispatcherQueue)
     {
         this.hostProcessId = hostProcessId;
         this.tapPath = tapPath;
         this.bridgeInitializationData = bridgeInitializationData;
         this.dispatcherQueue = dispatcherQueue;
+
         ResourceManagerRequested += (_, args) => args.CustomResourceManager = ProjectRuntimeResolver.CreateResourceManager();
+
         InitializeComponent();
     }
 
@@ -80,7 +60,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         UnhandledException += (_, args) =>
         {
             WinUIDesignerLogger.LogTrace("Surface", $"WinUI unhandled exception: {args.Exception}");
-            protocolHandler?.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse
+            protocolHandler?.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {
                 Message = args.Exception.Message,
                 CallStack = args.Exception.ToString(),
@@ -96,9 +76,11 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         {
             WinUIDesignerLogger.LogTrace("Surface", $"Asynchronous protocol request failed: {exception}");
 
-            protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse
+            protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {
-                Message = exception.Message, CallStack = exception.ToString(), IsArtboardException = true,
+                Message = exception.Message,
+                CallStack = exception.ToString(),
+                IsArtboardException = true,
             });
         };
 
@@ -111,27 +93,44 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
 
         WinUIDesignerLogger.LogTrace("Surface", "ProtocolHandler started.");
 
-        _ = Task.Run(WatchHostProcess);
+        // Exit the surface when the host process goes away, even if it never sends an orderly protocol shutdown.
+        // WPF has a similar watcher as HostProcessWatcher in WpfSurface.exe.
+        // UWP manages its DesignerAppView lifecycle from UwpSurfaceProcess in MS.VS.DT.UwpSurfaceDesigner.dll through DesignerAppManager.
+        _ = Task.Factory.StartNew(
+            () =>
+            {
+                try
+                {
+                    using var hostProcess = Process.GetProcessById(hostProcessId);
+                    while (protocolHandler is { IsShutdown: false } && !hostProcess.WaitForExit(250))
+                    {
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    // The host exited before the watcher was attached.
+                }
+
+                dispatcherQueue.TryEnqueue(Exit);
+            },
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
     }
 
-    private void WatchHostProcess()
+    IXamlType? IXamlMetadataProvider.GetXamlType(Type type)
     {
-        // The pipes do not own Visual Studio's lifetime. Exit the island when devenv
-        // goes away, even if the host never sends an orderly protocol shutdown.
-        try
-        {
-            using Process hostProcess = Process.GetProcessById(hostProcessId);
+        return GeneratedMetadata.GetXamlType(type) ?? ProjectRuntimeResolver.GetXamlType(type.FullName!);
+    }
 
-            while (protocolHandler is { IsShutdown: false } && !hostProcess.WaitForExit(250))
-            {
-            }
-        }
-        catch (ArgumentException)
-        {
-            // The host exited before the watcher was attached.
-        }
+    IXamlType? IXamlMetadataProvider.GetXamlType(string name)
+    {
+        return GeneratedMetadata.GetXamlType(name) ?? ProjectRuntimeResolver.GetXamlType(name);
+    }
 
-        dispatcherQueue.TryEnqueue(() => Exit());
+    XmlnsDefinition[] IXamlMetadataProvider.GetXmlnsDefinitions()
+    {
+        return GeneratedMetadata.GetXmlnsDefinitions().Concat(ProjectRuntimeResolver.GetXmlnsDefinitions()).ToArray();
     }
 
     public void Dispose()
