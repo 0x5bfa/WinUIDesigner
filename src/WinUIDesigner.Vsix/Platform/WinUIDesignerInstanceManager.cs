@@ -4,15 +4,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Live;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Pipeline;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
-using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Platform;
 
@@ -23,8 +20,6 @@ internal sealed class WinUIDesignerInstanceManager(
     IProtocolHandler protocolHandler)
     : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler)
 {
-    private readonly IProtocolHandler protocolHandler = protocolHandler;
-
     protected override LiveMarkupLinkResult TryLinkDocumentNode(ILiveNode liveNode, bool canDelay)
     {
         LiveMarkupLinkResult result = base.TryLinkDocumentNode(liveNode, canDelay);
@@ -39,57 +34,25 @@ internal sealed class WinUIDesignerInstanceManager(
         return result;
     }
 
-    protected override async Task<CreateSurfaceRequestInfo> CreateRequestAsync(
+    protected override Task<CreateSurfaceRequestInfo> CreateRequestAsync(
         ISurfaceProcessDocument targetDocument,
         IReadOnlyList<ISurfaceProcessDocument> preparedDocuments)
     {
         var provider = MarkupProvider as WinUISurfaceProcessMarkupProvider;
 
-        try
+        var projectPath = targetDocument.Document.DocumentContext?.Project?.ProjectPath;
+        var projectDirectory = Path.GetDirectoryName(projectPath);
+        var appXamlPath = projectDirectory is null ? null : Path.Combine(projectDirectory, "App.xaml");
+
+        if (provider is { AppXaml: null } && appXamlPath is not null && File.Exists(appXamlPath))
         {
-            // The shared instance builder does not expose WinUI App.xaml resources
-            // to the out-of-process surface, so send the supported subset first.
-            var projectPath = targetDocument.Document.DocumentContext?.Project?.ProjectPath;
-            var projectDirectory = Path.GetDirectoryName(projectPath);
-            var appXamlPath = projectDirectory is null ? null : Path.Combine(projectDirectory, "App.xaml");
-
-            if (provider is { AppXaml: null } && appXamlPath is not null && File.Exists(appXamlPath))
-                provider.PrepareApplicationDocumentsForLoading(ignoreAppXbf: true);
-
-            // Use the provider's document so these settings match the App.xaml sent to the surface.
-            var appXamlText = provider?.AppXaml?.Document.Text;
-            var appXaml = appXamlText is null ? null : XDocument.Parse(appXamlText);
-
-            var hasXamlControlsResources = appXaml is not null &&
-                appXaml.Descendants()
-                    .Any(element => element.Name.LocalName == "XamlControlsResources" &&
-                        element.Name.NamespaceName == "using:Microsoft.UI.Xaml.Controls");
-
-            var requestedTheme = (string?)appXaml?.Root?.Attribute("RequestedTheme");
-
-            ResponseWithError response = await protocolHandler.SendMessageAsync<ResponseWithError>(
-                (int)DesignerMessageId.ConfigureAppResources,
-                new ConfigureAppResourcesRequest { HasXamlControlsResources = hasXamlControlsResources, RequestedTheme = requestedTheme }).ConfigureAwait(false);
-
-            if (response.HResult < 0)
-            {
-                throw new InvalidOperationException(response.Error);
-            }
-
-            WinUIDesignerLogger.LogTrace(
-                "Platform",
-                $"App.xaml resources configured: XamlControlsResources={hasXamlControlsResources}, RequestedTheme={requestedTheme ?? "Default"}, result=0x{response.HResult:X8}.");
-        }
-        catch (Exception ex)
-        {
-            WinUIDesignerLogger.LogError("Platform", "App.xaml resource configuration failed.", ex);
-            throw;
+            provider.PrepareApplicationDocumentsForLoading(ignoreAppXbf: true);
         }
 
         bool includeInstanceBuildingActions = SurfaceProcessContext.ResetParseLoadDocumentFailure(targetDocument.DocumentId);
         includeInstanceBuildingActions |= SurfaceProcessContext.InstanceBuildingFailures.HasFailures;
 
-        var request = new CreateSurfaceRequestInfo()
+        var request = new CreateSurfaceRequestInfo
         {
             Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions),
         };
@@ -103,6 +66,6 @@ internal sealed class WinUIDesignerInstanceManager(
                 request.DesignTimeResources = MakeCreateDocumentInfo(resources, includeInstanceBuildingActions);
         }
 
-        return request;
+        return Task.FromResult(request);
     }
 }

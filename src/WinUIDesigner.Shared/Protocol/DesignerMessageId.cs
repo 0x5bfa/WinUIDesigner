@@ -35,7 +35,4 @@ internal enum DesignerMessageId : int
     SurfaceLayoutUpdated = 543,
     EvaluateStaticExtension = 546,
     SetSurfacePosition = 548,
-
-    // Extension-owned message; keep its wire value stable across both processes.
-    ConfigureAppResources = 6001,
 }

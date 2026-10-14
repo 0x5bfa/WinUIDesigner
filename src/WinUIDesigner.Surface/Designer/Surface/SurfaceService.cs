@@ -2,22 +2,18 @@
 // Licensed under MIT License.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml;
 using System.Xml.Linq;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Windows.Foundation;
@@ -48,8 +44,8 @@ internal sealed partial class SurfaceService : IDisposable
     private readonly Dictionary<int, ResourceDictionary> resourceDocuments = new();
     private readonly Dictionary<int, HashSet<int>> documentResources = new();
     private readonly Dictionary<int, SurfaceBoundsSnapshot> publishedSurfaceBounds = new();
-    private readonly Dictionary<long, VisualTreeTopologyEntry[]> publishedVisualTreeTopologies = new();
     private readonly List<int> registrationIds = new();
+    private readonly VisualTreeService visualTreeService;
     private readonly HitTestService hitTestService;
     private readonly SnapLineService snapLineService;
     private readonly PropertyService propertyService;
@@ -67,6 +63,7 @@ internal sealed partial class SurfaceService : IDisposable
         this.protocolHandler = protocolHandler;
         this.dispatcherQueue = dispatcherQueue;
         this.objectIdentity = objectIdentity;
+        visualTreeService = new(protocolHandler, objectIdentity);
         // These numeric message IDs are the shared VS designer wire contract; the
         // matching request/response types come from the private VS contract assembly.
 
@@ -77,8 +74,6 @@ internal sealed partial class SurfaceService : IDisposable
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetDeviceSizeRequestInfo, ResponseWithError>((int)DesignerMessageId.SetDeviceSize, HandleSetDeviceSizeAsync));
         registrationIds.Add(protocolHandler.RegisterMessageObserver<SetFreezeStateInfo>((int)DesignerMessageId.SetFreezeState, HandleSetFreezeState));
         registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetSurfacePositionRequestInfo, ResponseWithError>((int)DesignerMessageId.SetSurfacePosition, HandleSetSurfacePositionAsync));
-        registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<ConfigureAppResourcesRequest, ResponseWithError>((int)DesignerMessageId.ConfigureAppResources, HandleConfigureAppResourcesAsync));
-
         hitTestService = new HitTestService(protocolHandler, dispatcherQueue, objectIdentity);
         snapLineService = new SnapLineService(protocolHandler, dispatcherQueue, objectIdentity);
         xamlActionService = new XamlActionService(protocolHandler, dispatcherQueue, objectIdentity, this);
@@ -119,6 +114,12 @@ internal sealed partial class SurfaceService : IDisposable
             {
                 throw new ArgumentException("A nonzero document ID is required.");
             }
+
+            await InvokeOnDispatcher(() =>
+            {
+                ConfigureApplicationResources(requestInfo.Application);
+                return true;
+            }, ex => throw ex).ConfigureAwait(false);
 
             await InvokeOnDispatcher(() =>
             {
@@ -324,7 +325,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
         if (surfaces.Remove(documentId, out DesignerSurface? surface))
         {
-            PublishVisualTreeMutation(surface.Content, VisualMutationType.Remove);
+            visualTreeService.PublishMutation(surface.Content, VisualMutationType.Remove);
             surface.Dispose();
         }
         publishedSurfaceBounds.Remove(documentId);
@@ -347,11 +348,11 @@ internal sealed partial class SurfaceService : IDisposable
             surface.SetRequestedTheme(appRequestedTheme);
             surfaces[documentId] = surface;
 
-            RegisterPreparedSourceInfo(requestInfo.Document, preparedXaml, root);
+            visualTreeService.RegisterSourceInfo(requestInfo.Document, preparedXaml, root);
 
             long dispatcherHandle = objectIdentity.GetHandle(dispatcherQueue);
             long rootVisualHandle = objectIdentity.GetHandle(root);
-            PublishVisualTreeMutation(root, VisualMutationType.Add);
+            visualTreeService.PublishMutation(root, VisualMutationType.Add);
             PublishSurfaceBounds(documentId, surface);
             WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface completed: DocumentId={documentId}, DispatcherHandle={dispatcherHandle}, RootVisualHandle={rootVisualHandle}, DesiredSize={root.DesiredSize.Width}x{root.DesiredSize.Height}, ActualSize={root.ActualWidth}x{root.ActualHeight}.");
 
@@ -363,7 +364,7 @@ internal sealed partial class SurfaceService : IDisposable
                 }
 
                 using var scope = objectIdentity.EnterDocument(documentId);
-                PublishVisualTreeMutation(root, VisualMutationType.Add);
+                visualTreeService.PublishMutation(root, VisualMutationType.Add);
                 protocolHandler.PostMessage((int)DesignerMessageId.OnApplicationEvent, new OnApplicationEventResponse { EventName = "OnIdle" });
             });
 
@@ -376,164 +377,6 @@ internal sealed partial class SurfaceService : IDisposable
             WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface failed: {ex}");
             throw;
         }
-    }
-
-    private void RegisterPreparedSourceInfo(CreateDocumentInfo? document, string? preparedXaml, FrameworkElement root)
-    {
-        if (document is null || string.IsNullOrWhiteSpace(document.DesignTimeSurfaceUri) || string.IsNullOrWhiteSpace(preparedXaml))
-        {
-            return;
-        }
-
-        try
-        {
-            XDocument xamlDocument = XDocument.Parse(preparedXaml, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
-            if (xamlDocument.Root is null)
-            {
-                return;
-            }
-
-            var markupElements = new List<XElement>();
-            foreach (XElement element in xamlDocument.Root.DescendantsAndSelf())
-            {
-                if (!element.Name.LocalName.Contains('.', StringComparison.Ordinal)
-                    && !element.Ancestors().Any(parent => parent.Name.LocalName is "ControlTemplate" or "DataTemplate" or "ItemsPanelTemplate"))
-                {
-                    markupElements.Add(element);
-                }
-            }
-
-            var runtimeElements = new List<DependencyObject>();
-            AppendRuntimeElements(root, runtimeElements);
-            var usedMarkup = new HashSet<XElement>();
-            int mapped = 0;
-            foreach (DependencyObject runtimeElement in runtimeElements)
-            {
-                XElement? markupElement = FindMarkupElement(runtimeElement, markupElements, usedMarkup);
-                if (markupElement is null || markupElement is not IXmlLineInfo lineInfo || !lineInfo.HasLineInfo())
-                {
-                    continue;
-                }
-
-                usedMarkup.Add(markupElement);
-                objectIdentity.RegisterSourceInfo(runtimeElement, new SourceInfo
-                {
-                    FileName = document.DesignTimeSurfaceUri,
-                    LineNumber = (uint)lineInfo.LineNumber,
-                    ColumnNumber = (uint)lineInfo.LinePosition,
-                });
-                mapped++;
-            }
-
-            WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML source mapping registered: document={document.DocumentId}, mapped={mapped}/{runtimeElements.Count} visual(s).");
-        }
-        catch (Exception ex)
-        {
-            WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML source mapping failed for document {document.DocumentId}: {ex.Message}");
-        }
-    }
-
-    private static void AppendRuntimeElements(DependencyObject element, List<DependencyObject> elements, HashSet<object>? visited = null)
-    {
-        visited ??= new HashSet<object>(ReferenceEqualityComparer.Instance);
-        if (!visited.Add(element))
-        {
-            return;
-        }
-
-        elements.Add(element);
-        // Walk the object graph produced from source XAML instead of the rendered
-        // visual tree. The latter contains ControlTemplate implementation details
-        // (Border/Grid/ContentPresenter, etc.) which have no source DocumentNode
-        // and can otherwise steal same-type source entries from authored elements.
-
-        foreach (string propertyName in new[] { "Resources", "MergedDictionaries", "Setters", "Value", "Children", "Content", "Child", "Items" })
-        {
-            System.Reflection.PropertyInfo? property = element.GetType().GetProperty(propertyName);
-            if (property?.CanRead != true)
-            {
-                continue;
-            }
-
-            object? value;
-            try
-            {
-                value = property.GetValue(element);
-            }
-            catch
-            {
-                continue;
-            }
-
-            if (value is DependencyObject child)
-            {
-                AppendRuntimeElements(child, elements, visited);
-                continue;
-            }
-
-            if (value is IEnumerable enumerable && value is not string)
-            {
-                bool foundChild = false;
-                foreach (object? item in enumerable)
-                {
-                    object? authoredValue = item is not null && item.GetType().IsGenericType && item.GetType().GetGenericTypeDefinition() == typeof(KeyValuePair<,>)
-                        ? item.GetType().GetProperty("Value")?.GetValue(item) : item;
-                    if (authoredValue is DependencyObject dependencyObject)
-                    {
-                        AppendRuntimeElements(dependencyObject, elements, visited);
-                        foundChild = true;
-                    }
-                }
-
-                _ = foundChild;
-            }
-        }
-    }
-
-    private static XElement? FindMarkupElement(
-        DependencyObject runtimeElement,
-        IReadOnlyList<XElement> candidates,
-        HashSet<XElement> used)
-    {
-        string runtimeTypeName = runtimeElement.GetType().Name;
-        string? runtimeName = (runtimeElement as FrameworkElement)?.Name;
-        XNamespace x = XamlNamespace;
-
-        if (!string.IsNullOrEmpty(runtimeName))
-        {
-            foreach (XElement candidate in candidates)
-            {
-                if (used.Contains(candidate) || !MatchesMarkupType(candidate, runtimeElement.GetType()))
-                {
-                    continue;
-                }
-
-                string? candidateName = (string?)candidate.Attribute(x + "Name") ?? (string?)candidate.Attribute("Name");
-                if (string.Equals(candidateName, runtimeName, StringComparison.Ordinal))
-                {
-                    return candidate;
-                }
-            }
-        }
-
-        foreach (XElement candidate in candidates)
-        {
-            if (!used.Contains(candidate) && MatchesMarkupType(candidate, runtimeElement.GetType()))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool MatchesMarkupType(XElement element, Type runtimeType)
-    {
-        if (element.Name.NamespaceName.StartsWith("using:", StringComparison.Ordinal))
-            return string.Equals(element.Name.NamespaceName[6..] + "." + element.Name.LocalName, runtimeType.FullName, StringComparison.Ordinal);
-        if (element.Name.NamespaceName.StartsWith("clr-namespace:", StringComparison.Ordinal))
-            return string.Equals(element.Name.NamespaceName[14..].Split(';')[0] + "." + element.Name.LocalName, runtimeType.FullName, StringComparison.Ordinal);
-        return element.Name.LocalName == runtimeType.Name && runtimeType.Namespace?.StartsWith("Microsoft.UI.Xaml", StringComparison.Ordinal) == true;
     }
 
     internal void SetSurfaceContent(int documentId, object? content)
@@ -557,9 +400,9 @@ internal sealed partial class SurfaceService : IDisposable
         {
             XamlRuntimeUtilities.RegisterNameScope(root);
             FrameworkElement oldRoot = surface.Content;
-            PublishVisualTreeMutation(oldRoot, VisualMutationType.Remove);
+            visualTreeService.PublishMutation(oldRoot, VisualMutationType.Remove);
             surface.ReplaceContent(root);
-            RemoveVisualTreeIdentities(oldRoot);
+            visualTreeService.RemoveIdentities(oldRoot);
         }
         else
         {
@@ -567,7 +410,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
 
         objectIdentity.GetHandle(root);
-        PublishVisualTreeMutation(root, VisualMutationType.Add);
+        visualTreeService.PublishMutation(root, VisualMutationType.Add);
         PublishSurfaceBounds(documentId, surface);
         WinUIDesignerLogger.LogTrace("Surface", $"Action surface content applied: document={documentId}, root={root.GetType().FullName}.");
     }
@@ -578,7 +421,7 @@ internal sealed partial class SurfaceService : IDisposable
         {
             using var scope = objectIdentity.EnterDocument(entry.Key);
             entry.Value.RefreshLayout();
-            PublishVisualTreeMutationIfChanged(entry.Value.Content);
+            visualTreeService.PublishMutationIfChanged(entry.Value.Content);
             PublishSurfaceBounds(entry.Key, entry.Value);
         }
     }
@@ -705,20 +548,29 @@ internal sealed partial class SurfaceService : IDisposable
             }, $"SetArtboardColors ({(int)DesignerMessageId.SetArtboardColors})");
     }
 
-    private Task<ResponseWithError> HandleConfigureAppResourcesAsync(ConfigureAppResourcesRequest request)
+    private void ConfigureApplicationResources(CreateDocumentInfo? applicationDocument)
     {
-        return InvokeOnDispatcher(() =>
-            {
-                hasXamlControlsResources = request.HasXamlControlsResources;
-                appRequestedTheme = Enum.TryParse(request.RequestedTheme, true, out ElementTheme theme)
-                    ? theme : ElementTheme.Default;
-                LoadAppResourcesIfNeeded();
-                foreach (DesignerSurface surface in surfaces.Values)
-                {
-                    surface.SetRequestedTheme(appRequestedTheme);
-                }
-                return Success;
-            }, CreateResponseFailure);
+        string? appXaml = TryReadPreparedXaml(applicationDocument) ?? applicationDocument?.InitialXamlContent;
+        XDocument? appDocument = string.IsNullOrWhiteSpace(appXaml) ? null : XDocument.Parse(appXaml);
+
+        hasXamlControlsResources = appDocument?.Root?.DescendantsAndSelf()
+            .Any(element => element.Name.LocalName == "XamlControlsResources"
+                && element.Name.NamespaceName == "using:Microsoft.UI.Xaml.Controls") == true;
+
+        string? requestedTheme = (string?)appDocument?.Root?.Attribute("RequestedTheme");
+        appRequestedTheme = Enum.TryParse(requestedTheme, true, out ElementTheme theme)
+            ? theme
+            : ElementTheme.Default;
+
+        LoadAppResourcesIfNeeded();
+        foreach (DesignerSurface surface in surfaces.Values)
+        {
+            surface.SetRequestedTheme(appRequestedTheme);
+        }
+
+        WinUIDesignerLogger.LogTrace(
+            "Surface",
+            $"Application resources prepared from CreateSurface request: XamlControlsResources={hasXamlControlsResources}, RequestedTheme={requestedTheme ?? "Default"}.");
     }
 
     private Task<ResponseWithError> HandleSetDeviceSizeAsync(SetDeviceSizeRequestInfo request)
@@ -789,7 +641,7 @@ internal sealed partial class SurfaceService : IDisposable
                 surface.SetSurfacePosition(new IntPtr(request.ParentWindow), request.Width, request.Height);
                 LoadAppResourcesIfNeeded();
                 long rootHandle = objectIdentity.GetHandle(surface.Content);
-                PublishVisualTreeMutation(surface.Content, VisualMutationType.Add);
+                visualTreeService.PublishMutation(surface.Content, VisualMutationType.Add);
                 PublishSurfaceBounds(request.DocumentId, surface);
             }, $"SetSurfacePosition ({(int)DesignerMessageId.SetSurfacePosition})");
     }
@@ -921,166 +773,6 @@ internal sealed partial class SurfaceService : IDisposable
             $"document={documentBounds.X},{documentBounds.Y},{documentBounds.Width},{documentBounds.Height}.");
     }
 
-    private void PublishVisualTreeMutation(FrameworkElement root, VisualMutationType mutationType)
-    {
-        long rootHandle = objectIdentity.GetHandle(root);
-        if (mutationType == VisualMutationType.Remove)
-        {
-            protocolHandler.PostMessage((int)DesignerMessageId.VisualTreeMutations, new MutationList
-            {
-                Mutations =
-                [
-                    CreateVisualMutation(root, rootHandle, 0, 0, isRoot: true, mutationType),
-                ],
-            });
-            publishedVisualTreeTopologies.Remove(rootHandle);
-            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) posted: {mutationType} root handle={rootHandle}, type={root.GetType().FullName}.");
-            return;
-        }
-
-        var mutations = new List<VisualTreeMutationEvent>();
-        AppendVisualMutations(root, rootHandle, 0, 0, isRoot: true, mutations);
-
-        protocolHandler.PostMessage((int)DesignerMessageId.VisualTreeMutations, new MutationList
-        {
-            Mutations = mutations,
-        });
-
-        publishedVisualTreeTopologies[rootHandle] = CaptureVisualTreeTopology(root);
-        WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) posted: Add {mutations.Count} visual(s), root handle={rootHandle}, type={root.GetType().FullName}.");
-    }
-
-    private void PublishVisualTreeMutationIfChanged(FrameworkElement root)
-    {
-        long rootHandle = objectIdentity.GetHandle(root);
-        VisualTreeTopologyEntry[] currentTopology = CaptureVisualTreeTopology(root);
-
-        if (publishedVisualTreeTopologies.TryGetValue(rootHandle, out VisualTreeTopologyEntry[]? publishedTopology)
-            && publishedTopology.AsSpan().SequenceEqual(currentTopology))
-        {
-            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) skipped: topology unchanged for root handle={rootHandle}.");
-            return;
-        }
-
-        if (publishedTopology is not null)
-        {
-            // A full Add snapshot relocates surviving children, but does not remove
-            // deleted nodes in LiveNodeTreeBase. Explicitly remove the vanished roots.
-            var retained = currentTopology.Select(entry => entry.Handle).ToHashSet();
-            var removed = publishedTopology.Where(entry => !retained.Contains(entry.Handle)).ToArray();
-            var removedHandles = removed.Select(entry => entry.Handle).ToHashSet();
-            var mutations = removed.Where(entry => !removedHandles.Contains(entry.ParentHandle))
-                .Select(entry => new VisualTreeMutationEvent
-                {
-                    Element = new VisualElement { Handle = entry.Handle },
-                    Relation = new ParentChildRelation { Parent = entry.ParentHandle, Child = entry.Handle, ChildIndex = entry.ChildIndex },
-                    VisualMutationType = VisualMutationType.Remove,
-                }).ToList();
-            if (mutations.Count != 0)
-            {
-                protocolHandler.PostMessage((int)DesignerMessageId.VisualTreeMutations, new MutationList { Mutations = mutations });
-            }
-            // Keep detached object handles alive until document close: Undo can
-            // reconnect an existing proxy. Visual-tree deletion is not object release.
-        }
-
-        PublishVisualTreeMutation(root, VisualMutationType.Add);
-    }
-
-    private VisualTreeTopologyEntry[] CaptureVisualTreeTopology(DependencyObject root)
-    {
-        // Compare parent/child order and
-        // stable handles first to avoid resending an unchanged tree on every idle.
-        var topology = new List<VisualTreeTopologyEntry>();
-        AppendVisualTreeTopology(root, parentHandle: 0, childIndex: 0, topology);
-        return topology.ToArray();
-    }
-
-    private void AppendVisualTreeTopology(
-        DependencyObject element,
-        long parentHandle,
-        uint childIndex,
-        List<VisualTreeTopologyEntry> topology)
-    {
-        long handle = objectIdentity.GetHandle(element);
-        topology.Add(new VisualTreeTopologyEntry(handle, parentHandle, childIndex));
-
-        int childCount = VisualTreeHelper.GetChildrenCount(element);
-        for (int index = 0; index < childCount; index++)
-        {
-            AppendVisualTreeTopology(
-                VisualTreeHelper.GetChild(element, index),
-                handle,
-                (uint)index,
-                topology);
-        }
-    }
-
-    private void AppendVisualMutations(
-        DependencyObject element,
-        long handle,
-        long parentHandle,
-        uint childIndex,
-        bool isRoot,
-        List<VisualTreeMutationEvent> mutations)
-    {
-        // The designer needs both each element and its ordered parent relation to
-        // rebuild its own selectable tree from this out-of-process visual tree.
-        mutations.Add(CreateVisualMutation(element, handle, parentHandle, childIndex, isRoot, VisualMutationType.Add));
-
-        int childCount = VisualTreeHelper.GetChildrenCount(element);
-        for (int index = 0; index < childCount; index++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(element, index);
-            long childHandle = objectIdentity.GetHandle(child);
-            AppendVisualMutations(child, childHandle, handle, (uint)index, isRoot: false, mutations);
-        }
-    }
-
-    private VisualTreeMutationEvent CreateVisualMutation(
-        DependencyObject element,
-        long handle,
-        long parentHandle,
-        uint childIndex,
-        bool isRoot,
-        VisualMutationType mutationType)
-    {
-        return new VisualTreeMutationEvent
-        {
-            Element = new VisualElement
-            {
-                Handle = handle,
-                Type = GetDesignerTypeName(element.GetType()),
-                Name = (element as FrameworkElement)?.Name,
-                SourceInfo = objectIdentity.GetSourceInfo(element),
-                IsRoot = isRoot,
-            },
-            Relation = new ParentChildRelation
-            {
-                Parent = parentHandle,
-                Child = handle,
-                ChildIndex = childIndex,
-            },
-            VisualMutationType = mutationType,
-        };
-    }
-
-    private void RemoveVisualTreeIdentities(DependencyObject element)
-    {
-        int childCount = VisualTreeHelper.GetChildrenCount(element);
-        for (int index = 0; index < childCount; index++)
-        {
-            RemoveVisualTreeIdentities(VisualTreeHelper.GetChild(element, index));
-        }
-
-        objectIdentity.RemoveObject(element);
-    }
-
-    private static string? GetDesignerTypeName(Type type)
-    {
-        return type.FullName;
-    }
-
     private static ResponseWithError Success => new() { HResult = 0 };
 
     private static ResponseWithError CreateResponseFailure(Exception exception)
@@ -1115,7 +807,7 @@ internal sealed partial class SurfaceService : IDisposable
         documentResources.Clear();
 
         publishedSurfaceBounds.Clear();
-        publishedVisualTreeTopologies.Clear();
+        visualTreeService.Clear();
         objectIdentity.Clear();
     }
 }
