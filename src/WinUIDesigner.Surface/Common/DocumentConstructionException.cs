@@ -4,7 +4,7 @@
 using System;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Shared;
 
-namespace WinUIDesigner.Surface.Designer.Surface;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Reports which XAML action failed while constructing a document.

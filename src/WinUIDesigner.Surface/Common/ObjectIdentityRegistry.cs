@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
-namespace WinUIDesigner.Surface.Designer.Shared;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Maintains the stable object-to-handle identity expected by the Visual Studio LiveObject cache.
@@ -159,7 +159,14 @@ internal sealed partial class ObjectIdentityRegistry
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(info);
-        _sourceInfo[value] = CloneSourceInfo(info);
+        _sourceInfo[value] = new SourceInfo
+        {
+            FileName = info.FileName,
+            LineNumber = info.LineNumber,
+            ColumnNumber = info.ColumnNumber,
+            MarkupHandle = info.MarkupHandle,
+            ChangeVersion = info.ChangeVersion
+        };
         Track(value);
     }
 
@@ -176,7 +183,16 @@ internal sealed partial class ObjectIdentityRegistry
 
     public SourceInfo? GetSourceInfo(object value)
     {
-        return _sourceInfo.TryGetValue(value, out SourceInfo? info) ? CloneSourceInfo(info) : null;
+        return _sourceInfo.TryGetValue(value, out SourceInfo? info) ? new SourceInfo
+        {
+            FileName = info.FileName,
+            LineNumber = info.LineNumber,
+            ColumnNumber = info.ColumnNumber,
+            MarkupHandle = info.MarkupHandle,
+            ChangeVersion = info.ChangeVersion
+        }
+
+        : null;
     }
 
     public bool TryGetObject(long handle, out object? value)
@@ -216,17 +232,5 @@ internal sealed partial class ObjectIdentityRegistry
                 }
             }
         }
-    }
-
-    private static SourceInfo CloneSourceInfo(SourceInfo info)
-    {
-        return new()
-        {
-            FileName = info.FileName,
-            LineNumber = info.LineNumber,
-            ColumnNumber = info.ColumnNumber,
-            MarkupHandle = info.MarkupHandle,
-            ChangeVersion = info.ChangeVersion,
-        };
     }
 }

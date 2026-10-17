@@ -4,9 +4,9 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.UI.Xaml;
-using WinUIDesigner.Surface.Designer.Shared;
+using Microsoft.UI.Xaml.Markup;
 
-namespace WinUIDesigner.Surface.Designer.Xaml;
+namespace WinUIDesigner.Surface.Services;
 
 /// <summary>
 /// Resolves static resources within the document and its theme resource scopes.
@@ -141,7 +141,7 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
                 WinUIDesignerLogger.LogTrace("Surface", $"Parsing resource in theme scope '{_themeAssembly}/{_themePath}'.");
             }
 
-            return XamlRuntimeUtilities.ParseXaml(xaml) ?? throw new InvalidOperationException("XAML parsing returned no object.");
+            return XamlReader.Load(xaml) ?? throw new InvalidOperationException("XAML parsing returned no object.");
         }
         finally
         {

@@ -29,32 +29,24 @@ internal static class RuntimeTypeNameSerializer
 
     public static string Serialize(Type type)
     {
-        type = GetContractType(type);
-
-        return $"{GetTypeName(type)}, {GetAssemblyName(type)}";
-    }
-
-    private static Type GetContractType(Type type)
-    {
-        if (type.Assembly.GetName().Name != "WinRT.Runtime" || type.IsInterface)
-            return type;
-
-        var interfaces = type.GetInterfaces();
-
-        foreach (Type contract in _CollectionContracts)
+        if (type.Assembly.GetName().Name == "WinRT.Runtime" && !type.IsInterface)
         {
-            var match = interfaces
-                .Where(candidate => candidate == contract || candidate.IsGenericType && candidate.GetGenericTypeDefinition() == contract)
-                .OrderBy(candidate => candidate.FullName, StringComparer.Ordinal)
-                .FirstOrDefault();
-
-            if (match is not null)
+            var interfaces = type.GetInterfaces();
+            foreach (Type contract in _CollectionContracts)
             {
-                return match;
+                var match = interfaces
+                    .Where(candidate => candidate == contract || candidate.IsGenericType && candidate.GetGenericTypeDefinition() == contract)
+                    .OrderBy(candidate => candidate.FullName, StringComparer.Ordinal)
+                    .FirstOrDefault();
+                if (match is not null)
+                {
+                    type = match;
+                    break;
+                }
             }
         }
 
-        return type;
+        return $"{GetTypeName(type)}, {GetAssemblyName(type)}";
     }
 
     private static string GetTypeName(Type type)

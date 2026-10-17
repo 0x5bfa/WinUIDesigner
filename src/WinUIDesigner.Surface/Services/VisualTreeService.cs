@@ -11,11 +11,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
-using WinUIDesigner.Protocol;
-using WinUIDesigner.Surface.Designer.Shared;
-using WinUIDesigner.Surface.Designer.Surface;
 
-namespace WinUIDesigner.Surface.Designer.Operations;
+namespace WinUIDesigner.Surface.Services;
 
 /// <summary>
 /// Publishes the live WinUI visual tree and maps runtime objects back to their source XAML.
@@ -57,7 +54,39 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
             int mapped = 0;
             foreach (DependencyObject runtimeElement in runtimeElements)
             {
-                XElement? markupElement = FindMarkupElement(runtimeElement, markupElements, usedMarkup);
+                XElement? markupElement = null;
+                string? runtimeName = (runtimeElement as FrameworkElement)?.Name;
+                XNamespace x = _XamlNamespace;
+                if (!string.IsNullOrEmpty(runtimeName))
+                {
+                    foreach (XElement candidate in markupElements)
+                    {
+                        if (usedMarkup.Contains(candidate) || !MatchesMarkupType(candidate, runtimeElement.GetType()))
+                        {
+                            continue;
+                        }
+
+                        string? candidateName = (string?)candidate.Attribute(x + "Name") ?? (string?)candidate.Attribute("Name");
+                        if (string.Equals(candidateName, runtimeName, StringComparison.Ordinal))
+                        {
+                            markupElement = candidate;
+                            break;
+                        }
+                    }
+                }
+
+                if (markupElement is null)
+                {
+                    foreach (XElement candidate in markupElements)
+                    {
+                        if (!usedMarkup.Contains(candidate) && MatchesMarkupType(candidate, runtimeElement.GetType()))
+                        {
+                            markupElement = candidate;
+                            break;
+                        }
+                    }
+                }
+
                 if (markupElement is null || markupElement is not IXmlLineInfo lineInfo || !lineInfo.HasLineInfo())
                 {
                     continue;
@@ -171,11 +200,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
         return topology.ToArray();
     }
 
-    private void AppendTopology(
-        DependencyObject element,
-        long parentHandle,
-        uint childIndex,
-        List<VisualTreeTopologyEntry> topology)
+    private void AppendTopology(DependencyObject element, long parentHandle, uint childIndex, List<VisualTreeTopologyEntry> topology)
     {
         long handle = objectIdentity.GetHandle(element);
         topology.Add(new VisualTreeTopologyEntry(handle, parentHandle, childIndex));
@@ -191,13 +216,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
         }
     }
 
-    private void AppendMutations(
-        DependencyObject element,
-        long handle,
-        long parentHandle,
-        uint childIndex,
-        bool isRoot,
-        List<VisualTreeMutationEvent> mutations)
+    private void AppendMutations(DependencyObject element, long handle, long parentHandle, uint childIndex, bool isRoot, List<VisualTreeMutationEvent> mutations)
     {
         // The designer needs each element and its ordered parent relation to rebuild
         // its selectable tree from this out-of-process visual tree.
@@ -212,13 +231,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
         }
     }
 
-    private VisualTreeMutationEvent CreateMutation(
-        DependencyObject element,
-        long handle,
-        long parentHandle,
-        uint childIndex,
-        bool isRoot,
-        VisualMutationType mutationType)
+    private VisualTreeMutationEvent CreateMutation(DependencyObject element, long handle, long parentHandle, uint childIndex, bool isRoot, VisualMutationType mutationType)
     {
         return new VisualTreeMutationEvent
         {
@@ -290,42 +303,6 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
                 }
             }
         }
-    }
-
-    private static XElement? FindMarkupElement(
-        DependencyObject runtimeElement,
-        IReadOnlyList<XElement> candidates,
-        HashSet<XElement> used)
-    {
-        string? runtimeName = (runtimeElement as FrameworkElement)?.Name;
-        XNamespace x = _XamlNamespace;
-
-        if (!string.IsNullOrEmpty(runtimeName))
-        {
-            foreach (XElement candidate in candidates)
-            {
-                if (used.Contains(candidate) || !MatchesMarkupType(candidate, runtimeElement.GetType()))
-                {
-                    continue;
-                }
-
-                string? candidateName = (string?)candidate.Attribute(x + "Name") ?? (string?)candidate.Attribute("Name");
-                if (string.Equals(candidateName, runtimeName, StringComparison.Ordinal))
-                {
-                    return candidate;
-                }
-            }
-        }
-
-        foreach (XElement candidate in candidates)
-        {
-            if (!used.Contains(candidate) && MatchesMarkupType(candidate, runtimeElement.GetType()))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
     }
 
     private static bool MatchesMarkupType(XElement element, Type runtimeType)

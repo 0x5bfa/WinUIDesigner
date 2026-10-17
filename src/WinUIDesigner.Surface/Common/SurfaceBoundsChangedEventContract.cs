@@ -3,7 +3,7 @@
 
 using System.Runtime.Serialization;
 
-namespace WinUIDesigner.Surface.Designer.Surface;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Serializes a surface-bounds-changed event for the designer host.

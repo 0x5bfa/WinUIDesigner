@@ -17,12 +17,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Windows.Foundation;
-using WinUIDesigner.Protocol;
-using WinUIDesigner.Surface.Designer.Operations;
-using WinUIDesigner.Surface.Designer.Shared;
-using WinUIDesigner.Surface.Designer.Xaml;
 
-namespace WinUIDesigner.Surface.Designer.Surface;
+namespace WinUIDesigner.Surface.Services;
 
 /// <summary>
 /// Implements the surface-side Visual Studio designer protocol for WinUI documents.
@@ -48,11 +44,6 @@ internal sealed partial class SurfaceService : IDisposable
     private readonly Dictionary<int, SurfaceBoundsSnapshot> _publishedSurfaceBounds = [];
     private readonly List<int> _registrationIds = [];
     private readonly VisualTreeService _visualTreeService;
-    private readonly HitTestService _hitTestService;
-    private readonly SnapLineService _snapLineService;
-    private readonly PropertyService _propertyService;
-    private readonly XamlActionService _xamlActionService;
-    private readonly AnimationService _animationService;
     private ResourceDictionary? _xamlControlsResources;
     private int? _applicationResourceDocumentId;
     private int? _designTimeResourceDocumentId;
@@ -65,6 +56,9 @@ internal sealed partial class SurfaceService : IDisposable
         _dispatcherQueue = dispatcherQueue;
         _objectIdentity = objectIdentity;
         _visualTreeService = new(protocolHandler, objectIdentity);
+        _resourceScopes = new ResourceScopeService(objectIdentity);
+        _diagnosticsPropertySource = new DiagnosticsPropertySourceService();
+        _serializer = new LiveValueSerializer(objectIdentity);
 
         // The matching request/response types come from the Visual Studio side.
         _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>((int)DesignerMessageId.CreateSurface, HandleCreateSurfaceAsync));
@@ -75,11 +69,26 @@ internal sealed partial class SurfaceService : IDisposable
         _registrationIds.Add(protocolHandler.RegisterMessageObserver<SetFreezeStateInfo>((int)DesignerMessageId.SetFreezeState, HandleSetFreezeState));
         _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetSurfacePositionRequestInfo, ResponseWithError>((int)DesignerMessageId.SetSurfacePosition, HandleSetSurfacePositionAsync));
 
-        _hitTestService = new(protocolHandler, dispatcherQueue, objectIdentity);
-        _snapLineService = new(protocolHandler, dispatcherQueue, objectIdentity);
-        _xamlActionService = new(protocolHandler, dispatcherQueue, objectIdentity, this);
-        _propertyService = new(protocolHandler, dispatcherQueue, objectIdentity, _xamlActionService);
-        _animationService = new(protocolHandler, dispatcherQueue, objectIdentity);
+        // Visual Studio's HitTestRequest uses System.Windows.Point/Rect even for the
+        // platform-neutral wire protocol. Keep the WinUI surface independent of WPF
+        // by deserializing the same DataContract JSON shape into local DTOs.
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<HitTestRequestContract, HitResponse>((int)DesignerMessageId.HitTest, HandleHitTest));
+
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<GetSnapLinesRequest, GetSnapLinesResponse>((int)DesignerMessageId.GetSnapLines, HandleGetSnapLines));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<GetElementSnapDataRequest, GetElementSnapDataResponse>((int)DesignerMessageId.GetElementSnapData, HandleGetElementSnapData));
+
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, ResponseWithError>((int)DesignerMessageId.ExecuteXamlActions, HandleExecuteActions));
+
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<PropertiesRequestInfo, LiveObjectState>((int)DesignerMessageId.GetProperties, HandleGetProperties));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<DefaultValueRequestInfo, LiveValueResponse>((int)DesignerMessageId.GetDefaultValue, HandleGetDefaultValue));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<UnderlyingValueSourceRequest, UnderlyingValueSourceInformation>((int)DesignerMessageId.GetUnderlyingValue, HandleGetUnderlyingValue));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, UnderlyingValueSourceInformation>((int)DesignerMessageId.ExecuteLookupActions, HandleExecuteLookupActions));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<EvaluateStaticExtensionRequest, LiveValue>((int)DesignerMessageId.EvaluateStaticExtension, HandleEvaluateStaticExtension));
+
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<GoToStateRequest, ResponseWithError>((int)DesignerMessageId.GoToState, HandleGoToState));
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<StoryboardRequest, ResponseWithError>((int)DesignerMessageId.Storyboard, HandleStoryboardAction));
+
+        _diagnosticsPropertySource.StartInitialization();
     }
 
     private async Task<CreateSurfaceResponseInfo> HandleCreateSurfaceAsync(CreateSurfaceRequestInfo requestInfo)
@@ -133,7 +142,7 @@ internal sealed partial class SurfaceService : IDisposable
                 foreach (CreateDocumentInfo resourceDocument in resourceDocumentsToBuild)
                 {
                     InvalidateResourceDocument(resourceDocument.DocumentId);
-                    _xamlActionService.ReleaseDocument(resourceDocument.DocumentId);
+                    ReleaseDocument(resourceDocument.DocumentId);
 
                     if (!_documentResources.TryGetValue(document.DocumentId, out var resourceIds))
                     {
@@ -337,7 +346,8 @@ internal sealed partial class SurfaceService : IDisposable
         {
             return new()
             {
-                HResult = ex.HResult != 0 ? ex.HResult : Marshal.GetHRForException(ex), Error = ex.ToString()
+                HResult = ex.HResult != 0 ? ex.HResult : Marshal.GetHRForException(ex),
+                Error = ex.ToString()
             };
         }
         try
@@ -482,20 +492,17 @@ internal sealed partial class SurfaceService : IDisposable
 
         DesignerSurface? targetSurface = null;
         bool waitForPreviousUnfreeze = false;
+        DispatcherOperation.InvokeAsync(_dispatcherQueue, () =>
+             {
+                 if (request.DocumentIdToFreeze != 0 &&
+                     _surfaces.TryGetValue(request.DocumentIdToFreeze, out DesignerSurface? surface))
+                 {
+                     targetSurface = surface;
+                     waitForPreviousUnfreeze = !surface.IsFrozen;
+                 }
 
-        DispatcherOperation.Invoke(_dispatcherQueue, () =>
-        {
-            if (request.DocumentIdToFreeze != 0 &&
-                _surfaces.TryGetValue(request.DocumentIdToFreeze, out DesignerSurface? surface))
-            {
-                targetSurface = surface;
-                waitForPreviousUnfreeze = !surface.IsFrozen;
-            }
-
-            return true;
-        },
-        _protocolHandler.CancellationToken);
-
+                 return true;
+             }, _protocolHandler.CancellationToken).GetAwaiter().GetResult();
         if (waitForPreviousUnfreeze && targetSurface is not null)
         {
             bool completed = targetSurface.WaitForUnfreezeComposition(_FreezeCompositionTimeoutMilliseconds);
@@ -503,13 +510,11 @@ internal sealed partial class SurfaceService : IDisposable
                 $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}) composition barrier: document={request.DocumentIdToFreeze}, completed={completed}.");
         }
 
-        DispatcherOperation.Invoke(_dispatcherQueue, () =>
-        {
-            ApplyFreezeState(request.DocumentIdToFreeze);
-            return true;
-        },
-        _protocolHandler.CancellationToken);
-
+        DispatcherOperation.InvokeAsync(_dispatcherQueue, () =>
+             {
+                 ApplyFreezeState(request.DocumentIdToFreeze);
+                 return true;
+             }, _protocolHandler.CancellationToken).GetAwaiter().GetResult();
         WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}): document={request.DocumentIdToFreeze}.");
     }
 
@@ -595,7 +600,7 @@ internal sealed partial class SurfaceService : IDisposable
                             // The UWP cleaner can suppress project code and emit its own stand-in.
                             // Keep that decision, but use a WinUI control instead of UwpSurface.
                             if (element.Name.NamespaceName == "using:XSurfUwp.Fallback"
-                                && XamlRuntimeUtilities.IsFallbackControlType("XSurfUwp.Fallback." + element.Name.LocalName))
+                                && ("XSurfUwp.Fallback." + element.Name.LocalName is "XSurfUwp.Fallback.FallbackControl" or "XSurfUwp.Fallback.LayoutFaultFallbackControl"))
                             {
                                 element.Name = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml/presentation") + "ContentControl";
                                 if (element.Attribute("Content") is null && element.Attribute("Tag") is { } originalType)
@@ -661,7 +666,7 @@ internal sealed partial class SurfaceService : IDisposable
         {
             if (!resources)
             {
-                return (_xamlActionService.BuildDocument(actionsDocument), (string?)null);
+                return (BuildDocument(actionsDocument), (string?)null);
             }
             // Isolate action-built App resources from the designer's own dictionary.
 
@@ -669,7 +674,7 @@ internal sealed partial class SurfaceService : IDisposable
             Application.Current.Resources = [];
             try
             {
-                object root = _xamlActionService.BuildDocument(actionsDocument);
+                object root = BuildDocument(actionsDocument);
                 return (root is Application app ? (object)app.Resources : root, (string?)null);
             }
             finally
@@ -700,7 +705,7 @@ internal sealed partial class SurfaceService : IDisposable
                 }
 
                 InvalidateResourceDocument(resourceId);
-                _xamlActionService.ReleaseDocument(resourceId);
+                ReleaseDocument(resourceId);
             }
         }
         if (_surfaces.Remove(documentId, out DesignerSurface? surface))
@@ -709,7 +714,7 @@ internal sealed partial class SurfaceService : IDisposable
             surface.Dispose();
         }
         _publishedSurfaceBounds.Remove(documentId);
-        _xamlActionService.ReleaseDocument(documentId);
+        ReleaseDocument(documentId);
     }
 
     private void InvalidateResourceDocument(int resourceDocumentId)
@@ -744,7 +749,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
     }
 
-    internal void SetSurfaceContent(int documentId, object? content)
+    private void SetSurfaceContent(int documentId, object? content)
     {
         if (content is not FrameworkElement root)
         {
@@ -787,7 +792,7 @@ internal sealed partial class SurfaceService : IDisposable
         WinUIDesignerLogger.LogTrace("Surface", $"Action surface content applied: document={documentId}, root={root.GetType().FullName}.");
     }
 
-    internal void CompleteActionBatch()
+    private void CompleteActionBatch()
     {
         foreach (var entry in _surfaces)
         {
@@ -930,8 +935,8 @@ internal sealed partial class SurfaceService : IDisposable
         _protocolHandler.PostMessage((int)DesignerMessageId.SurfaceBoundsChanged, new SurfaceBoundsChangedEventContract
         {
             DocumentId = documentId,
-            ContentBounds = RectContract.FromRect(contentBounds),
-            DocumentBounds = RectContract.FromRect(documentBounds),
+            ContentBounds = new RectContract { X = contentBounds.X, Y = contentBounds.Y, Width = contentBounds.Width, Height = contentBounds.Height },
+            DocumentBounds = new RectContract { X = documentBounds.X, Y = documentBounds.Y, Width = documentBounds.Width, Height = documentBounds.Height },
         });
         WinUIDesignerLogger.LogTrace("Surface",
             $"SurfaceBoundsChanged ({(int)DesignerMessageId.SurfaceBoundsChanged}) posted: document={documentId}, " +
@@ -941,11 +946,8 @@ internal sealed partial class SurfaceService : IDisposable
 
     public void Dispose()
     {
-        _animationService.Dispose();
-        _xamlActionService.Dispose();
-        _hitTestService.Dispose();
-        _snapLineService.Dispose();
-        _propertyService.Dispose();
+        _actionObjects.Clear();
+        _trackedActionObjects.Clear();
 
         foreach (int registrationId in _registrationIds)
         {

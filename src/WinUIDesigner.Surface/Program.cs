@@ -22,27 +22,68 @@ internal static class Program
 {
     private const string _SurfaceRuntimeDirectoryName = "_WinUIDesignerSurfaceRuntime";
 
-    internal static string ContentDirectory { get; } = GetContentDirectory();
+    internal static string ContentDirectory { get; }
+
+    static Program()
+    {
+        // The host stages WinUISurface.exe in a private child directory so the
+        // shadow-copied project/runtime files aren't beside the executable. Project
+        // assemblies, PRI files, and prepared XAML remain in the parent directory.
+        var executablePath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            ContentDirectory = AppContext.BaseDirectory;
+            return;
+        }
+
+        string? executableDirectory = Path.GetDirectoryName(executablePath);
+        if (string.IsNullOrWhiteSpace(executableDirectory))
+        {
+            ContentDirectory = AppContext.BaseDirectory;
+            return;
+        }
+
+        var directory = new DirectoryInfo(executableDirectory);
+        ContentDirectory = string.Equals(directory.Name, _SurfaceRuntimeDirectoryName, StringComparison.OrdinalIgnoreCase)
+            ? directory.Parent?.FullName ?? executableDirectory
+            : executableDirectory;
+    }
 
     [STAThread]
     private static int Main(string[] args)
     {
         WinUIDesignerLogger.LogTrace("Surface", $"Main entered with {args.Length} arguments.");
-
         if (args.Length != 5 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
         {
             WinUIDesignerLogger.LogTrace("Surface", "Invalid startup arguments.");
             return 1;
         }
 
-        RegisterVisualStudioAssemblyResolver(args[4]);
+        if (!string.IsNullOrWhiteSpace(args[4]))
+        {
+            string[] assemblyDirectories = [Path.Combine(args[4], "Common7", "IDE", "PrivateAssemblies"), Path.Combine(args[4], "Common7", "IDE", "PublicAssemblies"), Path.Combine(args[4], "Common7", "IDE"),];
+            // Private VS contract assemblies are intentionally not copied into the VSIX.
+            // Resolve them from the same Visual Studio installation that launched us.
+            AssemblyLoadContext.Default.Resolving += (_, assemblyName) =>
+            {
+                string fileName = $"{assemblyName.Name}.dll";
+                foreach (string directory in assemblyDirectories)
+                {
+                    string assemblyPath = Path.Combine(directory, fileName);
+                    if (File.Exists(assemblyPath))
+                    {
+                        return AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
+                    }
+                }
+
+                return null;
+            };
+        }
 
         ProjectRuntimeResolver.Initialize(ContentDirectory);
-
         Assembly surfaceAssembly = typeof(Program).Assembly;
 
         WinUIDesignerLogger.LogTrace("Surface", $"Surface assembly='{surfaceAssembly.Location}'; content directory='{ContentDirectory}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
-
         WinUIDesignerLogger.LogTrace("Surface", $"WinUISurface started for host PID {hostProcessId}; TAP='{args[1]}'.");
 
         App? app = null;
@@ -54,7 +95,7 @@ internal static class Program
                 throw new ArgumentException("Invalid DPI awareness context.");
             }
 
-            IntPtr dpiAwarenessContext = dpiContext == 0
+            var dpiAwarenessContext = dpiContext == 0
                 ? NativeMethods.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
                 : new IntPtr(dpiContext);
 
@@ -89,61 +130,5 @@ internal static class Program
             app?.Dispose();
             WinUIDesignerLogger.LogTrace("Surface", "WinUISurface exiting.");
         }
-    }
-
-    private static void RegisterVisualStudioAssemblyResolver(string installRoot)
-    {
-        if (string.IsNullOrWhiteSpace(installRoot))
-        {
-            return;
-        }
-
-        string[] assemblyDirectories =
-        [
-            Path.Combine(installRoot, "Common7", "IDE", "PrivateAssemblies"),
-            Path.Combine(installRoot, "Common7", "IDE", "PublicAssemblies"),
-            Path.Combine(installRoot, "Common7", "IDE"),
-        ];
-
-        // Private VS contract assemblies are intentionally not copied into the VSIX.
-        // Resolve them from the same Visual Studio installation that launched us.
-        AssemblyLoadContext.Default.Resolving += (_, assemblyName) =>
-        {
-            string fileName = $"{assemblyName.Name}.dll";
-            foreach (string directory in assemblyDirectories)
-            {
-                string assemblyPath = Path.Combine(directory, fileName);
-                if (File.Exists(assemblyPath))
-                {
-                    return AssemblyLoadContext.Default.LoadFromAssemblyPath(assemblyPath);
-                }
-            }
-
-            return null;
-        };
-    }
-
-    private static string GetContentDirectory()
-    {
-        // The host stages WinUISurface.exe in a private child directory so the
-        // shadow-copied project/runtime files aren't beside the executable. Project
-        // assemblies, PRI files, and prepared XAML remain in the parent directory.
-        var executablePath = Environment.ProcessPath;
-
-        if (string.IsNullOrWhiteSpace(executablePath))
-        {
-            return AppContext.BaseDirectory;
-        }
-
-        string? executableDirectory = Path.GetDirectoryName(executablePath);
-        if (string.IsNullOrWhiteSpace(executableDirectory))
-        {
-            return AppContext.BaseDirectory;
-        }
-
-        var directory = new DirectoryInfo(executableDirectory);
-        return string.Equals(directory.Name, _SurfaceRuntimeDirectoryName, StringComparison.OrdinalIgnoreCase)
-            ? directory.Parent?.FullName ?? executableDirectory
-            : executableDirectory;
     }
 }

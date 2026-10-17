@@ -5,7 +5,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace WinUIDesigner.Surface.Designer.Shared;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Runs asynchronous operations sequentially while preserving their results and failures.

@@ -1,7 +1,7 @@
 // Copyright (c) 0x5BFA. All rights reserved.
 // Licensed under MIT License.
 
-namespace WinUIDesigner.Surface.Designer.Xaml;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Carries a deferred static-resource key from the instance builder.

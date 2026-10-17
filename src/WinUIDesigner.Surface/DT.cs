@@ -4,7 +4,9 @@
 using Microsoft.UI.Xaml;
 using System.Runtime.CompilerServices;
 
+#pragma warning disable IDE0130 // Namespace does not match folder structure
 namespace XSurfUwp;
+#pragma warning restore IDE0130 // Namespace does not match folder structure
 
 /// <summary>
 /// Defines attached design-time properties used to preserve document sizing and style intent.
@@ -52,23 +54,24 @@ public static class DT
         return (bool)owner.GetValue(ShouldDisableImplicitStyleProperty);
     }
 
+    // Metadata callbacks run after the attached properties have been registered.
     public static readonly DependencyProperty RootWidthProperty = DependencyProperty.RegisterAttached(
-        "RootWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
+        "RootWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, static (dependencyObject, _) => UpdateWidthOrHeight(dependencyObject, FrameworkElement.WidthProperty, RootWidthProperty!, DesignWidthProperty!, RuntimeWidthProperty!)));
 
     public static readonly DependencyProperty DesignWidthProperty = DependencyProperty.RegisterAttached(
-        "DesignWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
+        "DesignWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, static (dependencyObject, _) => UpdateWidthOrHeight(dependencyObject, FrameworkElement.WidthProperty, RootWidthProperty!, DesignWidthProperty!, RuntimeWidthProperty!)));
 
     public static readonly DependencyProperty RuntimeWidthProperty = DependencyProperty.RegisterAttached(
-        "RuntimeWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, WidthPropertyChangedCallback));
+        "RuntimeWidth", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, static (dependencyObject, _) => UpdateWidthOrHeight(dependencyObject, FrameworkElement.WidthProperty, RootWidthProperty!, DesignWidthProperty!, RuntimeWidthProperty!)));
 
     public static readonly DependencyProperty RootHeightProperty = DependencyProperty.RegisterAttached(
-        "RootHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
+        "RootHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, static (dependencyObject, _) => UpdateWidthOrHeight(dependencyObject, FrameworkElement.HeightProperty, RootHeightProperty!, DesignHeightProperty!, RuntimeHeightProperty!)));
 
     public static readonly DependencyProperty DesignHeightProperty = DependencyProperty.RegisterAttached(
-        "DesignHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
+        "DesignHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, static (dependencyObject, _) => UpdateWidthOrHeight(dependencyObject, FrameworkElement.HeightProperty, RootHeightProperty!, DesignHeightProperty!, RuntimeHeightProperty!)));
 
     public static readonly DependencyProperty RuntimeHeightProperty = DependencyProperty.RegisterAttached(
-        "RuntimeHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, HeightPropertyChangedCallback));
+        "RuntimeHeight", typeof(double), typeof(DT), new PropertyMetadata(double.NaN, static (dependencyObject, _) => UpdateWidthOrHeight(dependencyObject, FrameworkElement.HeightProperty, RootHeightProperty!, DesignHeightProperty!, RuntimeHeightProperty!)));
 
     public static void SetRootWidth(DependencyObject dependencyObject, double value)
     {
@@ -130,16 +133,6 @@ public static class DT
         return (double)dependencyObject.GetValue(RuntimeHeightProperty);
     }
 
-    private static void WidthPropertyChangedCallback(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
-    {
-        UpdateWidthOrHeight(dependencyObject, FrameworkElement.WidthProperty, RootWidthProperty, DesignWidthProperty, RuntimeWidthProperty);
-    }
-
-    private static void HeightPropertyChangedCallback(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
-    {
-        UpdateWidthOrHeight(dependencyObject, FrameworkElement.HeightProperty, RootHeightProperty, DesignHeightProperty, RuntimeHeightProperty);
-    }
-
     private static void UpdateWidthOrHeight(
         DependencyObject dependencyObject,
         DependencyProperty propertyToSet,
@@ -190,16 +183,12 @@ public static class DT
     {
         if (ReferenceEquals(dependencyProperty, FrameworkElement.WidthProperty))
         {
-            return HasValue(dependencyObject, DesignWidthProperty) ||
-                HasValue(dependencyObject, RuntimeWidthProperty) ||
-                HasValue(dependencyObject, RootWidthProperty);
+            return !ReferenceEquals(ReadPropertyValue(dependencyObject, DesignWidthProperty), DependencyProperty.UnsetValue) || !ReferenceEquals(ReadPropertyValue(dependencyObject, RuntimeWidthProperty), DependencyProperty.UnsetValue) || !ReferenceEquals(ReadPropertyValue(dependencyObject, RootWidthProperty), DependencyProperty.UnsetValue);
         }
 
         if (ReferenceEquals(dependencyProperty, FrameworkElement.HeightProperty))
         {
-            return HasValue(dependencyObject, DesignHeightProperty) ||
-                HasValue(dependencyObject, RuntimeHeightProperty) ||
-                HasValue(dependencyObject, RootHeightProperty);
+            return !ReferenceEquals(ReadPropertyValue(dependencyObject, DesignHeightProperty), DependencyProperty.UnsetValue) || !ReferenceEquals(ReadPropertyValue(dependencyObject, RuntimeHeightProperty), DependencyProperty.UnsetValue) || !ReferenceEquals(ReadPropertyValue(dependencyObject, RootHeightProperty), DependencyProperty.UnsetValue);
         }
 
         return false;
@@ -252,10 +241,5 @@ public static class DT
         }
 
         return DependencyProperty.UnsetValue;
-    }
-
-    private static bool HasValue(DependencyObject dependencyObject, DependencyProperty dependencyProperty)
-    {
-        return !ReferenceEquals(ReadPropertyValue(dependencyObject, dependencyProperty), DependencyProperty.UnsetValue);
     }
 }

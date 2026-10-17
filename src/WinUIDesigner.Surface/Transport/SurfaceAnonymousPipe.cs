@@ -3,10 +3,8 @@
 
 using System;
 using System.IO.Pipes;
-using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
-using WinUIDesigner;
 
 namespace WinUIDesigner.Surface.Transport;
 
@@ -138,16 +136,17 @@ internal sealed partial class SurfaceAnonymousPipe : IDisposable
                 case ConditionResult.Shutdown:
                     return false;
             }
+
+            if (_done)
+            {
+                break;
+            }
+
+            // Recheck the pipe periodically: a terminated peer cannot signal its event.
+            _ = waitHandle.WaitOne(250);
         }
-        while (!_done && WaitForSignal(waitHandle));
+        while (true);
 
         return false;
-    }
-
-    private static bool WaitForSignal(WaitHandle waitHandle)
-    {
-        // Recheck the pipe periodically: a terminated peer cannot signal its event.
-        _ = waitHandle.WaitOne(250);
-        return true;
     }
 }

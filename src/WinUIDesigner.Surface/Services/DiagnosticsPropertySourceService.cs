@@ -6,9 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
-using WinUIDesigner;
 
-namespace WinUIDesigner.Surface.Designer.Operations;
+namespace WinUIDesigner.Surface.Services;
 
 /// <summary>
 /// Queries WinUI diagnostics for dependency-property value-source information.

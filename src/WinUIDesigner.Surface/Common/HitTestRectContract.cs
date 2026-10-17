@@ -2,15 +2,14 @@
 // Licensed under MIT License.
 
 using System.Runtime.Serialization;
-using Windows.Foundation;
 
-namespace WinUIDesigner.Surface.Designer.Surface;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
-/// Serializes a rectangle included in a surface-bounds-changed event.
+/// Serializes a rectangle in the Visual Studio hit-test request wire shape.
 /// </summary>
 [DataContract]
-internal sealed class RectContract
+internal sealed class HitTestRectContract
 {
     [DataMember(Name = "_x")]
     public double X { get; set; }
@@ -23,9 +22,4 @@ internal sealed class RectContract
 
     [DataMember(Name = "_height")]
     public double Height { get; set; }
-
-    public static RectContract FromRect(Rect rect)
-    {
-        return new() { X = rect.X, Y = rect.Y, Width = rect.Width, Height = rect.Height };
-    }
 }

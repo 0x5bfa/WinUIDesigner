@@ -3,13 +3,10 @@
 
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Shared;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Action = System.Action;
-using WinUIDesigner.Surface;
-using WinUIDesigner.Surface.Transport;
+using WinUIDesigner.Surface.Common;
 using WinUIDesigner.Surface.Runtime;
-using WinUIDesigner.Surface.Designer.Shared;
-using WinUIDesigner.Surface.Designer.Surface;
+using WinUIDesigner.Surface.Transport;
+using Action = System.Action;
 
 [TestClass]
 public sealed class SurfaceTests

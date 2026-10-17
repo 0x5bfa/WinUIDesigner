@@ -3,7 +3,7 @@
 
 using System.Runtime.Serialization;
 
-namespace WinUIDesigner.Surface.Designer.Operations;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Serializes the Visual Studio hit-test request wire shape.

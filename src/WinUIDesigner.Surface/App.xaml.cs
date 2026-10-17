@@ -12,11 +12,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
-using WinUIDesigner.Protocol;
-using WinUIDesigner.Surface.Designer.Shared;
-using WinUIDesigner.Surface.Designer.Surface;
-using WinUIDesigner.Surface.Runtime;
-using WinUIDesigner.Surface.Transport;
 
 namespace WinUIDesigner.Surface;
 
@@ -60,6 +55,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         UnhandledException += (_, args) =>
         {
             WinUIDesignerLogger.LogTrace("Surface", $"WinUI unhandled exception: {args.Exception}");
+
             _protocolHandler?.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {
                 Message = args.Exception.Message,

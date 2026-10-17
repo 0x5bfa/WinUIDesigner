@@ -3,7 +3,7 @@
 
 using Windows.Foundation;
 
-namespace WinUIDesigner.Surface.Designer.Surface;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Stores the content and document bounds used to detect surface changes.

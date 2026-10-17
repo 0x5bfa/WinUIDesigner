@@ -3,13 +3,13 @@
 
 using System.Runtime.Serialization;
 
-namespace WinUIDesigner.Surface.Designer.Operations;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
-/// Serializes a rectangle in the Visual Studio hit-test request wire shape.
+/// Serializes a rectangle included in a surface-bounds-changed event.
 /// </summary>
 [DataContract]
-internal sealed class HitTestRectContract
+internal sealed class RectContract
 {
     [DataMember(Name = "_x")]
     public double X { get; set; }

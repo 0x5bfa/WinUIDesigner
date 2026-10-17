@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 
-namespace WinUIDesigner.Surface.Designer.Shared;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Provides awaitable operations for work dispatched to the WinUI UI thread.
@@ -14,11 +14,6 @@ namespace WinUIDesigner.Surface.Designer.Shared;
 internal static class DispatcherOperation
 {
     private static readonly TimeSpan _Timeout = TimeSpan.FromSeconds(30);
-
-    public static T Invoke<T>(DispatcherQueue queue, Func<T> callback, CancellationToken cancellationToken)
-    {
-        return InvokeAsync(queue, callback, cancellationToken).GetAwaiter().GetResult();
-    }
 
     public static async Task<T> InvokeAsync<T>(DispatcherQueue queue, Func<T> callback, CancellationToken cancellationToken)
     {

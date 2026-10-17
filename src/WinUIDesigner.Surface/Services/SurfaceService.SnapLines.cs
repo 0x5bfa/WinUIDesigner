@@ -3,45 +3,42 @@
 
 using System;
 using System.Collections.Generic;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Windows.Foundation;
-using WinUIDesigner.Protocol;
-using WinUIDesigner.Surface.Designer.Shared;
 
-namespace WinUIDesigner.Surface.Designer.Operations;
+namespace WinUIDesigner.Surface.Services;
 
 /// <summary>
 /// Calculates designer alignment guides from WinUI layout bounds.
 /// Reports positions relative to the requested container, not the screen or its window handle.
 /// </summary>
-internal sealed partial class SnapLineService : IDisposable
+internal sealed partial class SurfaceService
 {
-    private readonly ProtocolHandler _protocolHandler;
-    private readonly DispatcherQueue _dispatcherQueue;
-    private readonly ObjectIdentityRegistry _objectIdentity;
-    private readonly int _snapLinesRegistrationId;
-    private readonly int _elementDataRegistrationId;
-
-    public SnapLineService(ProtocolHandler protocolHandler, DispatcherQueue dispatcherQueue, ObjectIdentityRegistry objectIdentity)
-    {
-        _protocolHandler = protocolHandler;
-        _dispatcherQueue = dispatcherQueue;
-        _objectIdentity = objectIdentity;
-
-        _snapLinesRegistrationId = protocolHandler.RegisterMessageObserver<GetSnapLinesRequest, GetSnapLinesResponse>((int)DesignerMessageId.GetSnapLines, HandleGetSnapLines);
-        _elementDataRegistrationId = protocolHandler.RegisterMessageObserver<GetElementSnapDataRequest, GetElementSnapDataResponse>((int)DesignerMessageId.GetElementSnapData, HandleGetElementSnapData);
-    }
-
     private GetSnapLinesResponse HandleGetSnapLines(GetSnapLinesRequest request)
     {
         if (!_dispatcherQueue.HasThreadAccess)
         {
-            return InvokeOnDispatcher(() => HandleGetSnapLines(request), GetSnapLinesResponse.Empty);
+            try
+            {
+                return DispatcherOperation.InvokeAsync(_dispatcherQueue, () => HandleGetSnapLines(request), _protocolHandler.CancellationToken).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                WinUIDesignerLogger.LogTrace("Surface", $"Snap request failed: {ex}");
+
+                _protocolHandler.PostMessage(
+                    (int)DesignerMessageId.UnhandledException,
+                    new UnhandledExceptionResponse()
+                    {
+                        Message = ex.Message,
+                        CallStack = ex.ToString()
+                    });
+
+                return GetSnapLinesResponse.Empty;
+            }
         }
 
         if (!TryGetElement(request.ContainerHandle, out FrameworkElement? container))
@@ -59,8 +56,10 @@ internal sealed partial class SnapLineService : IDisposable
         }
 
         TryGetElement(request.TargetHandle, out FrameworkElement? target);
+
         var lines = new List<SingleSnapLine>();
         AddSnapLines(lines, container!, container!, true);
+
         if (container is Panel panel)
         {
             foreach (UIElement child in panel.Children)
@@ -74,14 +73,34 @@ internal sealed partial class SnapLineService : IDisposable
 
         WinUIDesignerLogger.LogTrace("Surface", $"GetSnapLines ({(int)DesignerMessageId.GetSnapLines}) returned {lines.Count} line(s) for container handle {request.ContainerHandle}.");
 
-        return new GetSnapLinesResponse { SnapLines = lines };
+        return new GetSnapLinesResponse()
+        {
+            SnapLines = lines
+        };
     }
 
     private GetElementSnapDataResponse HandleGetElementSnapData(GetElementSnapDataRequest request)
     {
         if (!_dispatcherQueue.HasThreadAccess)
         {
-            return InvokeOnDispatcher(() => HandleGetElementSnapData(request), new GetElementSnapDataResponse());
+            try
+            {
+                return DispatcherOperation.InvokeAsync(_dispatcherQueue, () => HandleGetElementSnapData(request), _protocolHandler.CancellationToken).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                WinUIDesignerLogger.LogTrace("Surface", $"Snap request failed: {ex}");
+
+                _protocolHandler.PostMessage(
+                    (int)DesignerMessageId.UnhandledException,
+                    new UnhandledExceptionResponse()
+                    {
+                        Message = ex.Message,
+                        CallStack = ex.ToString()
+                    });
+
+                return new GetElementSnapDataResponse();
+            }
         }
 
         if (!TryGetElement(request.TargetHandle, out FrameworkElement? element) || element is null || VisualTreeHelper.GetParent(element) is not FrameworkElement container || !TryGetBounds(element, container, out Rect bounds))
@@ -89,7 +108,14 @@ internal sealed partial class SnapLineService : IDisposable
             return new GetElementSnapDataResponse();
         }
 
-        return new GetElementSnapDataResponse { Left = bounds.Left, Top = bounds.Top, Right = bounds.Right, Bottom = bounds.Bottom, Baseline = TryGetBaseline(element, container) };
+        return new GetElementSnapDataResponse()
+        {
+            Left = bounds.Left,
+            Top = bounds.Top,
+            Right = bounds.Right,
+            Bottom = bounds.Bottom,
+            Baseline = (element is TextBlock textBlock && TryGetBounds(element, container, out Rect baselineBounds) ? baselineBounds.Top + textBlock.BaselineOffset : (double?)null)
+        };
     }
 
     private static void AddSnapLines(List<SingleSnapLine> lines, FrameworkElement element, FrameworkElement container, bool isContainer)
@@ -100,7 +126,6 @@ internal sealed partial class SnapLineService : IDisposable
         }
 
         SingleSnapLineFlags flags = isContainer ? SingleSnapLineFlags.Container : SingleSnapLineFlags.None;
-
         double centerX = bounds.Left + bounds.Width / 2;
         double centerY = bounds.Top + bounds.Height / 2;
         lines.Add(new SingleSnapLine(bounds.Top, bounds.Left, bounds.Right, flags));
@@ -109,10 +134,10 @@ internal sealed partial class SnapLineService : IDisposable
         lines.Add(new SingleSnapLine(bounds.Left, bounds.Top, bounds.Bottom, flags | SingleSnapLineFlags.Vertical));
         lines.Add(new SingleSnapLine(centerX, bounds.Top, bounds.Bottom, flags | SingleSnapLineFlags.Vertical | SingleSnapLineFlags.Center));
         lines.Add(new SingleSnapLine(bounds.Right, bounds.Top, bounds.Bottom, flags | SingleSnapLineFlags.Vertical | SingleSnapLineFlags.Maximum));
+
         // Only TextBlock exposes a baseline in this implementation; all elements
         // still receive edge and center guides above.
-
-        double? baseline = TryGetBaseline(element, container);
+        var baseline = (element is TextBlock textBlock && TryGetBounds(element, container, out Rect baselineBounds) ? baselineBounds.Top + textBlock.BaselineOffset : (double?)null);
         if (baseline.HasValue)
         {
             lines.Add(new SingleSnapLine(baseline.Value, bounds.Left, bounds.Right, SingleSnapLineFlags.Baseline));
@@ -144,11 +169,6 @@ internal sealed partial class SnapLineService : IDisposable
         }
     }
 
-    private static double? TryGetBaseline(FrameworkElement element, FrameworkElement container)
-    {
-        return element is TextBlock textBlock && TryGetBounds(element, container, out Rect bounds) ? bounds.Top + textBlock.BaselineOffset : null;
-    }
-
     private bool TryGetElement(long handle, out FrameworkElement? element)
     {
         if (_objectIdentity.TryGetObject(handle, out object? value) && value is FrameworkElement frameworkElement)
@@ -161,27 +181,5 @@ internal sealed partial class SnapLineService : IDisposable
         element = null;
 
         return false;
-    }
-
-    private T InvokeOnDispatcher<T>(Func<T> action, T fallback)
-    {
-        try
-        {
-            return DispatcherOperation.Invoke(_dispatcherQueue, action, _protocolHandler.CancellationToken);
-        }
-        catch (Exception ex)
-        {
-            WinUIDesignerLogger.LogTrace("Surface", $"Snap request failed: {ex}");
-
-            _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse { Message = ex.Message, CallStack = ex.ToString() });
-
-            return fallback;
-        }
-    }
-
-    public void Dispose()
-    {
-        _protocolHandler.UnregisterMessageObserver(_snapLinesRegistrationId);
-        _protocolHandler.UnregisterMessageObserver(_elementDataRegistrationId);
     }
 }

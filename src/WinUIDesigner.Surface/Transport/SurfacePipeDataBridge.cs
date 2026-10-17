@@ -3,12 +3,9 @@
 
 using System;
 using System.Globalization;
-using System.IO.Pipes;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
-using Microsoft.Win32.SafeHandles;
 
 namespace WinUIDesigner.Surface.Transport;
 

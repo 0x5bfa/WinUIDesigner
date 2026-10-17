@@ -3,7 +3,7 @@
 
 using Microsoft.UI.Xaml;
 
-namespace WinUIDesigner.Surface.Designer.Operations;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Stores a visible element considered by the hit-test traversal.

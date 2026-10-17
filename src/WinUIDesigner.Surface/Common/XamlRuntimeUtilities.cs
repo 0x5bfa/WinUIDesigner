@@ -15,9 +15,8 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
-using WinUIDesigner.Surface.Runtime;
 
-namespace WinUIDesigner.Surface.Designer.Xaml;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Resolves and converts serialized XAML values to live WinUI values.
@@ -39,18 +38,20 @@ internal static class XamlRuntimeUtilities
         {
             return null;
         }
+
         // Shared VS action contracts can spell framework types with the UWP prefix;
         // translate that prefix before looking in the WinUI runtime assemblies.
-
-        string candidate = NormalizeWinUITypeName(serializedTypeName.Trim());
+        string candidate = serializedTypeName.Trim().Replace("Windows.UI.Xaml", "Microsoft.UI.Xaml", StringComparison.Ordinal);
         if (candidate.Split(',')[0].Trim() == StaticResourceReference.ProtocolTypeName)
         {
             return typeof(StaticResourceReference);
         }
-        if (IsFallbackControlType(candidate.Split(',')[0].Trim()))
+
+        if ((candidate.Split(',')[0].Trim() is "XSurfUwp.Fallback.FallbackControl" or "XSurfUwp.Fallback.LayoutFaultFallbackControl"))
         {
             return typeof(Microsoft.UI.Xaml.Controls.ContentControl);
         }
+
         Type? type = Type.GetType(candidate, throwOnError: false);
         if (type is not null)
         {
@@ -68,11 +69,6 @@ internal static class XamlRuntimeUtilities
         }
 
         return ProjectRuntimeResolver.ResolveType(fullName);
-    }
-
-    public static bool IsFallbackControlType(string typeName)
-    {
-        return typeName is "XSurfUwp.Fallback.FallbackControl" or "XSurfUwp.Fallback.LayoutFaultFallbackControl";
     }
 
     public static object? ConvertString(string? serializedTypeName, string? value, bool isEnum = false)
@@ -96,7 +92,20 @@ internal static class XamlRuntimeUtilities
 
         if (type == typeof(DependencyProperty))
         {
-            return ResolveDependencyProperty(value);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            string normalized = value.Replace("Windows.UI.Xaml", "Microsoft.UI.Xaml", StringComparison.Ordinal);
+            int separator = normalized.LastIndexOf('.');
+            if (separator <= 0)
+            {
+                return null;
+            }
+
+            Type? owner = ResolveType(normalized[..separator]);
+            return owner is null ? null : FindDependencyProperty(owner, normalized[(separator + 1)..]);
         }
 
         if (type == typeof(Type))
@@ -139,7 +148,8 @@ internal static class XamlRuntimeUtilities
             return property.GetValue(target);
         }
 
-        throw new MissingMemberException(target.GetType().FullName, GetPropertyName(fullPropertyName));
+        int propertySeparator = fullPropertyName.IndexOf(':');
+        throw new MissingMemberException(target.GetType().FullName, propertySeparator < 0 ? fullPropertyName : fullPropertyName[..propertySeparator]);
     }
 
     public static void SetPropertyValue(object target, string fullPropertyName, object? value)
@@ -176,7 +186,8 @@ internal static class XamlRuntimeUtilities
             return;
         }
 
-        throw new MissingMemberException(target.GetType().FullName, GetPropertyName(fullPropertyName));
+        int propertySeparator = fullPropertyName.IndexOf(':');
+        throw new MissingMemberException(target.GetType().FullName, propertySeparator < 0 ? fullPropertyName : fullPropertyName[..propertySeparator]);
     }
 
     public static void ClearPropertyValue(object target, string fullPropertyName, bool useDefaultValue, string? defaultValue, string? defaultValueType)
@@ -204,14 +215,16 @@ internal static class XamlRuntimeUtilities
             return;
         }
 
-        throw new MissingMemberException(target.GetType().FullName, GetPropertyName(fullPropertyName));
+        int propertySeparator = fullPropertyName.IndexOf(':');
+        throw new MissingMemberException(target.GetType().FullName, propertySeparator < 0 ? fullPropertyName : fullPropertyName[..propertySeparator]);
     }
 
     public static object? GetDefaultValue(string fullPropertyName, string? targetTypeName)
     {
         Type? targetType = ResolveType(targetTypeName);
-        string propertyName = GetPropertyName(fullPropertyName);
-        Type? declaringType = GetDeclaringType(fullPropertyName) ?? targetType;
+        int propertySeparator = fullPropertyName.IndexOf(':');
+        string propertyName = propertySeparator < 0 ? fullPropertyName : fullPropertyName[..propertySeparator];
+        Type? declaringType = (propertySeparator < 0 ? null : ResolveType(fullPropertyName[(propertySeparator + 1)..])) ?? targetType;
         DependencyProperty? dependencyProperty = declaringType is null ? null : FindDependencyProperty(declaringType, propertyName);
         if (dependencyProperty is not null)
         {
@@ -267,9 +280,9 @@ internal static class XamlRuntimeUtilities
         ResolveProperty(target, fullPropertyName, out PropertyInfo? property, out DependencyProperty? dependencyProperty);
         if (dependencyProperty is not null && target is DependencyObject dependencyObject)
         {
-            if (XSurfUwp.DT.IsSizeShadowProperty(dependencyProperty))
+            if (DT.IsSizeShadowProperty(dependencyProperty))
             {
-                return XSurfUwp.DT.GetUnderlyingSizeShadowValue(dependencyObject, dependencyProperty);
+                return DT.GetUnderlyingSizeShadowValue(dependencyObject, dependencyProperty);
             }
 
             if (target is FrameworkElement element)
@@ -324,11 +337,6 @@ internal static class XamlRuntimeUtilities
         return array;
     }
 
-    public static object? ParseXaml(string xaml)
-    {
-        return XamlReader.Load(xaml);
-    }
-
     public static object CreateImplicitDictionaryKey(string key, bool isType)
     {
         return isType
@@ -372,21 +380,15 @@ internal static class XamlRuntimeUtilities
         throw new InvalidOperationException($"Property '{fullPropertyName}' on '{target.GetType().FullName}' is not a clearable collection.");
     }
 
-    public static void UpdateEventHandler(
-        object eventOwner,
-        string fullEventName,
-        object handlerOwner,
-        string? handlerOwnerTypeName,
-        string? oldHandler,
-        string? newHandler)
+    public static void UpdateEventHandler(object eventOwner, string fullEventName, object handlerOwner, string? handlerOwnerTypeName, string? oldHandler, string? newHandler)
     {
-        string eventName = GetPropertyName(fullEventName);
+        int eventSeparator = fullEventName.IndexOf(':');
+        string eventName = eventSeparator < 0 ? fullEventName : fullEventName[..eventSeparator];
         EventInfo eventInfo = eventOwner.GetType().GetEvent(eventName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
             ?? throw new MissingMemberException(eventOwner.GetType().FullName, eventName);
         Type handlerType = eventInfo.EventHandlerType
             ?? throw new InvalidOperationException($"Event '{eventName}' does not expose a handler type.");
         Type searchType = ResolveType(handlerOwnerTypeName) ?? handlerOwner.GetType();
-
         if (!string.IsNullOrWhiteSpace(oldHandler))
         {
             Delegate? oldDelegate = CreateEventDelegate(handlerType, handlerOwner, searchType, oldHandler);
@@ -452,34 +454,21 @@ internal static class XamlRuntimeUtilities
         }
     }
 
-    public static object? InvokeMethod(
-        object? instance,
-        string declaringTypeName,
-        string methodName,
-        IReadOnlyList<string> parameterTypeNames,
-        IReadOnlyList<long> parameterHandles,
-        Func<long, object?> resolveObject)
+    public static object? InvokeMethod(object? instance, string declaringTypeName, string methodName, IReadOnlyList<string> parameterTypeNames, IReadOnlyList<long> parameterHandles, Func<long, object?> resolveObject)
     {
         Type declaringType = ResolveType(declaringTypeName)
             ?? throw new TypeLoadException($"Unable to resolve declaring type '{declaringTypeName}'.");
         Type[] parameterTypes = ResolveParameterTypes(parameterTypeNames);
         object?[] arguments = ResolveArguments(parameterHandles, resolveObject);
-        MethodInfo method = FindMethod(declaringType, methodName, parameterTypes, instance is null)
-            ?? throw new MissingMethodException(declaringType.FullName, methodName);
+        MethodInfo method = RuntimeMemberResolver.FindMethod(declaringType, methodName, parameterTypes, instance is null) ?? throw new MissingMethodException(declaringType.FullName, methodName);
         return method.Invoke(instance, CoerceArguments(arguments, method.GetParameters()));
     }
 
-    public static object? InvokeFactory(
-        Type runtimeType,
-        string factoryMethod,
-        IReadOnlyList<string>? argumentTypeNames,
-        IReadOnlyList<long>? argumentHandles,
-        Func<long, object?> resolveObject)
+    public static object? InvokeFactory(Type runtimeType, string factoryMethod, IReadOnlyList<string>? argumentTypeNames, IReadOnlyList<long>? argumentHandles, Func<long, object?> resolveObject)
     {
         Type[] parameterTypes = ResolveParameterTypes(argumentTypeNames);
         object?[] arguments = ResolveArguments(argumentHandles, resolveObject);
-        MethodInfo method = FindMethod(runtimeType, factoryMethod, parameterTypes, staticOnly: true)
-            ?? throw new MissingMethodException(runtimeType.FullName, factoryMethod);
+        MethodInfo method = RuntimeMemberResolver.FindMethod(runtimeType, factoryMethod, parameterTypes, isStatic: true) ?? throw new MissingMethodException(runtimeType.FullName, factoryMethod);
         return method.Invoke(null, CoerceArguments(arguments, method.GetParameters()));
     }
 
@@ -561,7 +550,24 @@ internal static class XamlRuntimeUtilities
         }
 
         int insertionIndex = index;
-        if (TryGetCollectionCount(collection, out int count) && (insertionIndex < 0 || insertionIndex > count))
+        int count = 0;
+        bool hasCount = false;
+        if (collection is ICollection nonGenericCollection)
+        {
+            count = nonGenericCollection.Count;
+            hasCount = true;
+        }
+        else if (collection is not null)
+        {
+            PropertyInfo? countProperty = collection.GetType().GetProperty("Count", BindingFlags.Public | BindingFlags.Instance);
+            if (countProperty?.PropertyType == typeof(int) && countProperty.GetValue(collection) is int value)
+            {
+                count = value;
+                hasCount = true;
+            }
+        }
+
+        if (hasCount && (insertionIndex < 0 || insertionIndex > count))
         {
             insertionIndex = count;
         }
@@ -669,25 +675,14 @@ internal static class XamlRuntimeUtilities
 
     private static void ResolveProperty(object target, string fullPropertyName, out PropertyInfo? property, out DependencyProperty? dependencyProperty)
     {
-        string propertyName = GetPropertyName(fullPropertyName);
-        Type? declaringType = GetDeclaringType(fullPropertyName);
+        int propertySeparator = fullPropertyName.IndexOf(':');
+        string propertyName = propertySeparator < 0 ? fullPropertyName : fullPropertyName[..propertySeparator];
+        Type? declaringType = (propertySeparator < 0 ? null : ResolveType(fullPropertyName[(propertySeparator + 1)..]));
         Type targetType = target.GetType();
         property = targetType.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy)
             ?? declaringType?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
         dependencyProperty = FindDependencyProperty(declaringType ?? targetType, propertyName)
             ?? FindDependencyProperty(targetType, propertyName);
-    }
-
-    private static string GetPropertyName(string fullPropertyName)
-    {
-        int separator = fullPropertyName.IndexOf(':');
-        return separator < 0 ? fullPropertyName : fullPropertyName[..separator];
-    }
-
-    private static Type? GetDeclaringType(string fullPropertyName)
-    {
-        int separator = fullPropertyName.IndexOf(':');
-        return separator < 0 ? null : ResolveType(fullPropertyName[(separator + 1)..]);
     }
 
     private static DependencyProperty? FindDependencyProperty(Type type, string propertyName)
@@ -708,24 +703,6 @@ internal static class XamlRuntimeUtilities
         }
 
         return null;
-    }
-
-    private static DependencyProperty? ResolveDependencyProperty(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        string normalized = NormalizeWinUITypeName(value);
-        int separator = normalized.LastIndexOf('.');
-        if (separator <= 0)
-        {
-            return null;
-        }
-
-        Type? owner = ResolveType(normalized[..separator]);
-        return owner is null ? null : FindDependencyProperty(owner, normalized[(separator + 1)..]);
     }
 
     private static object? ResolveStaticMember(Type? declaringType, string memberName)
@@ -841,11 +818,6 @@ internal static class XamlRuntimeUtilities
         return arguments;
     }
 
-    private static MethodInfo? FindMethod(Type declaringType, string methodName, Type[] parameterTypes, bool staticOnly)
-    {
-        return RuntimeMemberResolver.FindMethod(declaringType, methodName, parameterTypes, staticOnly);
-    }
-
     private static object?[] CoerceArguments(object?[] arguments, ParameterInfo[] parameters)
     {
         if (arguments.Length != parameters.Length)
@@ -858,24 +830,26 @@ internal static class XamlRuntimeUtilities
         return coerced;
     }
 
-    private static object? GetChildCollection(object parent)
+    private static object? GetChildCollectionOrSelf(object parent)
     {
-        foreach (string name in new[] { "Children", "Items" })
+        object? collection = null;
+        foreach (string name in new[]
+        {
+            "Children",
+            "Items"
+        }
+
+        )
         {
             PropertyInfo? property = parent.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
             object? value = property?.GetValue(parent);
             if (value is not null)
             {
-                return value;
+                collection = value;
+                break;
             }
         }
 
-        return null;
-    }
-
-    private static object? GetChildCollectionOrSelf(object parent)
-    {
-        object? collection = GetChildCollection(parent);
         if (collection is not null)
         {
             return collection;
@@ -892,30 +866,6 @@ internal static class XamlRuntimeUtilities
         }
 
         return null;
-    }
-
-    private static bool TryGetCollectionCount(object? collection, out int count)
-    {
-        count = 0;
-        if (collection is null)
-        {
-            return false;
-        }
-
-        if (collection is ICollection nonGenericCollection)
-        {
-            count = nonGenericCollection.Count;
-            return true;
-        }
-
-        PropertyInfo? countProperty = collection.GetType().GetProperty("Count", BindingFlags.Public | BindingFlags.Instance);
-        if (countProperty?.PropertyType == typeof(int) && countProperty.GetValue(collection) is int value)
-        {
-            count = value;
-            return true;
-        }
-
-        return false;
     }
 
     private static bool TryInvokeCollectionMutation(object? collection, string methodName, params object?[] arguments)
@@ -981,10 +931,5 @@ internal static class XamlRuntimeUtilities
         }
 
         return Convert.ChangeType(value, Nullable.GetUnderlyingType(targetType) ?? targetType, CultureInfo.InvariantCulture);
-    }
-
-    private static string NormalizeWinUITypeName(string value)
-    {
-        return value.Replace("Windows.UI.Xaml", "Microsoft.UI.Xaml", StringComparison.Ordinal);
     }
 }

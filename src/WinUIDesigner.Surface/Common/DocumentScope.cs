@@ -3,7 +3,7 @@
 
 using System;
 
-namespace WinUIDesigner.Surface.Designer.Shared;
+namespace WinUIDesigner.Surface.Common;
 
 /// <summary>
 /// Restores the previously active document when the scope is disposed.

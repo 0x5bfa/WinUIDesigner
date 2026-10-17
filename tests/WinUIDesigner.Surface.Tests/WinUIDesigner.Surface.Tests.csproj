@@ -8,12 +8,12 @@
 
 	<ItemGroup>
 		<Compile Include="../../src/WinUIDesigner.Surface/Transport/MessageFrameReader.cs" Link="MessageFrameReader.cs" Visible="false" />
-		<Compile Include="../../src/WinUIDesigner.Surface/Designer/Shared/QueuedOperation.cs" Link="QueuedOperation.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Surface/Common/QueuedOperation.cs" Link="QueuedOperation.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Surface/Runtime/RuntimeMemberResolver.cs" Link="RuntimeMemberResolver.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Surface/Runtime/RuntimeTypeNameSerializer.cs" Link="RuntimeTypeNameSerializer.cs" Visible="false" />
-		<Compile Include="../../src/WinUIDesigner.Surface/Designer/Surface/DocumentConstructionException.cs" Link="DocumentConstructionException.cs" Visible="false" />
-		<Compile Include="../../src/WinUIDesigner.Surface/Designer/Shared/ObjectIdentityRegistry.cs" Link="ObjectIdentityRegistry.cs" Visible="false" />
-		<Compile Include="../../src/WinUIDesigner.Surface/Designer/Shared/DocumentScope.cs" Link="DocumentScope.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Surface/Common/DocumentConstructionException.cs" Link="DocumentConstructionException.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Surface/Common/ObjectIdentityRegistry.cs" Link="ObjectIdentityRegistry.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Surface/Common/DocumentScope.cs" Link="DocumentScope.cs" Visible="false" />
 	</ItemGroup>
 
 	<ItemGroup>

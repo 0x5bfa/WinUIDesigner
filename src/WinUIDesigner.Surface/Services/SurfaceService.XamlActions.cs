@@ -4,60 +4,47 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Shared;
-using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
-using WinUIDesigner.Protocol;
-using WinUIDesigner.Surface.Designer.Operations;
-using WinUIDesigner.Surface.Designer.Shared;
-using WinUIDesigner.Surface.Designer.Surface;
 
-namespace WinUIDesigner.Surface.Designer.Xaml;
+namespace WinUIDesigner.Surface.Services;
 
 /// <summary>
 /// Applies instance-builder actions to the live WinUI document tree.
 /// Scopes proxy handles to each action batch and maps them to stable live-object handles.
 /// </summary>
-internal sealed partial class XamlActionService : IDisposable
+internal sealed partial class SurfaceService
 {
-    private readonly ProtocolHandler _protocolHandler;
-    private readonly DispatcherQueue _dispatcherQueue;
-    private readonly ObjectIdentityRegistry _objectIdentity;
-    private readonly SurfaceService _surfaceService;
     private readonly ResourceScopeService _resourceScopes;
     private readonly Dictionary<long, object?> _actionObjects = [];
     private readonly Dictionary<long, object?> _trackedActionObjects = [];
-    private readonly int _registrationId;
-
-    public XamlActionService(
-        ProtocolHandler protocolHandler,
-        DispatcherQueue dispatcherQueue,
-        ObjectIdentityRegistry objectIdentity,
-        SurfaceService surfaceService)
-    {
-        _protocolHandler = protocolHandler;
-        _dispatcherQueue = dispatcherQueue;
-        _objectIdentity = objectIdentity;
-        _surfaceService = surfaceService;
-        _resourceScopes = new ResourceScopeService(objectIdentity);
-        _registrationId = protocolHandler.RegisterMessageObserver<ExecuteXamlActionsRequestInfo, ResponseWithError>((int)DesignerMessageId.ExecuteXamlActions, HandleExecuteActions);
-    }
 
     private ResponseWithError HandleExecuteActions(ExecuteXamlActionsRequestInfo request)
     {
         if (!_dispatcherQueue.HasThreadAccess)
         {
-            return InvokeOnDispatcher(() => HandleExecuteActions(request));
+            try
+            {
+                return DispatcherOperation.InvokeAsync(_dispatcherQueue, () => HandleExecuteActions(request), _protocolHandler.CancellationToken).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                return new ResponseWithError()
+                {
+                    HResult = ex.HResult != 0 ? ex.HResult : Marshal.GetHRForException(ex),
+                    Error = ex.ToString(),
+                };
+            }
         }
 
         XamlAction? failedAction = null;
+
         try
         {
-            IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
+            var actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
+            var documentId = 0;
 
-            int documentId = 0;
             foreach (XamlAction action in actions)
             {
                 if (action is SetDispatcherAction dispatcher && _objectIdentity.TryGetObject(dispatcher.DispatcherObjectHandle, out object? target) && target is not null)
@@ -91,10 +78,14 @@ internal sealed partial class XamlActionService : IDisposable
                 TrackActionObjects();
             }
 
-            _surfaceService.CompleteActionBatch();
+            CompleteActionBatch();
+
             WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) completed: count={actions.Count}.");
 
-            return Success;
+            return new ResponseWithError()
+            {
+                HResult = 0
+            };
         }
         catch (Exception ex)
         {
@@ -102,28 +93,33 @@ internal sealed partial class XamlActionService : IDisposable
             // action using the shared error contract. Raw exception text is not
             // valid ActionError JSON and prevents frontend error processing.
             WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) failed: {ex}");
+
             try
             {
-                _surfaceService.CompleteActionBatch();
+                CompleteActionBatch();
             }
             catch (Exception layoutError)
             {
                 WinUIDesignerLogger.LogTrace("Surface", $"Layout after failed action: {layoutError}");
             }
 
-            return Failure(ex, failedAction);
+            return new ResponseWithError()
+            {
+                HResult = ex.HResult != 0 ? ex.HResult : Marshal.GetHRForException(ex),
+                Error = failedAction is null ? ex.ToString() : ActionErrorJsonSerializer.Serialize([new() { XamlAction = failedAction, Error = ex.ToString() },]),
+            };
         }
     }
 
-    public LiveValue ExecuteLookupActions(ExecuteXamlActionsRequestInfo request, LiveValueSerializer serializer)
+    private LiveValue ExecuteLookupActions(ExecuteXamlActionsRequestInfo request, LiveValueSerializer serializer)
     {
         if (!_dispatcherQueue.HasThreadAccess)
         {
-            return DispatcherOperation.Invoke(_dispatcherQueue, () => ExecuteLookupActions(request, serializer), _protocolHandler.CancellationToken);
+            return DispatcherOperation.InvokeAsync(_dispatcherQueue, () => ExecuteLookupActions(request, serializer), _protocolHandler.CancellationToken).GetAwaiter().GetResult();
         }
 
         object? captured = null;
-        IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
+        var actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
         foreach (XamlAction action in actions)
         {
             Execute(action, (_, value) => captured = value);
@@ -132,12 +128,12 @@ internal sealed partial class XamlActionService : IDisposable
         return serializer.Serialize(captured);
     }
 
-    public object BuildDocument(CreateDocumentInfo document)
+    private object BuildDocument(CreateDocumentInfo document)
     {
         using var scope = _objectIdentity.EnterDocument(document.DocumentId);
 
         object? root = null;
-        IList<XamlAction> actions = XamlActionJsonSerializer.Deserialize(document.Actions ?? []);
+        var actions = XamlActionJsonSerializer.Deserialize(document.Actions ?? []);
 
         for (int index = 0; index < actions.Count; index++)
         {
@@ -158,6 +154,7 @@ internal sealed partial class XamlActionService : IDisposable
 
                     root = value;
                 });
+
                 TrackActionObjects();
             }
             catch (Exception ex)
@@ -182,11 +179,12 @@ internal sealed partial class XamlActionService : IDisposable
         }
     }
 
-    public void ReleaseDocument(int documentId)
+    private void ReleaseDocument(int documentId)
     {
         var released = _objectIdentity.ReleaseDocument(documentId);
         _resourceScopes.RemoveObjects(released);
-        foreach (long key in new List<long>(_actionObjects.Keys))
+
+        foreach (var key in new List<long>(_actionObjects.Keys))
         {
             if (_actionObjects[key] is object value && released.Contains(value))
             {
@@ -203,7 +201,6 @@ internal sealed partial class XamlActionService : IDisposable
             case ConnectToLiveTreeAction connect:
                 _actionObjects[connect.ProxyHandle] = ResolveObject(connect.LiveHandle);
                 break;
-
             case SetSurfaceContentAction setSurfaceContent:
                 object? surfaceContent = ResolveObject(setSurfaceContent.RootProxyHandle);
                 if (setSurfaceContentOverride is not null)
@@ -212,21 +209,59 @@ internal sealed partial class XamlActionService : IDisposable
                 }
                 else
                 {
-                    _surfaceService.SetSurfaceContent(setSurfaceContent.DocumentId, surfaceContent);
+                    SetSurfaceContent(setSurfaceContent.DocumentId, surfaceContent);
                 }
-                break;
 
-                // The stock TAP uses this live-object handle only to choose the dispatcher
-                // for the following actions. This surface already executes the whole batch
-                // on its single DispatcherQueue, so do not put the dispatcher into the
-                // proxy/object map: the same handle still identifies the live WinUI object
-                // used by a following ConnectToLiveTreeAction.
+                break;
+            // The stock TAP uses this live-object handle only to choose the dispatcher
+            // for the following actions. This surface already executes the whole batch
+            // on its single DispatcherQueue, so do not put the dispatcher into the
+            // proxy/object map: the same handle still identifies the live WinUI object
+            // used by a following ConnectToLiveTreeAction.
             case SetDispatcherAction:
                 break;
-
             case CreateInstanceAction create:
-                ExecuteCreateInstance(create);
-                break;
+                {
+                    Type? runtimeType = XamlRuntimeUtilities.ResolveType(create.TypeName) ?? XamlRuntimeUtilities.ResolveType(create.FallbackTypeName);
+                    if (runtimeType is null)
+                    {
+                        throw new TypeLoadException($"Unable to resolve '{create.TypeName}' (fallback '{create.FallbackTypeName}').");
+                    }
+
+                    object? instance;
+                    if (typeof(Application).IsAssignableFrom(runtimeType))
+                    {
+                        // The process already owns its one WinUI Application. Resource actions
+                        // target this instance without running the user's application startup.
+                        instance = Application.Current;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(create.FactoryMethod))
+                    {
+                        instance = XamlRuntimeUtilities.InvokeFactory(runtimeType, create.FactoryMethod, create.ArgumentTypes, create.ArgumentHandles, ResolveObject);
+                    }
+                    else if (create.ArgumentHandles is { Length: > 0 })
+                    {
+                        instance = XamlRuntimeUtilities.CreateInstance(runtimeType, create.ArgumentTypes, create.ArgumentHandles, ResolveObject);
+                    }
+                    else
+                    {
+                        instance = Activator.CreateInstance(runtimeType);
+                    }
+
+                    if (instance is null)
+                    {
+                        throw new InvalidOperationException($"Failed to create '{runtimeType.FullName}'.");
+                    }
+
+                    _actionObjects[create.LiveHandle] = instance;
+                    _objectIdentity.GetHandle(instance);
+                    if (create.MarkupHandle != 0)
+                    {
+                        _objectIdentity.RegisterMarkupInfo(instance, create.MarkupHandle, create.ChangeVersion);
+                    }
+
+                    break;
+                }
 
             case CreateArrayAction createArray:
                 _actionObjects[createArray.LiveHandle] = XamlRuntimeUtilities.CreateArray(
@@ -234,127 +269,92 @@ internal sealed partial class XamlActionService : IDisposable
                     createArray.ItemHandles,
                     ResolveObject);
                 break;
-
             case TypeConvertInstanceAction convert:
                 _actionObjects[convert.LiveHandle] = XamlRuntimeUtilities.ConvertString(convert.MemberName, convert.Value, convert.IsEnum);
                 break;
-
             case XamlParseInstanceAction parse:
-                ExecuteXamlParseInstance(parse);
-                break;
+                {
+                    object instance = _resourceScopes.Parse(parse.OwnerHandle == 0 ? null : (ResolveObject(parse.OwnerHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {parse.OwnerHandle}.")), parse.Xaml);
+                    _actionObjects[parse.LiveHandle] = instance;
+                    _objectIdentity.GetHandle(instance);
+                    if (parse.MarkupHandle != 0)
+                    {
+                        _objectIdentity.RegisterMarkupInfo(instance, parse.MarkupHandle, parse.ChangeVersion);
+                    }
+
+                    break;
+                }
 
             case CreateImplicitDictionaryKeyAction implicitKey:
                 _actionObjects[implicitKey.LiveHandle] = XamlRuntimeUtilities.CreateImplicitDictionaryKey(
                     implicitKey.Key,
                     implicitKey.KeyKind == ImplicitKeyKind.Type);
                 break;
-
             case MeasureElementAction measure:
-                XamlRuntimeUtilities.MeasureElement(RequireObject(measure.ElementHandle));
+                XamlRuntimeUtilities.MeasureElement((ResolveObject(measure.ElementHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {measure.ElementHandle}.")));
                 break;
-
             case GetPropertyAction getProperty:
-                _actionObjects[getProperty.PropertyValueHandle] = XamlRuntimeUtilities.GetPropertyValue(RequireObject(getProperty.ParentHandle), getProperty.FullPropertyName);
+                _actionObjects[getProperty.PropertyValueHandle] = XamlRuntimeUtilities.GetPropertyValue((ResolveObject(getProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getProperty.ParentHandle}.")), getProperty.FullPropertyName);
                 break;
-
             case SetPropertyAction setProperty:
-                object propertyOwner = RequireObject(setProperty.ParentHandle);
+                object propertyOwner = (ResolveObject(setProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {setProperty.ParentHandle}."));
                 XamlRuntimeUtilities.SetPropertyValue(propertyOwner, setProperty.FullPropertyName,
                     ResolveActionValue(setProperty.PropertyValueHandle, propertyOwner));
                 break;
-
             case ClearPropertyAction clearProperty:
-                XamlRuntimeUtilities.ClearPropertyValue(
-                    RequireObject(clearProperty.ParentHandle),
-                    clearProperty.FullPropertyName,
-                    clearProperty.UseDefaultValue,
-                    clearProperty.DefaultValue,
-                    clearProperty.DefaultValueType);
+                XamlRuntimeUtilities.ClearPropertyValue((ResolveObject(clearProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearProperty.ParentHandle}.")), clearProperty.FullPropertyName, clearProperty.UseDefaultValue, clearProperty.DefaultValue, clearProperty.DefaultValueType);
                 break;
-
             case ClearCollectionPropertyAction clearCollection:
-                XamlRuntimeUtilities.ClearCollectionProperty(
-                    RequireObject(clearCollection.ParentHandle),
-                    clearCollection.FullPropertyName);
+                XamlRuntimeUtilities.ClearCollectionProperty((ResolveObject(clearCollection.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearCollection.ParentHandle}.")), clearCollection.FullPropertyName);
                 break;
-
             case UpdateEventHandlerAction updateEvent:
-                XamlRuntimeUtilities.UpdateEventHandler(
-                    RequireObject(updateEvent.EventOwner),
-                    updateEvent.FullEventName,
-                    RequireObject(updateEvent.HandlerOwner),
-                    updateEvent.HandlerOwnerType,
-                    updateEvent.OldHandler,
-                    updateEvent.NewHandler);
+                XamlRuntimeUtilities.UpdateEventHandler((ResolveObject(updateEvent.EventOwner) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateEvent.EventOwner}.")), updateEvent.FullEventName, (ResolveObject(updateEvent.HandlerOwner) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateEvent.HandlerOwner}.")), updateEvent.HandlerOwnerType, updateEvent.OldHandler, updateEvent.NewHandler);
                 break;
-
             case GetChildAction getChild:
-                _actionObjects[getChild.ChildHandle] = XamlRuntimeUtilities.GetChild(RequireObject(getChild.ParentHandle), getChild.Index);
+                _actionObjects[getChild.ChildHandle] = XamlRuntimeUtilities.GetChild((ResolveObject(getChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getChild.ParentHandle}.")), getChild.Index);
                 break;
-
             case AddChildAction addChild:
-                object childOwner = RequireObject(addChild.ParentHandle);
+                object childOwner = (ResolveObject(addChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {addChild.ParentHandle}."));
                 XamlRuntimeUtilities.AddChild(childOwner, addChild.Index, ResolveActionValue(addChild.ChildHandle, childOwner));
                 break;
-
             case RemoveChildAction removeChild:
-                XamlRuntimeUtilities.RemoveChild(RequireObject(removeChild.ParentHandle), removeChild.Index);
+                XamlRuntimeUtilities.RemoveChild((ResolveObject(removeChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {removeChild.ParentHandle}.")), removeChild.Index);
                 break;
-
             case GetDictionaryEntryAction getDictionaryEntry:
-                _actionObjects[getDictionaryEntry.ValueHandle] = XamlRuntimeUtilities.GetDictionaryEntry(
-                    RequireObject(getDictionaryEntry.DictionaryHandle),
-                    ResolveObject(getDictionaryEntry.KeyHandle));
+                _actionObjects[getDictionaryEntry.ValueHandle] = XamlRuntimeUtilities.GetDictionaryEntry((ResolveObject(getDictionaryEntry.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getDictionaryEntry.DictionaryHandle}.")), ResolveObject(getDictionaryEntry.KeyHandle));
                 break;
-
             case AddDictionaryEntryAction addDictionaryEntry:
-                object dictionaryOwner = RequireObject(addDictionaryEntry.DictionaryHandle);
+                object dictionaryOwner = (ResolveObject(addDictionaryEntry.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {addDictionaryEntry.DictionaryHandle}."));
                 XamlRuntimeUtilities.SetDictionaryEntry(
                     dictionaryOwner,
                     ResolveObject(addDictionaryEntry.KeyHandle),
                     ResolveActionValue(addDictionaryEntry.ValueHandle, dictionaryOwner));
                 break;
-
             case RemoveDictionaryEntryAction removeDictionaryEntry:
-                XamlRuntimeUtilities.RemoveDictionaryEntry(
-                    RequireObject(removeDictionaryEntry.DictionaryHandle),
-                    ResolveObject(removeDictionaryEntry.KeyHandle));
+                XamlRuntimeUtilities.RemoveDictionaryEntry((ResolveObject(removeDictionaryEntry.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {removeDictionaryEntry.DictionaryHandle}.")), ResolveObject(removeDictionaryEntry.KeyHandle));
                 break;
-
             case UpdateDictionaryValueAction updateDictionaryValue:
-                object updatedDictionaryOwner = RequireObject(updateDictionaryValue.DictionaryHandle);
+                object updatedDictionaryOwner = (ResolveObject(updateDictionaryValue.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateDictionaryValue.DictionaryHandle}."));
                 XamlRuntimeUtilities.SetDictionaryEntry(
                     updatedDictionaryOwner,
                     ResolveObject(updateDictionaryValue.KeyHandle),
                     ResolveActionValue(updateDictionaryValue.ValueHandle, updatedDictionaryOwner));
                 break;
-
             case NullReferenceAction nullReference:
                 _actionObjects[nullReference.LiveHandle] = null;
                 break;
-
             case MemberReferenceAction memberReference:
                 _actionObjects[memberReference.LiveHandle] = XamlRuntimeUtilities.ResolveMember(memberReference.MemberName);
                 break;
-
             case StaticReferenceAction staticReference:
                 _actionObjects[staticReference.LiveHandle] = XamlRuntimeUtilities.ResolveMember(staticReference.MemberName);
                 break;
-
             case FindElementAction findElement:
-                _actionObjects[findElement.ElementHandle] = XamlRuntimeUtilities.FindElement(
-                    RequireObject(findElement.LookupContextHandle),
-                    findElement.ElementName)
-                    ?? throw new InvalidOperationException($"Unable to find element '{findElement.ElementName}' from handle {findElement.LookupContextHandle}.");
+                _actionObjects[findElement.ElementHandle] = XamlRuntimeUtilities.FindElement((ResolveObject(findElement.LookupContextHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {findElement.LookupContextHandle}.")), findElement.ElementName) ?? throw new InvalidOperationException($"Unable to find element '{findElement.ElementName}' from handle {findElement.LookupContextHandle}.");
                 break;
-
             case UpdateNameRegistrationAction updateName:
-                XamlRuntimeUtilities.UpdateNameRegistration(
-                    RequireObject(updateName.ParentHandle),
-                    updateName.OldName,
-                    updateName.NewName);
+                XamlRuntimeUtilities.UpdateNameRegistration((ResolveObject(updateName.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateName.ParentHandle}.")), updateName.OldName, updateName.NewName);
                 break;
-
             case InvokeMethodAction invoke:
                 _actionObjects[invoke.LiveHandle] = XamlRuntimeUtilities.InvokeMethod(
                     invoke.InstanceHandle == 0 ? null : ResolveObject(invoke.InstanceHandle),
@@ -364,97 +364,28 @@ internal sealed partial class XamlActionService : IDisposable
                     invoke.ParameterHandles,
                     ResolveObject);
                 break;
-
             case UpdateResourceMutationsAction resources:
-                _resourceScopes.UpdateResources(RequireObject(resources.Handle));
+                _resourceScopes.UpdateResources((ResolveObject(resources.Handle) ?? throw new KeyNotFoundException($"No live object is registered for handle {resources.Handle}.")));
                 break;
             case SetResourcesSearchParentAction parent:
-                _resourceScopes.SetParent(RequireObject(parent.ChildHandle), parent.ParentHandle == 0 ? null : RequireObject(parent.ParentHandle));
+                _resourceScopes.SetParent((ResolveObject(parent.ChildHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {parent.ChildHandle}.")), parent.ParentHandle == 0 ? null : (ResolveObject(parent.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {parent.ParentHandle}.")));
                 break;
             case SetThemeResourcesEditingScopeAction theme:
                 _resourceScopes.SetThemeScope(theme.Assembly, theme.RelativePath);
                 break;
-
             case DisableXBindAction disableXBind:
-                XamlRuntimeUtilities.DisableXBind(
-                    RequireObject(disableXBind.DataTemplateComponentHandle),
-                    disableXBind.LineNumber,
-                    disableXBind.ColumnNumber);
+                XamlRuntimeUtilities.DisableXBind((ResolveObject(disableXBind.DataTemplateComponentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {disableXBind.DataTemplateComponentHandle}.")), disableXBind.LineNumber, disableXBind.ColumnNumber);
                 break;
-
             case TapErrorAction tapError:
                 throw new InvalidOperationException($"TAP action stream reported an error for handle {tapError.Handle}.");
-
             default:
                 throw new NotSupportedException($"XAML action '{action.Action}' is not implemented by the WinUI designer surface.");
         }
     }
 
-    private void ExecuteCreateInstance(CreateInstanceAction action)
-    {
-        Type? runtimeType = XamlRuntimeUtilities.ResolveType(action.TypeName)
-            ?? XamlRuntimeUtilities.ResolveType(action.FallbackTypeName);
-        if (runtimeType is null)
-        {
-            throw new TypeLoadException($"Unable to resolve '{action.TypeName}' (fallback '{action.FallbackTypeName}').");
-        }
-
-        object? instance;
-        if (typeof(Application).IsAssignableFrom(runtimeType))
-        {
-            // The process already owns its one WinUI Application. Resource actions
-            // target this instance without running the user's application startup.
-            instance = Application.Current;
-        }
-        else if (!string.IsNullOrWhiteSpace(action.FactoryMethod))
-        {
-            instance = XamlRuntimeUtilities.InvokeFactory(
-                runtimeType,
-                action.FactoryMethod,
-                action.ArgumentTypes,
-                action.ArgumentHandles,
-                ResolveObject);
-        }
-        else if (action.ArgumentHandles is { Length: > 0 })
-        {
-            instance = XamlRuntimeUtilities.CreateInstance(
-                runtimeType,
-                action.ArgumentTypes,
-                action.ArgumentHandles,
-                ResolveObject);
-        }
-        else
-        {
-            instance = Activator.CreateInstance(runtimeType);
-        }
-
-        if (instance is null)
-        {
-            throw new InvalidOperationException($"Failed to create '{runtimeType.FullName}'.");
-        }
-
-        _actionObjects[action.LiveHandle] = instance;
-        _objectIdentity.GetHandle(instance);
-        if (action.MarkupHandle != 0)
-        {
-            _objectIdentity.RegisterMarkupInfo(instance, action.MarkupHandle, action.ChangeVersion);
-        }
-    }
-
-    private void ExecuteXamlParseInstance(XamlParseInstanceAction action)
-    {
-        object instance = _resourceScopes.Parse(action.OwnerHandle == 0 ? null : RequireObject(action.OwnerHandle), action.Xaml);
-        _actionObjects[action.LiveHandle] = instance;
-        _objectIdentity.GetHandle(instance);
-        if (action.MarkupHandle != 0)
-        {
-            _objectIdentity.RegisterMarkupInfo(instance, action.MarkupHandle, action.ChangeVersion);
-        }
-    }
-
     private object? ResolveObject(long handle)
     {
-        if (_actionObjects.TryGetValue(handle, out object? value))
+        if (_actionObjects.TryGetValue(handle, out var value))
         {
             if (value is not null)
             {
@@ -486,44 +417,7 @@ internal sealed partial class XamlActionService : IDisposable
             value = _resourceScopes.ResolveStaticResource(owner, reference.ResourceKey);
             _actionObjects[handle] = value;
         }
+
         return value;
-    }
-
-    private object RequireObject(long handle)
-    {
-        return ResolveObject(handle) ?? throw new KeyNotFoundException($"No live object is registered for handle {handle}.");
-    }
-
-    private ResponseWithError InvokeOnDispatcher(Func<ResponseWithError> callback)
-    {
-        try
-        {
-            return DispatcherOperation.Invoke(_dispatcherQueue, callback, _protocolHandler.CancellationToken);
-        }
-        catch (Exception ex)
-        {
-            return Failure(ex);
-        }
-    }
-
-    private static ResponseWithError Success => new() { HResult = 0 };
-
-    private static ResponseWithError Failure(Exception exception, XamlAction? action = null)
-    {
-        return new()
-        {
-            HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
-            Error = action is null ? exception.ToString() : ActionErrorJsonSerializer.Serialize(
-            [
-                new() { XamlAction = action, Error = exception.ToString() },
-            ]),
-        };
-    }
-
-    public void Dispose()
-    {
-        _actionObjects.Clear();
-        _trackedActionObjects.Clear();
-        _protocolHandler.UnregisterMessageObserver(_registrationId);
     }
 }
