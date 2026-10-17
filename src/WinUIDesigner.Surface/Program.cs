@@ -20,6 +20,8 @@ namespace WinUIDesigner.Surface;
 /// </summary>
 internal static class Program
 {
+    private const string _SurfaceRuntimeDirectoryName = "_WinUIDesignerSurfaceRuntime";
+
     internal static string ContentDirectory { get; } = GetContentDirectory();
 
     [STAThread]
@@ -123,13 +125,25 @@ internal static class Program
 
     private static string GetContentDirectory()
     {
-        // In single-file mode, AppContext.BaseDirectory can point to the bundle
-        // extraction folder. Project assemblies, PRI files, and prepared XAML live
-        // beside the shadow-copied WinUISurface.exe instead.
+        // The host stages WinUISurface.exe in a private child directory so the
+        // shadow-copied project/runtime files aren't beside the executable. Project
+        // assemblies, PRI files, and prepared XAML remain in the parent directory.
         var executablePath = Environment.ProcessPath;
 
-        return !string.IsNullOrWhiteSpace(executablePath)
-            ? Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory
-            : AppContext.BaseDirectory;
+        if (string.IsNullOrWhiteSpace(executablePath))
+        {
+            return AppContext.BaseDirectory;
+        }
+
+        string? executableDirectory = Path.GetDirectoryName(executablePath);
+        if (string.IsNullOrWhiteSpace(executableDirectory))
+        {
+            return AppContext.BaseDirectory;
+        }
+
+        var directory = new DirectoryInfo(executableDirectory);
+        return string.Equals(directory.Name, _SurfaceRuntimeDirectoryName, StringComparison.OrdinalIgnoreCase)
+            ? directory.Parent?.FullName ?? executableDirectory
+            : executableDirectory;
     }
 }

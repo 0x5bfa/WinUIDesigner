@@ -19,6 +19,8 @@ namespace WinUIDesigner.DesignerHost;
 internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, IHostProject hostProject, IEnumerable<string> controlAssembliesForShadowCopy, string payloadSurface)
     : WpfHostShadowCopyWorker(surfaceInfo, hostProject, controlAssembliesForShadowCopy)
 {
+    private const string _SurfaceRuntimeDirectoryName = "_WinUIDesignerSurfaceRuntime";
+
     private readonly string[] _projectAssemblies = [.. hostProject.References.Select(reference => reference.Path)
         .Concat([hostProject.TargetAssemblyPath]).Where(path => !string.IsNullOrEmpty(path))
         .Distinct(StringComparer.OrdinalIgnoreCase)];
@@ -40,7 +42,8 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, 
         }
 
         cancelToken.ThrowIfCancellationRequested();
-        SurfaceInfo.ShadowCacheContent.AddItem(_payloadSurface, "WinUISurface.exe", forceCopyNow: true);
+        string relativeSurfacePath = Path.Combine(_SurfaceRuntimeDirectoryName, "WinUISurface.exe");
+        SurfaceInfo.ShadowCacheContent.AddItem(_payloadSurface, relativeSurfacePath, forceCopyNow: true);
 
         // ProjectRuntimeResolver loads these as fallback resource maps when a
         // project/control resource is absent from the surface's primary map.
@@ -63,7 +66,7 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, 
             }
         }
 
-        var cachedSurface = SurfaceInfo.ShadowCacheContent.FindCachedItem("WinUISurface.exe");
+        var cachedSurface = SurfaceInfo.ShadowCacheContent.FindCachedItem(relativeSurfacePath);
         if (string.IsNullOrWhiteSpace(cachedSurface))
         {
             throw new FileNotFoundException("WinUISurface.exe was not staged into the designer shadow cache.");
