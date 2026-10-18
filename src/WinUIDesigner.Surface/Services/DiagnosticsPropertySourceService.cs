@@ -17,6 +17,7 @@ namespace WinUIDesigner.Surface.Services;
 internal sealed class DiagnosticsPropertySourceService
 {
     private int _initializationStarted;
+    private int _lookupFailureLogged;
     private volatile bool _nativeUnavailable;
     private long _retryAfter;
 
@@ -36,8 +37,6 @@ internal sealed class DiagnosticsPropertySourceService
                 // Connection can wait for the diagnostics endpoint to appear; keep
                 // TAP attachment off the UI thread while the surface starts.
                 int hr = NativeMethods.WinUIDesignerDiagnostics_Initialize();
-
-                WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics TAP initialization completed: hr=0x{hr:X8}.");
 
                 if (hr < 0)
                 {
@@ -86,7 +85,7 @@ internal sealed class DiagnosticsPropertySourceService
 
             if (hr != NativeMethods.S_OK)
             {
-                if (hr < 0)
+                if (hr < 0 && Interlocked.Exchange(ref _lookupFailureLogged, 1) == 0)
                 {
                     WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics property-source lookup failed: property={propertyName}, hr=0x{hr:X8}.");
                 }
@@ -108,8 +107,6 @@ internal sealed class DiagnosticsPropertySourceService
 
                 return true;
             }
-
-            WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics returned an unsupported property source: property={propertyName}, source={nativeSource}.");
 
             return false;
         }
@@ -135,8 +132,6 @@ internal sealed class DiagnosticsPropertySourceService
         try
         {
             int hr = NativeMethods.WinUIDesignerDiagnostics_SetRenderingEnabled(enabled);
-
-            WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics rendering switch: enabled={enabled}, hr=0x{hr:X8}.");
 
             return hr == NativeMethods.S_OK;
         }

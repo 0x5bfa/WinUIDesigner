@@ -80,7 +80,6 @@ internal sealed partial class SurfacePipeDataBridge : IDataBridge, IDisposable
             _isFirstMessage = false;
             FirstMessageEvent.Set();
 
-            WinUIDesignerLogger.LogTrace("Surface", "First protocol message received from Visual Studio.");
         }
 
         return buffer;

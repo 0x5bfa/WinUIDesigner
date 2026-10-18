@@ -15,18 +15,14 @@ public sealed class WinUIToolboxAppDomainControl : IToolboxAppDomainControl
 
     public WinUIToolboxAppDomainControl()
     {
-        WinUIDesignerLogger.LogDebug("Toolbox", "AppDomainControl constructed without IServiceProvider.");
     }
 
     public WinUIToolboxAppDomainControl(IServiceProvider services)
     {
-        WinUIDesignerLogger.LogDebug("Toolbox", $"AppDomainControl constructed with IServiceProvider={services?.GetType().FullName ?? "<null>"}.");
     }
 
     public AppDomain CreateAppDomain()
     {
-        WinUIDesignerLogger.LogDebug("Toolbox", "CreateAppDomain requested.");
-
         var factory = new IsolatedObjectFactory($"WinUIDesigner.Toolbox.{Guid.NewGuid()}",
             new ObjectCreator(typeof(IDesignTimeMetadataAppDomainInitializer),
                 "Microsoft.VisualStudio.DesignTools.SurfaceDesigner",
@@ -35,8 +31,6 @@ public sealed class WinUIToolboxAppDomainControl : IToolboxAppDomainControl
         {
             AppDomain domain = factory.CreateInstance<IDesignTimeMetadataAppDomainInitializer>().InitializeAndGetAppDomain();
             _domains[domain.Id] = factory;
-
-            WinUIDesignerLogger.LogDebug("Toolbox", $"CreateAppDomain completed: id={domain.Id}, name={domain.FriendlyName}.");
 
             return domain;
         }
@@ -52,8 +46,6 @@ public sealed class WinUIToolboxAppDomainControl : IToolboxAppDomainControl
 
     public void UnloadAppDomain(AppDomain domain)
     {
-        WinUIDesignerLogger.LogDebug("Toolbox", $"UnloadAppDomain requested: id={domain?.Id}, name={domain?.FriendlyName}.");
-
         if (domain is not null && _domains.TryRemove(domain.Id, out var factory))
         {
             factory.Dispose();

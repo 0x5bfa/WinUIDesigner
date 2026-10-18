@@ -116,9 +116,8 @@ internal sealed partial class SurfaceService
                                         AddDependencyProperty(response.Properties, element, name, owner, dp);
                                     }
                                 }
-                                catch (Exception ex)
+                                catch
                                 {
-                                    WinUIDesignerLogger.LogTrace("Surface", $"Attached property '{owner.FullName}.{name}' could not be read: {ex.Message}");
                                 }
                             }
                         }
@@ -148,16 +147,6 @@ internal sealed partial class SurfaceService
                     }
                 }
 
-                if (value is FrameworkElement layoutElement)
-                {
-#if DEBUG
-                    if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
-                    {
-                        WinUIDesignerLogger.LogTrace("Surface", $"Layout properties ({(int)DesignerMessageId.GetProperties}): handle={request.Object}, type={value.GetType().FullName}, size={layoutElement.ActualWidth}x{layoutElement.ActualHeight}, margin={layoutElement.Margin}, transform={GetTransformToParent(layoutElement)}.");
-                    }
-#endif
-                }
-
                 if (value is IEnumerable enumerable and not string)
                 {
                     foreach (object? item in enumerable)
@@ -181,7 +170,6 @@ internal sealed partial class SurfaceService
             };
         }
 
-        WinUIDesignerLogger.LogTrace("Surface", $"GetProperties ({(int)DesignerMessageId.GetProperties}) completed for handle {request.Object}: properties={state.Properties.Count}, items={state.Items.Count}.");
         return state;
     }
 
@@ -331,7 +319,6 @@ internal sealed partial class SurfaceService
 
     private LiveValueResponse HandleGetDefaultValue(DefaultValueRequestInfo request)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"GetDefaultValue ({(int)DesignerMessageId.GetDefaultValue}): property={request.FullPropertyName}, target={request.TargetTypeName}.");
         try
         {
             var value = DispatcherOperation.InvokeAsync(_dispatcherQueue, () =>
@@ -374,7 +361,6 @@ internal sealed partial class SurfaceService
 
     private UnderlyingValueSourceInformation HandleGetUnderlyingValue(UnderlyingValueSourceRequest request)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"GetUnderlyingValue ({(int)DesignerMessageId.GetUnderlyingValue}): handle={request.Object}, property={request.Property}.");
 
         try
         {
@@ -418,7 +404,6 @@ internal sealed partial class SurfaceService
 
     private UnderlyingValueSourceInformation HandleExecuteLookupActions(ExecuteXamlActionsRequestInfo request)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"Execute lookup actions ({(int)DesignerMessageId.ExecuteLookupActions}): count={request.Actions?.Count ?? 0}.");
 
         try
         {
@@ -453,7 +438,6 @@ internal sealed partial class SurfaceService
 
     private LiveValue HandleEvaluateStaticExtension(EvaluateStaticExtensionRequest request)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"EvaluateStaticExtension ({(int)DesignerMessageId.EvaluateStaticExtension}): member={request.MemberName}, type={request.TypeName}.");
 
         try
         {

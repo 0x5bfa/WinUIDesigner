@@ -136,11 +136,6 @@ internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
                 application.MergedDictionaries.Add(dictionary);
             }
 
-            if (!string.IsNullOrEmpty(_themePath))
-            {
-                WinUIDesignerLogger.LogTrace("Surface", $"Parsing resource in theme scope '{_themeAssembly}/{_themePath}'.");
-            }
-
             return XamlReader.Load(xaml) ?? throw new InvalidOperationException("XAML parsing returned no object.");
         }
         finally

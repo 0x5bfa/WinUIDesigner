@@ -42,8 +42,6 @@ internal sealed class WinUIDisplaySettingsProvider(IPlatformService platformServ
             return files;
         }
 
-        WinUIDesignerLogger.LogTrace("Platform", $"UWP device definitions loaded from '{devicesDirectory}'.");
-
         return AccessHelper.AccessService.DirectoryGetFiles(devicesDirectory, "*.xml");
     }
 }

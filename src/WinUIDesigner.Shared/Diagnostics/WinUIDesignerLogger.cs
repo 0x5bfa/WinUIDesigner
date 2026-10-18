@@ -35,22 +35,6 @@ internal static class WinUIDesignerLogger
         Write("Critical", category, message, exception);
     }
 
-    public static void LogDebug(string category, string message, Exception? exception = null)
-    {
-        if (IsVerboseLoggingEnabled)
-        {
-            Write("Debug", category, message, exception);
-        }
-    }
-
-    public static void LogDebug(string category, ref WinUIDesignerLogMessage message, Exception? exception = null)
-    {
-        if (message.ShouldAppend)
-        {
-            Write("Debug", category, message.GetFormattedMessage(), exception);
-        }
-    }
-
     public static void LogError(string category, string message, Exception? exception = null)
     {
         Write("Error", category, message, exception);

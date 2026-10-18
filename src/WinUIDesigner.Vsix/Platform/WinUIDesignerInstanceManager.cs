@@ -18,20 +18,6 @@ internal sealed class WinUIDesignerInstanceManager(
     protected override LiveMarkupLinkResult TryLinkDocumentNode(ILiveNode liveNode, bool canDelay)
     {
         LiveMarkupLinkResult result = base.TryLinkDocumentNode(liveNode, canDelay);
-        if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
-        {
-            SourceInfo? source = liveNode.SourceInfo;
-            WinUIDesignerLogger.LogTrace("Platform",
-                $"Live markup link: handle={liveNode.Handle}, type={liveNode.TypeFullName}, " +
-                $"file={source?.FileName ?? "<null>"}, " +
-                $"line={source?.LineNumber ?? 0}, " +
-                $"column={source?.ColumnNumber ?? 0}, " +
-                $"markup={source?.MarkupHandle ?? 0}, " +
-                $"changeVersion={source?.ChangeVersion ?? 0}, " +
-                $"canDelay={canDelay}, " +
-                $"result={result}.");
-        }
-
         return result;
     }
 

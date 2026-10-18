@@ -61,7 +61,6 @@ public sealed class WinUIPlatform : XamlPlatform
                 // TODO: This seems to be working fine for now, but we may need to implement WinUIPlatformPaneModel.
                 _platformPaneModel = new UwpPlatformPaneModel(DesignerContext, DisplaySettingsProvider);
 
-                WinUIDesignerLogger.LogDebug("Platform", "UwpPlatformPaneModel instantiated.");
             }
 
             return _platformPaneModel;
@@ -76,15 +75,11 @@ public sealed class WinUIPlatform : XamlPlatform
 
     public override void Initialize(IDesignerContext designerContext)
     {
-        WinUIDesignerLogger.LogDebug("Platform", "WinUIPlatform.Initialize reached.");
-
         base.Initialize(designerContext);
     }
 
     public override AttributeTable[] GetAttributeMetadata()
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.GetAttributeMetadata reached.");
-
         var builder = new AttributeTableBuilder();
 
         // TODO: Add more categories for other properties as needed.
@@ -110,18 +105,12 @@ public sealed class WinUIPlatform : XamlPlatform
 
     public override IProjectContext CreateProjectContext()
     {
-        WinUIDesignerLogger.LogDebug("Platform", "WinUIPlatform.CreateProjectContext reached.");
-
         return new WinUIProjectContext(DesignerContext, this);
     }
 
     public override SceneView CreateSceneView(SceneDocument document)
     {
-        WinUIDesignerLogger.LogDebug("Platform", "WinUIPlatform.CreateSceneView reached.");
-
         var viewModel = new UwpSceneViewModel(DesignerContext, document);
-
-        WinUIDesignerLogger.LogDebug("Platform", "Temporary UwpSceneViewModel bridge instantiated.");
 
         var view = new WinUISceneView(viewModel);
 
@@ -132,22 +121,16 @@ public sealed class WinUIPlatform : XamlPlatform
 
     public override ISurfaceProcessMarkupProvider CreateSurfaceProcessMarkupProvider()
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreateSurfaceProcessMarkupProvider reached.");
-
         return new WinUISurfaceProcessMarkupProvider();
     }
 
     public override IInstanceBuilderPlatform CreateSurfaceInstanceBuilderPlatform(IProjectContext projectContext)
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreateSurfaceInstanceBuilderPlatform reached.");
-
         return new UwpDesignerInstanceBuilderPlatform(projectContext);
     }
 
     protected override IPlatformConverter CreatePlatformConverter()
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreatePlatformConverter reached.");
-
         var converter = new NodeObjectPlatformConverter();
 
         // The shared Visual Studio designer model represents these layout values with WPF types.
@@ -179,8 +162,6 @@ public sealed class WinUIPlatform : XamlPlatform
 
     protected override IGeometry CreateIsolatedSurfaceGeometry()
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.CreateIsolatedSurfaceGeometry reached.");
-
         // WPF uses Math.Round(), while UWP uses Math.Floor(value + 0.5). For WinUI's geometry,
         // we use the same rounding behavior as UWP.
         return new NodeObjectGeometry(PlatformConverter, value => Math.Floor(value + 0.5));
@@ -188,22 +169,16 @@ public sealed class WinUIPlatform : XamlPlatform
 
     protected override void RegisterNodeBuilders()
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodeBuilders reached.");
-
         base.RegisterSurfaceIsolatedDocumentNodeBuilders();
     }
 
     protected override void RegisterNodeChildBuilders()
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodeChildBuilders reached.");
-
         base.RegisterSurfaceIsolatedDocumentNodeChildBuilders();
     }
 
     protected override void RegisterNodePropertyBuilders()
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatform.RegisterNodePropertyBuilders reached.");
-
         base.RegisterSurfaceIsolatedDocumentNodePropertyBuilders();
     }
 }

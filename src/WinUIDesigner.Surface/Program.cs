@@ -4,7 +4,6 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Reflection;
 using System.Runtime.Loader;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -56,12 +55,11 @@ internal static class Program
             || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId)
             || !bool.TryParse(args[5], out bool verboseLoggingEnabled))
         {
-            WinUIDesignerLogger.LogTrace("Surface", "Invalid startup arguments.");
+            WinUIDesignerLogger.LogError("Surface", "Invalid startup arguments.");
             return 1;
         }
 
         WinUIDesignerLogger.ConfigureVerboseLogging(verboseLoggingEnabled);
-        WinUIDesignerLogger.LogTrace("Surface", $"Main entered with {args.Length} arguments.");
 
         if (!string.IsNullOrWhiteSpace(args[4]))
         {
@@ -85,11 +83,6 @@ internal static class Program
         }
 
         ProjectRuntimeResolver.Initialize(ContentDirectory);
-        Assembly surfaceAssembly = typeof(Program).Assembly;
-
-        WinUIDesignerLogger.LogTrace("Surface", $"Surface assembly='{surfaceAssembly.Location}'; content directory='{ContentDirectory}'; MVID={surfaceAssembly.ManifestModule.ModuleVersionId:D}.");
-        WinUIDesignerLogger.LogTrace("Surface", $"WinUISurface started for host PID {hostProcessId}; TAP='{args[1]}'.");
-
         App? app = null;
 
         try
@@ -110,15 +103,13 @@ internal static class Program
 
             WinRT.ComWrappersSupport.InitializeComWrappers();
 
-            WinUIDesignerLogger.LogTrace("Surface", "CsWinRT COM wrappers initialized; starting Microsoft.UI.Xaml.Application.");
-
             Application.Start(_ =>
             {
                 DispatcherQueue dispatcherQueue = DispatcherQueue.GetForCurrentThread()
                     ?? throw new InvalidOperationException("WinUI DispatcherQueue was not created for the application thread.");
 
                 SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(dispatcherQueue));
-                app = new App(hostProcessId, args[1], args[2], dispatcherQueue);
+                app = new App(hostProcessId, args[2], dispatcherQueue);
                 app.Initialize();
             });
 
@@ -132,7 +123,6 @@ internal static class Program
         finally
         {
             app?.Dispose();
-            WinUIDesignerLogger.LogTrace("Surface", "WinUISurface exiting.");
         }
     }
 }

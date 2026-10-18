@@ -41,13 +41,10 @@ internal sealed partial class SurfaceService
             };
         }
 
-        bool changed = false;
         foreach (string stateName in request.StateNames ?? [])
         {
-            changed |= TryGoToState(root, stateName, request.UseTransitions);
+            TryGoToState(root, stateName, request.UseTransitions);
         }
-
-        WinUIDesignerLogger.LogTrace("Surface", $"GoToState ({(int)DesignerMessageId.GoToState}): root={request.RootHandle}, states={request.StateNames?.Count ?? 0}, changed={changed}.");
 
         return new ResponseWithError()
         {
@@ -130,7 +127,6 @@ internal sealed partial class SurfaceService
                 }
             }
 
-            WinUIDesignerLogger.LogTrace("Surface", $"Storyboard ({(int)DesignerMessageId.Storyboard}): handle={request.ObjectHandle}, actions={request.StoryboardActions?.Count ?? 0}.");
 
             return new ResponseWithError()
             {

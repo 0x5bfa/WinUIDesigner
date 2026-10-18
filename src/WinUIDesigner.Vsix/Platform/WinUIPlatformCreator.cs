@@ -23,13 +23,10 @@ public sealed class WinUIPlatformCreator : PlatformCreatorBase
     public WinUIPlatformCreator(IPlatformService platformService)
         : base(platformService)
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatformCreator instantiated.");
     }
 
     protected override PlatformBase CreatePlatformInternal(IPlatformReferenceAssemblyResolver referenceAssemblyResolver)
     {
-        WinUIDesignerLogger.LogTrace("Platform", "WinUIPlatformCreator.CreatePlatformInternal reached.");
-
         return new WinUIPlatform(referenceAssemblyResolver);
     }
 }

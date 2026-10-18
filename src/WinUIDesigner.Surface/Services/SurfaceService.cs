@@ -178,9 +178,6 @@ internal sealed partial class SurfaceService : IDisposable
                     surface.SetRequestedTheme(_appRequestedTheme);
                 }
 
-                WinUIDesignerLogger.LogTrace(
-                    "Surface",
-                    $"Application resources configured: documentProvided={requestInfo.Application is not null}, XamlControlsResources={_hasXamlControlsResources}, RequestedTheme={_appRequestedTheme}.");
                 return true;
             }, _protocolHandler.CancellationToken).ConfigureAwait(false);
 
@@ -259,8 +256,6 @@ internal sealed partial class SurfaceService : IDisposable
                     long rootVisualHandle = _objectIdentity.GetHandle(root);
                     _visualTreeService.PublishMutation(root, VisualMutationType.Add);
                     PublishSurfaceBounds(documentId, surface);
-                    WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface completed: DocumentId={documentId}, DispatcherHandle={dispatcherHandle}, RootVisualHandle={rootVisualHandle}, DesiredSize={root.DesiredSize.Width}x{root.DesiredSize.Height}, ActualSize={root.ActualWidth}x{root.ActualHeight}.");
-
                     _ = _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
                     {
                         if (!_surfaces.TryGetValue(documentId, out var current) || !ReferenceEquals(current, surface))
@@ -358,8 +353,6 @@ internal sealed partial class SurfaceService : IDisposable
             return await DispatcherOperation.InvokeAsync(_dispatcherQueue, () =>
             {
                 CloseSurfaceDocument(request.DocumentId);
-                WinUIDesignerLogger.LogTrace("Surface", $"CloseDocument ({(int)DesignerMessageId.CloseDocument}) completed for document {request.DocumentId}.");
-
                 return new ResponseWithError() { HResult = 0 };
             }, _protocolHandler.CancellationToken).ConfigureAwait(false);
         }
@@ -387,7 +380,6 @@ internal sealed partial class SurfaceService : IDisposable
                 }
 
                 surface.SetPanZoomTransform(request.OffsetX, request.OffsetY, request.Scale);
-                WinUIDesignerLogger.LogTrace("Surface", $"SetPanZoomTransform ({(int)DesignerMessageId.SetPanZoomTransform}) completed for document {request.DocumentId}.");
                 return new ResponseWithError { HResult = 0 };
             }, _protocolHandler.CancellationToken).ConfigureAwait(false);
         }
@@ -441,7 +433,6 @@ internal sealed partial class SurfaceService : IDisposable
                     surface.SetCheckerboardColors(color1, color2);
                 }
 
-                WinUIDesignerLogger.LogTrace("Surface", $"SetArtboardColors ({(int)DesignerMessageId.SetArtboardColors}) completed for document {request.DocumentId}.");
                 return new ResponseWithError { HResult = 0 };
             }, _protocolHandler.CancellationToken).ConfigureAwait(false);
         }
@@ -469,7 +460,6 @@ internal sealed partial class SurfaceService : IDisposable
 
                 surface.SetDeviceSize(request.Width, request.Height);
                 PublishSurfaceBounds(request.DocumentId, surface);
-                WinUIDesignerLogger.LogTrace("Surface", $"SetDeviceSize ({(int)DesignerMessageId.SetDeviceSize}) completed for document {request.DocumentId}.");
                 return new ResponseWithError { HResult = 0 };
             }, _protocolHandler.CancellationToken).ConfigureAwait(false);
         }
@@ -489,7 +479,6 @@ internal sealed partial class SurfaceService : IDisposable
         if (_dispatcherQueue.HasThreadAccess)
         {
             ApplyFreezeState(request.DocumentIdToFreeze);
-            WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}): document={request.DocumentIdToFreeze}, handled directly on UI thread.");
             return;
         }
 
@@ -508,9 +497,7 @@ internal sealed partial class SurfaceService : IDisposable
              }, _protocolHandler.CancellationToken).GetAwaiter().GetResult();
         if (waitForPreviousUnfreeze && targetSurface is not null)
         {
-            bool completed = targetSurface.WaitForUnfreezeComposition(_FreezeCompositionTimeoutMilliseconds);
-            WinUIDesignerLogger.LogTrace("Surface",
-                $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}) composition barrier: document={request.DocumentIdToFreeze}, completed={completed}.");
+            targetSurface.WaitForUnfreezeComposition(_FreezeCompositionTimeoutMilliseconds);
         }
 
         DispatcherOperation.InvokeAsync(_dispatcherQueue, () =>
@@ -518,7 +505,6 @@ internal sealed partial class SurfaceService : IDisposable
                  ApplyFreezeState(request.DocumentIdToFreeze);
                  return true;
              }, _protocolHandler.CancellationToken).GetAwaiter().GetResult();
-        WinUIDesignerLogger.LogTrace("Surface", $"SetFreezeState ({(int)DesignerMessageId.SetFreezeState}): document={request.DocumentIdToFreeze}.");
     }
 
     private async Task<ResponseWithError> HandleSetSurfacePositionAsync(SetSurfacePositionRequestInfo request)
@@ -538,7 +524,6 @@ internal sealed partial class SurfaceService : IDisposable
                 _visualTreeService.PublishMutation(surface.Content, VisualMutationType.Add);
                 PublishSurfaceBounds(request.DocumentId, surface);
 
-                WinUIDesignerLogger.LogTrace("Surface", $"SetSurfacePosition ({(int)DesignerMessageId.SetSurfacePosition}) completed for document {request.DocumentId}.");
                 return new ResponseWithError { HResult = 0 };
             }, _protocolHandler.CancellationToken).ConfigureAwait(false);
         }
@@ -792,7 +777,6 @@ internal sealed partial class SurfaceService : IDisposable
         _objectIdentity.GetHandle(root);
         _visualTreeService.PublishMutation(root, VisualMutationType.Add);
         PublishSurfaceBounds(documentId, surface);
-        WinUIDesignerLogger.LogTrace("Surface", $"Action surface content applied: document={documentId}, root={root.GetType().FullName}.");
     }
 
     private void CompleteActionBatch()
@@ -830,11 +814,9 @@ internal sealed partial class SurfaceService : IDisposable
 
         if (!File.Exists(path))
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML path was not found for document {document.DocumentId}: '{path}'.");
             return null;
         }
 
-        WinUIDesignerLogger.LogTrace("Surface", $"Reading prepared XAML for document {document.DocumentId}: '{path}'.");
         return File.ReadAllText(path);
     }
 
@@ -866,7 +848,6 @@ internal sealed partial class SurfaceService : IDisposable
             {
                 Application.Current.Resources.MergedDictionaries.Remove(_xamlControlsResources);
                 _xamlControlsResources = null;
-                WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources removed from Application resources.");
             }
 
             return;
@@ -897,7 +878,6 @@ internal sealed partial class SurfaceService : IDisposable
             mergedDictionaries.Add(_xamlControlsResources);
         }
 
-        WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources added to Application resources.");
     }
 
     private void PublishSurfaceLayoutUpdatedIfCurrent(int documentId, DesignerSurface surface)
@@ -922,7 +902,6 @@ internal sealed partial class SurfaceService : IDisposable
         if (_publishedSurfaceBounds.TryGetValue(documentId, out SurfaceBoundsSnapshot publishedBounds)
             && publishedBounds.Equals(currentBounds))
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"SurfaceBoundsChanged ({(int)DesignerMessageId.SurfaceBoundsChanged}) skipped: bounds unchanged for document={documentId}.");
             return;
         }
 
@@ -933,13 +912,6 @@ internal sealed partial class SurfaceService : IDisposable
             ContentBounds = new RectContract { X = contentBounds.X, Y = contentBounds.Y, Width = contentBounds.Width, Height = contentBounds.Height },
             DocumentBounds = new RectContract { X = documentBounds.X, Y = documentBounds.Y, Width = documentBounds.Width, Height = documentBounds.Height },
         });
-        if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
-        {
-            WinUIDesignerLogger.LogTrace("Surface",
-                $"SurfaceBoundsChanged ({(int)DesignerMessageId.SurfaceBoundsChanged}) posted: document={documentId}, " +
-                $"content={contentBounds.X},{contentBounds.Y},{contentBounds.Width},{contentBounds.Height}, " +
-                $"document={documentBounds.X},{documentBounds.Y},{documentBounds.Width},{documentBounds.Height}.");
-        }
     }
 
     public void Dispose()

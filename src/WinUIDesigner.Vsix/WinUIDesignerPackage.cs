@@ -169,8 +169,6 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 
     private static IPlatformCreator? GetPlatformCreatorHook(GetPlatformCreatorDelegate original, PlatformService instance, PlatformIdentifier platformIdentifier)
     {
-        WinUIDesignerLogger.LogDebug("VSIX", $"GetPlatformCreator called for '{platformIdentifier.Identifier}' (XamlRuntime={platformIdentifier.XamlRuntime}).");
-
         if (!string.Equals(platformIdentifier.XamlRuntime, XamlRuntimeNames.WinUI, StringComparison.Ordinal))
         {
             // Let Visual Studio handle WPF, UWP, and any future XAML runtime.
@@ -178,8 +176,6 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
         }
 
         var creator = _PlatformCreators.GetValue(instance, static platformService => new WinUIPlatformCreator(platformService));
-
-        WinUIDesignerLogger.LogDebug("VSIX", $"Supplied WinUIPlatformCreator for '{platformIdentifier.Identifier}'.");
 
         return creator;
     }

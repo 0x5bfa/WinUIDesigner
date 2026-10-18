@@ -134,7 +134,6 @@ internal static class ProjectRuntimeResolver
             {
                 projects.Add(new ResourceManager(file));
 
-                WinUIDesignerLogger.LogTrace("Surface", $"Staged PRI loaded: '{file}'.");
             }
             catch (Exception ex)
             {
@@ -154,22 +153,8 @@ internal static class ProjectRuntimeResolver
 
                 args.SetResolvedCandidate(candidate);
 
-#if DEBUG
-                if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
-                {
-                    WinUIDesignerLogger.LogTrace("Surface", $"Project resource resolved: {args.Name}.");
-                }
-#endif
-
                 return;
             }
-
-#if DEBUG
-            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
-            {
-                WinUIDesignerLogger.LogTrace("Surface", $"Project resource was not found: {args.Name}.");
-            }
-#endif
         };
 
         return primary;

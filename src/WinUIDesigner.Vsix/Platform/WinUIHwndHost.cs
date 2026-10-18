@@ -2,7 +2,6 @@
 // Licensed under MIT License.
 
 using System;
-using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
@@ -70,8 +69,6 @@ internal sealed partial class WinUIIsolatedImageHost
                     new System.Windows.Input.QueryCursorEventHandler(InputBridge_QueryCursor),
                     handledEventsToo: true);
 
-                WinUIDesignerLogger.LogTrace(
-                    "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={_inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
             }
 
             return handle;
@@ -134,8 +131,6 @@ internal sealed partial class WinUIIsolatedImageHost
         {
             _parentHwnd = parentHwnd.ToInt32();
 
-            WinUIDesignerLogger.LogTrace(
-                "Platform", $"WinUI artboard HWND initialized: parent=0x{parentHwnd.ToInt64():X}, document={_surfaceDocumentId}.");
         }
 
         protected override void ResizeSurfaceHwnd(int width, int height)
@@ -152,19 +147,6 @@ internal sealed partial class WinUIIsolatedImageHost
                         {
                             pipeline.LiveNodeTree.ProcessPendingMutations();
 
-#if DEBUG
-                            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
-                            {
-                                var liveRoot = pipeline.LiveNodeTree.RootNode;
-                                WinUIDesignerLogger.LogTrace(
-                                    "Platform",
-                                    $"Frontend mutation received: count={mutations.Mutations?.Count ?? 0}, " +
-                                    $"liveRootChildren={liveRoot.Children.Count()}, " +
-                                    $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
-
-                                _imageHost.ScheduleGeometryDiagnostic();
-                            }
-#endif
                         }));
                     });
                 }
@@ -178,8 +160,6 @@ internal sealed partial class WinUIIsolatedImageHost
                     Height = height,
                 });
 
-                WinUIDesignerLogger.LogTrace(
-                    "Platform", $"SetSurfacePosition ({(int)DesignerMessageId.SetSurfacePosition}) posted: document={_surfaceDocumentId}, parent=0x{_parentHwnd:X}, size={width}x{height}.");
             }
         }
 
@@ -193,17 +173,6 @@ internal sealed partial class WinUIIsolatedImageHost
 
         private void InputBridge_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs args)
         {
-            _imageHost.SceneView.WritePointerDiagnostic("Input bridge MouseDown", args);
-
-            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
-            {
-                WinUIDesignerLogger.LogTrace(
-                    "Platform",
-                    $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, " +
-                    $"forward={ShouldForwardInput(args)}, activeTool={_imageHost.SceneView.DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
-                    $"activeBehavior={_imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
-            }
-
             if (!ShouldForwardInput(args))
             {
                 return;
@@ -216,13 +185,6 @@ internal sealed partial class WinUIIsolatedImageHost
             };
 
             _imageHost.SceneView.Artboard.RaiseEvent(forwarded);
-
-            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
-            {
-                WinUIDesignerLogger.LogTrace("Platform",
-                    $"Input bridge MouseDown forwarded: handled={forwarded.Handled}, " +
-                    $"activeBehavior={_imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
-            }
 
             args.Handled = forwarded.Handled;
         }

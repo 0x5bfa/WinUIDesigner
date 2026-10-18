@@ -22,7 +22,6 @@ namespace WinUIDesigner.Surface;
 public sealed partial class App : Application, IXamlMetadataProvider, IDisposable
 {
     private readonly int _hostProcessId;
-    private readonly string _tapPath;
     private readonly string _bridgeInitializationData;
     private readonly DispatcherQueue _dispatcherQueue;
     private SurfacePipeDataBridge? _dataBridge;
@@ -38,10 +37,9 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         (IXamlMetadataProvider)(GetType().GetProperty("_AppProvider", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(this)
             ?? throw new InvalidOperationException("The generated XAML metadata provider was not found."));
 
-    public App(int hostProcessId, string tapPath, string bridgeInitializationData, DispatcherQueue dispatcherQueue)
+    public App(int hostProcessId, string bridgeInitializationData, DispatcherQueue dispatcherQueue)
     {
         _hostProcessId = hostProcessId;
-        _tapPath = tapPath;
         _bridgeInitializationData = bridgeInitializationData;
         _dispatcherQueue = dispatcherQueue;
 
@@ -64,8 +62,6 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
             });
         };
 
-        WinUIDesignerLogger.LogTrace("Surface", $"Microsoft.UI.Xaml.Application initialized; DispatcherQueue acquired; TAP='{_tapPath}'.");
-
         _dataBridge = new(_bridgeInitializationData);
         _protocolHandler = new(_dataBridge, tokenSource: null, shouldStart: false);
         _protocolHandler.OnUnhandledException += (_, exception) =>
@@ -83,11 +79,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         _objectIdentity = new();
         _surfaceService = new(_protocolHandler, _dispatcherQueue, _objectIdentity);
 
-        WinUIDesignerLogger.LogTrace("Surface", $"PipeDataBridge, ProtocolHandler, and minimal SurfaceService initialized; message {(int)DesignerMessageId.CreateSurface} registered before protocol start.");
-
         _protocolHandler.Start();
-
-        WinUIDesignerLogger.LogTrace("Surface", "ProtocolHandler started.");
 
         // Exit the surface when the host process goes away, even if it never sends an orderly protocol shutdown.
         // WPF has a similar watcher as HostProcessWatcher in WpfSurface.exe.

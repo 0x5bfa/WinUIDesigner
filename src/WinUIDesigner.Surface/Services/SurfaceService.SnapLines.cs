@@ -71,7 +71,6 @@ internal sealed partial class SurfaceService
             }
         }
 
-        WinUIDesignerLogger.LogTrace("Surface", $"GetSnapLines ({(int)DesignerMessageId.GetSnapLines}) returned {lines.Count} line(s) for container handle {request.ContainerHandle}.");
 
         return new GetSnapLinesResponse()
         {

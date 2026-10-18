@@ -69,18 +69,9 @@ internal sealed partial class SurfaceService
             // Keep the wire order: later actions can refer to objects or names created
             // by earlier actions in this same transaction.
             using var documentScope = _objectIdentity.EnterDocument(documentId);
-            for (int index = 0; index < actions.Count; index++)
+            foreach (XamlAction action in actions)
             {
-#if DEBUG
-                if (WinUIDesignerLogger.IsVerboseLoggingEnabled
-                    && request.Actions is { } serializedActions
-                    && index < serializedActions.Count)
-                {
-                    WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) action[{index}]: {serializedActions[index]}");
-                }
-#endif
-
-                failedAction = actions[index];
+                failedAction = action;
                 Execute(failedAction, deferredSetterInsertions: deferredSetterInsertions);
                 TrackActionObjects();
             }
@@ -93,8 +84,6 @@ internal sealed partial class SurfaceService
 
             CompleteActionBatch();
 
-            WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) completed: count={actions.Count}.");
-
             return new ResponseWithError()
             {
                 HResult = 0
@@ -105,7 +94,7 @@ internal sealed partial class SurfaceService
             // Synchronize the surviving changes, then report the exact failed
             // action using the shared error contract. Raw exception text is not
             // valid ActionError JSON and prevents frontend error processing.
-            WinUIDesignerLogger.LogError("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) failed.", ex);
+            WinUIDesignerLogger.LogError("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) failed during '{failedAction?.Action}'.", ex);
 
             try
             {
@@ -158,14 +147,6 @@ internal sealed partial class SurfaceService
         for (int index = 0; index < actions.Count; index++)
         {
             XamlAction action = actions[index];
-#if DEBUG
-            if (WinUIDesignerLogger.IsVerboseLoggingEnabled
-                && document.Actions is { } serializedActions
-                && index < serializedActions.Count)
-            {
-                WinUIDesignerLogger.LogTrace("Surface", $"BuildDocument ({document.DocumentId}) action[{index}]: {serializedActions[index]}");
-            }
-#endif
 
             try
             {
@@ -183,6 +164,14 @@ internal sealed partial class SurfaceService
             }
             catch (Exception ex)
             {
+#if DEBUG
+                if (WinUIDesignerLogger.IsVerboseLoggingEnabled
+                    && document.Actions is { } serializedActions
+                    && index < serializedActions.Count)
+                {
+                    WinUIDesignerLogger.LogTrace("Surface", $"BuildDocument ({document.DocumentId}) failed at action[{index}]: {serializedActions[index]}", ex);
+                }
+#endif
                 throw new DocumentConstructionException(ex, action);
             }
         }

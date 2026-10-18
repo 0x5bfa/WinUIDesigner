@@ -51,7 +51,6 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
             var runtimeElements = new List<DependencyObject>();
             AppendAuthoredElements(root, runtimeElements);
             var usedMarkup = new HashSet<XElement>();
-            int mapped = 0;
             foreach (DependencyObject runtimeElement in runtimeElements)
             {
                 XElement? markupElement = null;
@@ -99,10 +98,8 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
                     LineNumber = (uint)lineInfo.LineNumber,
                     ColumnNumber = (uint)lineInfo.LinePosition,
                 });
-                mapped++;
             }
 
-            WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML source mapping registered: document={document.DocumentId}, mapped={mapped}/{runtimeElements.Count} visual(s).");
         }
         catch (Exception ex)
         {
@@ -123,7 +120,6 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
                 ],
             });
             _publishedTopologies.Remove(rootHandle);
-            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) posted: {mutationType} root handle={rootHandle}, type={root.GetType().FullName}.");
             return;
         }
 
@@ -136,7 +132,6 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
         });
 
         _publishedTopologies[rootHandle] = CaptureTopology(root);
-        WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) posted: Add {mutations.Count} visual(s), root handle={rootHandle}, type={root.GetType().FullName}.");
     }
 
     public void PublishMutationIfChanged(FrameworkElement root)
@@ -147,7 +142,6 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
         if (_publishedTopologies.TryGetValue(rootHandle, out VisualTreeTopologyEntry[]? publishedTopology)
             && publishedTopology.AsSpan().SequenceEqual(currentTopology))
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Visual tree mutation ({(int)DesignerMessageId.VisualTreeMutations}) skipped: topology unchanged for root handle={rootHandle}.");
             return;
         }
 

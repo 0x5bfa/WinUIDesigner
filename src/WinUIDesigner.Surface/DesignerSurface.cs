@@ -119,11 +119,9 @@ internal sealed partial class DesignerSurface : IDisposable
             _compositionRenderingHandler = null;
             _unfreezeCompositionCompleted.Set();
 
-            WinUIDesignerLogger.LogTrace("Surface", "DesignerSurface unfreeze composition barrier completed.");
         };
         _compositionRenderingHandler = handler;
         CompositionTarget.Rendering += handler;
-        WinUIDesignerLogger.LogTrace("Surface", "DesignerSurface unfreeze composition barrier armed.");
     }
 
     public bool WaitForUnfreezeComposition(int millisecondsTimeout)
@@ -185,7 +183,6 @@ internal sealed partial class DesignerSurface : IDisposable
                 PublishDpi(root);
             }
 
-            WinUIDesignerLogger.LogTrace("Surface", $"DesktopWindowXamlSource initialized on surface HWND 0x{_hostWindow.ToInt64():X}.");
         }
 
         if (_parentWindow != parentHwnd)
@@ -209,7 +206,6 @@ internal sealed partial class DesignerSurface : IDisposable
         _viewportRoot.Arrange(new Rect(0, 0, _viewportRoot.Width, _viewportRoot.Height));
         _viewportRoot.UpdateLayout();
         _ = NativeMethods.InvalidateRect(parentHwnd, IntPtr.Zero, true);
-        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface positioned: parent=0x{parentHwnd.ToInt64():X}, size={width}x{height}.");
     }
 
     public void SetPanZoomTransform(double offsetX, double offsetY, double scale)
@@ -224,7 +220,6 @@ internal sealed partial class DesignerSurface : IDisposable
             TranslateY = offsetY,
         };
 
-        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface pan/zoom updated: offset={offsetX},{offsetY}, scale={scale}.");
     }
 
     public void SetDeviceSize(double width, double height)
@@ -241,7 +236,6 @@ internal sealed partial class DesignerSurface : IDisposable
         _transformRoot.Arrange(new Rect(0, 0, width, height));
         _transformRoot.UpdateLayout();
 
-        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface device size updated: {width}x{height}.");
     }
 
     public void ReplaceContent(FrameworkElement newContent)
@@ -268,7 +262,6 @@ internal sealed partial class DesignerSurface : IDisposable
 
         SetDeviceSize(_deviceWidth > 0 ? _deviceWidth : 800, _deviceHeight > 0 ? _deviceHeight : 600);
 
-        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface content replaced with {newContent.GetType().FullName}.");
     }
 
     public void RefreshLayout()
@@ -324,7 +317,6 @@ internal sealed partial class DesignerSurface : IDisposable
             : ElementTheme.Dark;
         _viewportRoot.RequestedTheme = _previewRequestedTheme ?? _appRequestedTheme;
         RefreshLayout();
-        WinUIDesignerLogger.LogTrace("Surface", $"DesignerSurface preview theme: colors={color1},{color2}, requested={_previewRequestedTheme}, actual={_viewportRoot.ActualTheme}.");
     }
 
     public void SetRequestedTheme(ElementTheme theme)

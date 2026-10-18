@@ -106,15 +106,9 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         {
             try
             {
-                var exitMessage = $"WinUISurface.exe exited (PID={process.Id}, ExitCode={process.ExitCode}).";
-
-                if (process.ExitCode == 0)
+                if (process.ExitCode != 0)
                 {
-                    WinUIDesignerLogger.LogDebug("Host", exitMessage);
-                }
-                else
-                {
-                    WinUIDesignerLogger.LogError("Host", exitMessage);
+                    WinUIDesignerLogger.LogError("Host", $"WinUISurface.exe exited (PID={process.Id}, ExitCode={process.ExitCode}).");
                 }
             }
             catch (InvalidOperationException)
