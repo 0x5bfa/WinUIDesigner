@@ -70,9 +70,9 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
         {
             string version = FileVersionInfo.GetVersionInfo(typeof(PlatformService).Assembly.Location).FileVersion ?? string.Empty;
             string numericVersion = version.Split('-')[0];
-            if (!Version.TryParse(numericVersion, out Version? parsedVersion) || parsedVersion.Major < 17 || !Environment.Is64BitProcess)
+            if (!Version.TryParse(numericVersion, out Version? parsedVersion) || parsedVersion.Major < 18 || !Environment.Is64BitProcess)
             {
-                throw new NotSupportedException($"WinUI Designer requires Visual Studio 17.0 or later running as a 64-bit process. Found DesignTools version {version}.");
+                throw new NotSupportedException($"WinUI Designer requires Visual Studio 18.0 or later running as a 64-bit process. Found DesignTools version {version}.");
             }
 
             WinUIDesignerLogger.LogInformation("VSIX", $"Checking Visual Studio DesignTools {version} in a 64-bit process.");
