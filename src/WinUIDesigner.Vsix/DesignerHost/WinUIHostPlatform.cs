@@ -74,14 +74,16 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         // 3. serialized pipe initialization data
         // 4. inherited DPI awareness context
         // 5. Path to the VS install root for private contract DLL resolution
+        // 6. verbose logging setting
         var arguments = string.Format(
             CultureInfo.InvariantCulture,
-            "{0} {1} {2} {3} {4}",
+            "{0} {1} {2} {3} {4} {5}",
             currentProcess.Id,
             ShellEscape(tapPath),
             ShellEscape(initializationData),
             DpiHelper.GetProcessDpiAwarenessContext().ToInt64(),
-            ShellEscape(installRoot));
+            ShellEscape(installRoot),
+            WinUIDesignerLogger.IsVerboseLoggingEnabled);
 
         var process = new Process()
         {
@@ -93,7 +95,6 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
             },
             EnableRaisingEvents = true,
         };
-
         process.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
@@ -109,7 +110,7 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
 
                 if (process.ExitCode == 0)
                 {
-                    WinUIDesignerLogger.LogInformation("Host", exitMessage);
+                    WinUIDesignerLogger.LogDebug("Host", exitMessage);
                 }
                 else
                 {

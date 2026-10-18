@@ -12,5 +12,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)Interop\NativeMethods.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Protocol\DesignerMessageId.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Diagnostics\WinUIDesignerLogger.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Diagnostics\InterpolatedStringHandlerAttribute.cs" />
   </ItemGroup>
 </Project>

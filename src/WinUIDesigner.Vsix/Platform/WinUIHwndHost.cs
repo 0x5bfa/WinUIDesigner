@@ -72,9 +72,6 @@ internal sealed partial class WinUIIsolatedImageHost
 
                 WinUIDesignerLogger.LogTrace(
                     "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={_inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
-
-                WinUIDesignerLogger.LogTrace(
-                    "Platform", $"Input bridge installed: root={root.GetType().FullName}, child={_inputBridgeAdornerLayer?.GetType().FullName ?? "<none>"}.");
             }
 
             return handle;
@@ -154,16 +151,19 @@ internal sealed partial class WinUIIsolatedImageHost
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
                             pipeline.LiveNodeTree.ProcessPendingMutations();
-                            var liveRoot = pipeline.LiveNodeTree.RootNode;
-
-                            WinUIDesignerLogger.LogTrace(
-                                "Platform",
-                                $"Frontend mutation received: count={mutations.Mutations?.Count ?? 0}, " +
-                                $"liveRootChildren={liveRoot.Children.Count()}, " +
-                                $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
 
 #if DEBUG
-                            _imageHost.ScheduleGeometryDiagnostic();
+                            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+                            {
+                                var liveRoot = pipeline.LiveNodeTree.RootNode;
+                                WinUIDesignerLogger.LogTrace(
+                                    "Platform",
+                                    $"Frontend mutation received: count={mutations.Mutations?.Count ?? 0}, " +
+                                    $"liveRootChildren={liveRoot.Children.Count()}, " +
+                                    $"mutations=[{string.Join("; ", mutations.Mutations?.Select(m => $"{m.VisualMutationType}:h={m.Element?.Handle},p={m.Relation?.Parent},c={m.Relation?.Child},i={m.Relation?.ChildIndex},root={m.Element?.IsRoot},type={m.Element?.Type}") ?? [])}].");
+
+                                _imageHost.ScheduleGeometryDiagnostic();
+                            }
 #endif
                         }));
                     });
@@ -195,13 +195,14 @@ internal sealed partial class WinUIIsolatedImageHost
         {
             _imageHost.SceneView.WritePointerDiagnostic("Input bridge MouseDown", args);
 
-            WinUIDesignerLogger.LogTrace(
-                "Platform", $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, forward={ShouldForwardInput(args)}.");
-            WinUIDesignerLogger.LogTrace(
-                "Platform",
-                $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, " +
-                $"forward={ShouldForwardInput(args)}, activeTool={_imageHost.SceneView.DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
-                $"activeBehavior={_imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+            {
+                WinUIDesignerLogger.LogTrace(
+                    "Platform",
+                    $"Input bridge MouseDown: source={args.OriginalSource?.GetType().FullName ?? "<null>"}, " +
+                    $"forward={ShouldForwardInput(args)}, activeTool={_imageHost.SceneView.DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
+                    $"activeBehavior={_imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+            }
 
             if (!ShouldForwardInput(args))
             {
@@ -216,9 +217,12 @@ internal sealed partial class WinUIIsolatedImageHost
 
             _imageHost.SceneView.Artboard.RaiseEvent(forwarded);
 
-            WinUIDesignerLogger.LogTrace("Platform",
-                $"Input bridge MouseDown forwarded: handled={forwarded.Handled}, " +
-                $"activeBehavior={_imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+            {
+                WinUIDesignerLogger.LogTrace("Platform",
+                    $"Input bridge MouseDown forwarded: handled={forwarded.Handled}, " +
+                    $"activeBehavior={_imageHost.SceneView.EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+            }
 
             args.Handled = forwarded.Handled;
         }

@@ -18,6 +18,7 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using MonoMod.RuntimeDetour;
 using WinUIDesigner.DesignerHost;
+using WinUIDesigner.Options;
 using WinUIDesigner.Platform;
 using WinUIDesigner.Toolbox;
 
@@ -30,6 +31,7 @@ namespace WinUIDesigner;
 /// </summary>
 [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
 [Guid("4b134b27-b9ee-4f30-a267-cf19aa49f896")]
+[ProvideOptionPage(typeof(WinUIDesignerOptionsPage), "WinUI Designer", "Diagnostics", 0, 0, true)]
 [ProvideXamlRuntimeDesigner(XamlRuntimeNames.WinUI)]
 [ProvideStaticWinUIToolboxItems]
 [ProvideToolboxItemDiscovery("WinUI 3", "WinUIComponents", typeof(WinUIToolboxItemDiscovery), typeof(WinUIToolboxItemCreator), [".NETCoreApp"], AppDomainCreatorType = typeof(WinUIToolboxAppDomainControl))]
@@ -55,6 +57,9 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
     {
         await base.InitializeAsync(cancellationToken, progress);
         await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+        var optionsPage = (WinUIDesignerOptionsPage)GetDialogPage(typeof(WinUIDesignerOptionsPage));
+        WinUIDesignerLogger.ConfigureVerboseLogging(optionsPage.EnableVerboseLogging);
 
         if (_getPlatformCreatorHook is not null)
         {

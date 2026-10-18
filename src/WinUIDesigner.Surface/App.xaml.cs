@@ -54,7 +54,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
     {
         UnhandledException += (_, args) =>
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"WinUI unhandled exception: {args.Exception}");
+            WinUIDesignerLogger.LogError("Surface", "WinUI unhandled exception.", args.Exception);
 
             _protocolHandler?.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {
@@ -70,7 +70,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
         _protocolHandler = new(_dataBridge, tokenSource: null, shouldStart: false);
         _protocolHandler.OnUnhandledException += (_, exception) =>
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Asynchronous protocol request failed: {exception}");
+            WinUIDesignerLogger.LogError("Surface", "Asynchronous protocol request failed.", exception);
 
             _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse()
             {

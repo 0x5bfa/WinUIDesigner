@@ -95,7 +95,7 @@ internal sealed class WinUICoreShadowCopyWorker(SurfaceProcessInfo surfaceInfo, 
 
             SurfaceInfo.ShadowCacheContent.AddItem(item.Path, relativePath, forceCopyNow: true);
 
-            WinUIDesignerLogger.LogInformation("Host", $"Project media staged: '{item.Path}' -> '{relativePath}'; mode={SurfaceInfo.ShadowCopyType}.");
+            WinUIDesignerLogger.LogDebug("Host", $"Project media staged: '{item.Path}' -> '{relativePath}'; mode={SurfaceInfo.ShadowCopyType}.");
         }
     }
 

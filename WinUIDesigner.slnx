@@ -7,7 +7,7 @@
     </Project>
     <Project Path="src/WinUIDesigner.Vsix/WinUIDesigner.Vsix.csproj">
       <BuildDependency Project="src/WinUIDesigner.Surface/WinUIDesigner.Surface.csproj" />
-      <Deploy Solution="Debug|Any CPU" />
+      <Deploy />
     </Project>
   </Folder>
   <Folder Name="/tests/">

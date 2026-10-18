@@ -49,11 +49,14 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
     {
         WritePointerDiagnostic("Artboard PreviewMouseDown", e);
 
-        WinUIDesignerLogger.LogTrace("Platform",
-            $"Artboard PreviewMouseDown: source={e.OriginalSource?.GetType().FullName ?? "<null>"}, " +
-            $"activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
-            $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
-            $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}, handled={e.Handled}.");
+        if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+        {
+            WinUIDesignerLogger.LogTrace("Platform",
+                $"Artboard PreviewMouseDown: source={e.OriginalSource?.GetType().FullName ?? "<null>"}, " +
+                $"activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
+                $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
+                $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}, handled={e.Handled}.");
+        }
     }
 #endif
 
@@ -64,10 +67,13 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
 #if DEBUG
             if (System.Windows.PresentationSource.FromVisual(Artboard) is System.Windows.Interop.HwndSource hwndSource)
             {
-                WinUIDesignerLogger.LogTrace("Platform",
-                    $"Artboard presentation source: hwnd=0x{hwndSource.Handle.ToInt64():X}, " +
-                    $"root={hwndSource.RootVisual?.GetType().FullName ?? "<null>"}, " +
-                    $"artboard={Artboard.ActualWidth}x{Artboard.ActualHeight}, hitTest={Artboard.IsHitTestVisible}, enabled={Artboard.IsEnabled}.");
+                if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+                {
+                    WinUIDesignerLogger.LogTrace("Platform",
+                        $"Artboard presentation source: hwnd=0x{hwndSource.Handle.ToInt64():X}, " +
+                        $"root={hwndSource.RootVisual?.GetType().FullName ?? "<null>"}, " +
+                        $"artboard={Artboard.ActualWidth}x{Artboard.ActualHeight}, hitTest={Artboard.IsHitTestVisible}, enabled={Artboard.IsEnabled}.");
+                }
 
                 hwndSource.AddHook(PresentationSourceHook);
 
@@ -81,10 +87,13 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
             }
 #endif
 
-            WinUIDesignerLogger.LogTrace("Platform",
-                $"ArtboardLoaded before update: activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
-                $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
-                $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+            {
+                WinUIDesignerLogger.LogTrace("Platform",
+                    $"ArtboardLoaded before update: activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
+                    $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
+                    $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+            }
 
             EnsureActiveViewUpdated();
 
@@ -92,17 +101,21 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
                 viewSwitched: true,
                 DocumentPipelineUpdateInfo.CreateFromViewModel(ViewModel, SceneUpdateStates.None));
 
-            WinUIDesignerLogger.LogTrace("Platform",
-                $"ArtboardLoaded after update: activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
-                $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
-                $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+            {
+                WinUIDesignerLogger.LogTrace("Platform",
+                    $"ArtboardLoaded after update: activeTool={DesignerContext.ToolManager.ActiveTool?.GetType().FullName ?? "<null>"}, " +
+                    $"eventRouter={EventRouter?.GetType().FullName ?? "<null>"}, " +
+                    $"activeBehavior={EventRouter?.ActiveBehavior?.GetType().FullName ?? "<null>"}.");
+            }
         });
     }
 
 #if DEBUG
     private IntPtr PresentationSourceHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == NativeMethods.WM_LBUTTONDOWN || msg == NativeMethods.WM_LBUTTONUP)
+        if (WinUIDesignerLogger.IsVerboseLoggingEnabled
+            && (msg == NativeMethods.WM_LBUTTONDOWN || msg == NativeMethods.WM_LBUTTONUP))
         {
             WinUIDesignerLogger.LogTrace("Platform",
                 $"Presentation source raw mouse: hwnd=0x{hwnd.ToInt64():X}, msg=0x{msg:X}, " +
@@ -114,9 +127,12 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
 
     private void PresentationRoot_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        WinUIDesignerLogger.LogTrace("Platform",
-            $"Presentation root PreviewMouseDown: sender={sender.GetType().FullName}, " +
-            $"source={e.OriginalSource?.GetType().FullName ?? "<null>"}, handled={e.Handled}.");
+        if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+        {
+            WinUIDesignerLogger.LogTrace("Platform",
+                $"Presentation root PreviewMouseDown: sender={sender.GetType().FullName}, " +
+                $"source={e.OriginalSource?.GetType().FullName ?? "<null>"}, handled={e.Handled}.");
+        }
     }
 #endif
 
@@ -124,6 +140,11 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
     internal void WritePointerDiagnostic(string prefix, System.Windows.Input.MouseEventArgs args)
     {
 #if DEBUG
+        if (!WinUIDesignerLogger.IsVerboseLoggingEnabled)
+        {
+            return;
+        }
+
         try
         {
             System.Windows.Point artboardPoint = args.GetPosition((System.Windows.IInputElement)(object)Artboard);
@@ -140,7 +161,7 @@ internal sealed class WinUISceneView(UwpSceneViewModel viewModel) : UwpSceneView
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogError("Platform", $"{prefix} coordinate diagnostic failed.", ex);
+            WinUIDesignerLogger.LogDebug("Platform", $"{prefix} coordinate diagnostic failed.", ex);
         }
 #endif
     }

@@ -104,7 +104,7 @@ internal static class ProjectRuntimeResolver
             }
             catch (Exception ex) when (ex is IOException or BadImageFormatException)
             {
-                WinUIDesignerLogger.LogTrace("Surface", $"Unable to index staged assembly '{file}': {ex.Message}");
+                WinUIDesignerLogger.LogWarning("Surface", $"Unable to index staged assembly '{file}'.", ex);
             }
         }
 
@@ -138,7 +138,7 @@ internal static class ProjectRuntimeResolver
             }
             catch (Exception ex)
             {
-                WinUIDesignerLogger.LogTrace("Surface", $"Unable to load staged PRI '{file}': {ex.Message}");
+                WinUIDesignerLogger.LogWarning("Surface", $"Unable to load staged PRI '{file}'.", ex);
             }
         }
 
@@ -154,12 +154,22 @@ internal static class ProjectRuntimeResolver
 
                 args.SetResolvedCandidate(candidate);
 
-                WinUIDesignerLogger.LogTrace("Surface", $"Project resource resolved: {args.Name}.");
+#if DEBUG
+                if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+                {
+                    WinUIDesignerLogger.LogTrace("Surface", $"Project resource resolved: {args.Name}.");
+                }
+#endif
 
                 return;
             }
 
-            WinUIDesignerLogger.LogTrace("Surface", $"Project resource was not found: {args.Name}.");
+#if DEBUG
+            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+            {
+                WinUIDesignerLogger.LogTrace("Surface", $"Project resource was not found: {args.Name}.");
+            }
+#endif
         };
 
         return primary;

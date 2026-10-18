@@ -150,7 +150,12 @@ internal sealed partial class SurfaceService
 
                 if (value is FrameworkElement layoutElement)
                 {
-                    WinUIDesignerLogger.LogTrace("Surface", $"Layout properties ({(int)DesignerMessageId.GetProperties}): handle={request.Object}, type={value.GetType().FullName}, size={layoutElement.ActualWidth}x{layoutElement.ActualHeight}, margin={layoutElement.Margin}, transform={GetTransformToParent(layoutElement)}.");
+#if DEBUG
+                    if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+                    {
+                        WinUIDesignerLogger.LogTrace("Surface", $"Layout properties ({(int)DesignerMessageId.GetProperties}): handle={request.Object}, type={value.GetType().FullName}, size={layoutElement.ActualWidth}x{layoutElement.ActualHeight}, margin={layoutElement.Margin}, transform={GetTransformToParent(layoutElement)}.");
+                    }
+#endif
                 }
 
                 if (value is IEnumerable enumerable and not string)
@@ -166,7 +171,7 @@ internal sealed partial class SurfaceService
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Property request failed: {ex}");
+            WinUIDesignerLogger.LogError("Surface", "Property request failed.", ex);
             int documentId = _objectIdentity.TryGetObject(request.Object, out var target) && target is not null ? _objectIdentity.GetDocumentId(target) : 0;
             _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse { DocumentId = documentId, Handle = request.Object, Message = ex.Message, CallStack = ex.ToString(), IsArtboardException = true, });
             state = new LiveObjectState
@@ -356,7 +361,7 @@ internal sealed partial class SurfaceService
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Property request failed: {ex}");
+            WinUIDesignerLogger.LogError("Surface", "Property request failed.", ex);
             int documentId = _objectIdentity.TryGetObject(0, out var target) && target is not null ? _objectIdentity.GetDocumentId(target) : 0;
             _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse { DocumentId = documentId, Handle = 0, Message = ex.Message, CallStack = ex.ToString(), IsArtboardException = true, });
 
@@ -389,7 +394,7 @@ internal sealed partial class SurfaceService
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Property request failed: {ex}");
+            WinUIDesignerLogger.LogError("Surface", "Property request failed.", ex);
 
             int documentId = _objectIdentity.TryGetObject(request.Object, out var target) && target is not null ? _objectIdentity.GetDocumentId(target) : 0;
 
@@ -424,7 +429,7 @@ internal sealed partial class SurfaceService
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Property request failed: {ex}");
+            WinUIDesignerLogger.LogError("Surface", "Property request failed.", ex);
 
             int documentId = _objectIdentity.TryGetObject(0, out var target) && target is not null ? _objectIdentity.GetDocumentId(target) : 0;
 
@@ -456,7 +461,7 @@ internal sealed partial class SurfaceService
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Property request failed: {ex}");
+            WinUIDesignerLogger.LogError("Surface", "Property request failed.", ex);
 
             int documentId = _objectIdentity.TryGetObject(0, out var target) && target is not null ? _objectIdentity.GetDocumentId(target) : 0;
 

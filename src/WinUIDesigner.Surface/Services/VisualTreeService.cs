@@ -106,7 +106,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Prepared XAML source mapping failed for document {document.DocumentId}: {ex.Message}");
+            WinUIDesignerLogger.LogWarning("Surface", $"Prepared XAML source mapping failed for document {document.DocumentId}.", ex);
         }
     }
 

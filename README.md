@@ -47,3 +47,7 @@ flowchart TB
 ## Architecture
 
 See [Architecture](docs/architecture.md) for the designer's processing flow and implementation details.
+
+## Diagnostics
+
+Log files are written to `%LOCALAPPDATA%\WinUIDesigner\Logs`. Each process creates a file named `yyyyMMdd-HHmmss-<PID>.log`, using local time when the logger initializes and that process's ID. The seconds-level timestamp sorts naturally and the PID distinguishes processes; `:` is omitted for Windows filename compatibility. Information, warning, and error entries are recorded normally. To capture detailed trace and debug entries, open **Tools > Options > WinUI Designer > Diagnostics** and enable **Enable verbose logging**. Applying the option updates Visual Studio logging immediately, and newly started surface processes receive the setting at launch. Restart the XAML designer after changing it so an existing surface process uses the new setting. The page includes an **Open log folder** link. Detailed logging can slow designer interactions, so enable it while investigating an issue and turn it off afterward.

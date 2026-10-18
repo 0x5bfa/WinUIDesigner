@@ -27,7 +27,7 @@ internal sealed partial class SurfaceService
             }
             catch (Exception ex)
             {
-                WinUIDesignerLogger.LogTrace("Surface", $"Snap request failed: {ex}");
+                WinUIDesignerLogger.LogError("Surface", "Snap request failed.", ex);
 
                 _protocolHandler.PostMessage(
                     (int)DesignerMessageId.UnhandledException,
@@ -89,7 +89,7 @@ internal sealed partial class SurfaceService
             }
             catch (Exception ex)
             {
-                WinUIDesignerLogger.LogTrace("Surface", $"Snap request failed: {ex}");
+                WinUIDesignerLogger.LogError("Surface", "Snap request failed.", ex);
 
                 _protocolHandler.PostMessage(
                     (int)DesignerMessageId.UnhandledException,

@@ -24,7 +24,7 @@ internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : Isol
 #if DEBUG
     private void ScheduleGeometryDiagnostic()
     {
-        if (_geometryDiagnosticScheduled)
+        if (!WinUIDesignerLogger.IsVerboseLoggingEnabled || _geometryDiagnosticScheduled)
         {
             return;
         }
@@ -38,6 +38,11 @@ internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : Isol
             {
                 ((System.Windows.Threading.DispatcherTimer)sender).Stop();
                 _geometryDiagnosticScheduled = false;
+
+                if (!WinUIDesignerLogger.IsVerboseLoggingEnabled)
+                {
+                    return;
+                }
 
                 LogGeometry(SceneView.ViewModel.RootNode, 0);
 
@@ -84,7 +89,7 @@ internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : Isol
 
     private void LogGeometry(SceneNode? node, int depth)
     {
-        if (node is null)
+        if (node is null || !WinUIDesignerLogger.IsVerboseLoggingEnabled)
         {
             return;
         }
@@ -157,7 +162,7 @@ internal sealed partial class WinUIIsolatedImageHost(WinUISceneView view) : Isol
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogError("Platform", $"Frontend geometry failed for depth={depth}.", ex);
+            WinUIDesignerLogger.LogDebug("Platform", $"Frontend geometry diagnostic failed for depth={depth}.", ex);
         }
     }
 #endif

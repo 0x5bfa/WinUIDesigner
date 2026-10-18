@@ -275,18 +275,17 @@ internal sealed partial class SurfaceService : IDisposable
 
                     return new CreateSurfaceResponseInfo { DispatcherHandle = dispatcherHandle, RootVisualHandle = rootVisualHandle };
                 }
-                catch (Exception ex)
+                catch
                 {
                     // Let the construction failure path release resources and identities,
                     // including a surface installed before a later initialization failure.
-                    WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface failed: {ex}");
                     throw;
                 }
             }, _protocolHandler.CancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"CreateSurface failed for document {document?.DocumentId}: {ex}");
+            WinUIDesignerLogger.LogError("Surface", $"CreateSurface failed for document {document?.DocumentId}.", ex);
 
             if (ex is DocumentConstructionException constructionError)
             {
@@ -324,7 +323,7 @@ internal sealed partial class SurfaceService : IDisposable
             }
             catch (Exception cleanupException)
             {
-                WinUIDesignerLogger.LogTrace("Surface", $"Surface operation failed: {cleanupException}");
+                WinUIDesignerLogger.LogWarning("Surface", "Surface cleanup after a failed operation also failed.", cleanupException);
             }
 
             return new()
@@ -366,7 +365,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
         catch (Exception exception)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Surface operation failed: {exception}");
+            WinUIDesignerLogger.LogError("Surface", "Surface operation failed.", exception);
             return new ResponseWithError
             {
                 HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
@@ -394,7 +393,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
         catch (Exception exception)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Surface operation failed: {exception}");
+            WinUIDesignerLogger.LogError("Surface", "Surface operation failed.", exception);
             return new ResponseWithError
             {
                 HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
@@ -448,7 +447,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
         catch (Exception exception)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Surface operation failed: {exception}");
+            WinUIDesignerLogger.LogError("Surface", "Surface operation failed.", exception);
             return new ResponseWithError
             {
                 HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
@@ -476,7 +475,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
         catch (Exception exception)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Surface operation failed: {exception}");
+            WinUIDesignerLogger.LogError("Surface", "Surface operation failed.", exception);
             return new ResponseWithError
             {
                 HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
@@ -545,7 +544,7 @@ internal sealed partial class SurfaceService : IDisposable
         }
         catch (Exception exception)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Surface operation failed: {exception}");
+            WinUIDesignerLogger.LogError("Surface", "Surface operation failed.", exception);
             return new ResponseWithError
             {
                 HResult = exception.HResult != 0 ? exception.HResult : Marshal.GetHRForException(exception),
@@ -878,35 +877,27 @@ internal sealed partial class SurfaceService : IDisposable
             return;
         }
 
-        try
+        _xamlControlsResources = new XamlControlsResources();
+        IList<ResourceDictionary> mergedDictionaries = Application.Current.Resources.MergedDictionaries;
+        if (_designTimeResourceDocumentId is int designResourcesId
+            && _resourceDocuments.TryGetValue(designResourcesId, out ResourceDictionary? designResources))
         {
-            _xamlControlsResources = new XamlControlsResources();
-            IList<ResourceDictionary> mergedDictionaries = Application.Current.Resources.MergedDictionaries;
-            if (_designTimeResourceDocumentId is int designResourcesId
-                && _resourceDocuments.TryGetValue(designResourcesId, out ResourceDictionary? designResources))
+            int designResourcesIndex = mergedDictionaries.IndexOf(designResources);
+            if (designResourcesIndex >= 0)
             {
-                int designResourcesIndex = mergedDictionaries.IndexOf(designResources);
-                if (designResourcesIndex >= 0)
-                {
-                    mergedDictionaries.Insert(designResourcesIndex, _xamlControlsResources);
-                }
-                else
-                {
-                    mergedDictionaries.Add(_xamlControlsResources);
-                }
+                mergedDictionaries.Insert(designResourcesIndex, _xamlControlsResources);
             }
             else
             {
                 mergedDictionaries.Add(_xamlControlsResources);
             }
-
-            WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources added to Application resources.");
         }
-        catch (Exception ex)
+        else
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"XamlControlsResources could not be added: {ex}");
-            throw;
+            mergedDictionaries.Add(_xamlControlsResources);
         }
+
+        WinUIDesignerLogger.LogTrace("Surface", "XamlControlsResources added to Application resources.");
     }
 
     private void PublishSurfaceLayoutUpdatedIfCurrent(int documentId, DesignerSurface surface)
@@ -942,10 +933,13 @@ internal sealed partial class SurfaceService : IDisposable
             ContentBounds = new RectContract { X = contentBounds.X, Y = contentBounds.Y, Width = contentBounds.Width, Height = contentBounds.Height },
             DocumentBounds = new RectContract { X = documentBounds.X, Y = documentBounds.Y, Width = documentBounds.Width, Height = documentBounds.Height },
         });
-        WinUIDesignerLogger.LogTrace("Surface",
-            $"SurfaceBoundsChanged ({(int)DesignerMessageId.SurfaceBoundsChanged}) posted: document={documentId}, " +
-            $"content={contentBounds.X},{contentBounds.Y},{contentBounds.Width},{contentBounds.Height}, " +
-            $"document={documentBounds.X},{documentBounds.Y},{documentBounds.Width},{documentBounds.Height}.");
+        if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+        {
+            WinUIDesignerLogger.LogTrace("Surface",
+                $"SurfaceBoundsChanged ({(int)DesignerMessageId.SurfaceBoundsChanged}) posted: document={documentId}, " +
+                $"content={contentBounds.X},{contentBounds.Y},{contentBounds.Width},{contentBounds.Height}, " +
+                $"document={documentBounds.X},{documentBounds.Y},{documentBounds.Width},{documentBounds.Height}.");
+        }
     }
 
     public void Dispose()

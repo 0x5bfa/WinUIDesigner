@@ -139,7 +139,7 @@ internal sealed partial class SurfaceService
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Storyboard ({(int)DesignerMessageId.Storyboard}) failed: {ex}");
+            WinUIDesignerLogger.LogError("Surface", $"Storyboard ({(int)DesignerMessageId.Storyboard}) failed.", ex);
 
             return new ResponseWithError
             {

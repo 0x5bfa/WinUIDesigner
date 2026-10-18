@@ -52,12 +52,16 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        WinUIDesignerLogger.LogTrace("Surface", $"Main entered with {args.Length} arguments.");
-        if (args.Length != 5 || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId))
+        if (args.Length != 6
+            || !int.TryParse(args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int hostProcessId)
+            || !bool.TryParse(args[5], out bool verboseLoggingEnabled))
         {
             WinUIDesignerLogger.LogTrace("Surface", "Invalid startup arguments.");
             return 1;
         }
+
+        WinUIDesignerLogger.ConfigureVerboseLogging(verboseLoggingEnabled);
+        WinUIDesignerLogger.LogTrace("Surface", $"Main entered with {args.Length} arguments.");
 
         if (!string.IsNullOrWhiteSpace(args[4]))
         {
@@ -122,7 +126,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"Surface startup failed: {ex}");
+            WinUIDesignerLogger.LogError("Surface", "Surface startup failed.", ex);
             return ex.HResult != 0 ? ex.HResult : 1;
         }
         finally

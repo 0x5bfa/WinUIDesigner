@@ -71,27 +71,32 @@ internal sealed partial class SurfaceService
 
             var hits = candidates.Select(candidate => new LiveValueHitEntry() { Element = new LiveValue() { Handle = _objectIdentity.GetHandle(candidate.Element), Type = candidate.Element.GetType().FullName, SourceInfo = _objectIdentity.GetSourceInfo(candidate.Element), }, IsVisible = candidate.IsVisible, }).ToList();
 
-            var region = request.Point is not null
-                ? $"point={request.Point.X},{request.Point.Y}"
-                : request.Rect is not null
-                    ? $"rect={request.Rect.X},{request.Rect.Y},{request.Rect.Width},{request.Rect.Height}"
-                    : "region=<none>";
+#if DEBUG
+            if (WinUIDesignerLogger.IsVerboseLoggingEnabled)
+            {
+                var region = request.Point is not null
+                    ? $"point={request.Point.X},{request.Point.Y}"
+                    : request.Rect is not null
+                        ? $"rect={request.Rect.X},{request.Rect.Y},{request.Rect.Width},{request.Rect.Height}"
+                        : "region=<none>";
 
-            var hitSummary = string.Join(
-                ", ",
-                hits.Select(hit =>
-                {
-                    SourceInfo? source = hit.Element?.SourceInfo;
-                    return $"{hit.Element?.Handle}:{hit.Element?.Type}@{source?.FileName ?? "<none>"}:{source?.LineNumber ?? 0}:{source?.ColumnNumber ?? 0}:visible={hit.IsVisible}";
-                }));
+                var hitSummary = string.Join(
+                    ", ",
+                    hits.Select(hit =>
+                    {
+                        SourceInfo? source = hit.Element?.SourceInfo;
+                        return $"{hit.Element?.Handle}:{hit.Element?.Type}@{source?.FileName ?? "<none>"}:{source?.LineNumber ?? 0}:{source?.ColumnNumber ?? 0}:visible={hit.IsVisible}";
+                    }));
 
-            WinUIDesignerLogger.LogTrace("Surface", $"HitTest ({(int)DesignerMessageId.HitTest}) {region}; root={request.RootHandle}; hits=[{hitSummary}].");
+                WinUIDesignerLogger.LogTrace("Surface", $"HitTest ({(int)DesignerMessageId.HitTest}) {region}; root={request.RootHandle}; hits=[{hitSummary}].");
+            }
+#endif
 
             return new HitResponse() { Hits = hits };
         }
         catch (Exception ex)
         {
-            WinUIDesignerLogger.LogTrace("Surface", $"HitTest ({(int)DesignerMessageId.HitTest}) failed for root {request.RootHandle}: {ex}");
+            WinUIDesignerLogger.LogError("Surface", $"HitTest ({(int)DesignerMessageId.HitTest}) failed for root {request.RootHandle}.", ex);
 
             _protocolHandler.PostMessage((int)DesignerMessageId.UnhandledException, new UnhandledExceptionResponse { Handle = request.RootHandle, Message = ex.Message, CallStack = ex.ToString() });
 

@@ -3,7 +3,10 @@
 
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
+using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 
 namespace WinUIDesigner;
@@ -16,16 +19,36 @@ internal static class WinUIDesignerLogger
     private static readonly int _ProcessId = GetProcessId();
     private static readonly string _LogPath = CreateLogPath();
     private static readonly Mutex _LogMutex = new(false, $"Local\\WinUIDesignerLogger-{_ProcessId}");
+    private static bool _isVerboseLoggingEnabled;
+
+    public static bool IsVerboseLoggingEnabled => Volatile.Read(ref _isVerboseLoggingEnabled);
+
+    public static string LogDirectoryPath => Path.GetDirectoryName(_LogPath)!;
+
+    public static void ConfigureVerboseLogging(bool enabled)
+    {
+        Volatile.Write(ref _isVerboseLoggingEnabled, enabled);
+    }
 
     public static void LogCritical(string category, string message, Exception? exception = null)
     {
         Write("Critical", category, message, exception);
     }
 
-    [Conditional("DEBUG")]
     public static void LogDebug(string category, string message, Exception? exception = null)
     {
-        Write("Debug", category, message, exception);
+        if (IsVerboseLoggingEnabled)
+        {
+            Write("Debug", category, message, exception);
+        }
+    }
+
+    public static void LogDebug(string category, ref WinUIDesignerLogMessage message, Exception? exception = null)
+    {
+        if (message.ShouldAppend)
+        {
+            Write("Debug", category, message.GetFormattedMessage(), exception);
+        }
     }
 
     public static void LogError(string category, string message, Exception? exception = null)
@@ -38,10 +61,20 @@ internal static class WinUIDesignerLogger
         Write("Information", category, message, exception);
     }
 
-    [Conditional("DEBUG")]
     public static void LogTrace(string category, string message, Exception? exception = null)
     {
-        Write("Trace", category, message, exception);
+        if (IsVerboseLoggingEnabled)
+        {
+            Write("Trace", category, message, exception);
+        }
+    }
+
+    public static void LogTrace(string category, ref WinUIDesignerLogMessage message, Exception? exception = null)
+    {
+        if (message.ShouldAppend)
+        {
+            Write("Trace", category, message.GetFormattedMessage(), exception);
+        }
     }
 
     public static void LogWarning(string category, string message, Exception? exception = null)
@@ -111,12 +144,94 @@ internal static class WinUIDesignerLogger
             basePath = Path.GetTempPath();
         }
 
-        return Path.Combine(basePath, "WinUIDesigner", "Logs", $"WinUIDesigner-{_ProcessId}.log");
+        string timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        return Path.Combine(basePath, "WinUIDesigner", "Logs", $"{timestamp}-{_ProcessId}.log");
     }
 
     private static int GetProcessId()
     {
         using Process process = Process.GetCurrentProcess();
         return process.Id;
+    }
+}
+
+[InterpolatedStringHandler]
+internal ref struct WinUIDesignerLogMessage
+{
+    private readonly StringBuilder? _message;
+
+    public WinUIDesignerLogMessage(int literalLength, int formattedCount, out bool shouldAppend)
+    {
+        shouldAppend = WinUIDesignerLogger.IsVerboseLoggingEnabled;
+        ShouldAppend = shouldAppend;
+        _message = shouldAppend ? new StringBuilder(literalLength) : null;
+    }
+
+    public bool ShouldAppend { get; }
+
+    public void AppendLiteral(string value)
+    {
+        _message?.Append(value);
+    }
+
+    public void AppendFormatted<T>(T value)
+    {
+        _message?.Append(value);
+    }
+
+    public void AppendFormatted<T>(T value, string? format)
+    {
+        if (_message is not null)
+        {
+            AppendFormattedValue(value, format);
+        }
+    }
+
+    public void AppendFormatted<T>(T value, int alignment)
+    {
+        if (_message is not null)
+        {
+            AppendAligned(AppendFormattedValue(value, null), alignment);
+        }
+    }
+
+    public void AppendFormatted<T>(T value, int alignment, string? format)
+    {
+        if (_message is not null)
+        {
+            AppendAligned(AppendFormattedValue(value, format), alignment);
+        }
+    }
+
+    public string GetFormattedMessage()
+    {
+        return _message?.ToString() ?? string.Empty;
+    }
+
+    private string AppendFormattedValue<T>(T value, string? format)
+    {
+        string formattedValue = value is IFormattable formattable
+            ? formattable.ToString(format, CultureInfo.CurrentCulture) ?? string.Empty
+            : value?.ToString() ?? string.Empty;
+
+        _message!.Append(formattedValue);
+        return formattedValue;
+    }
+
+    private void AppendAligned(string value, int alignment)
+    {
+        int padding = Math.Abs(alignment) - value.Length;
+        if (padding <= 0)
+        {
+            _message!.Append(value);
+        }
+        else if (alignment < 0)
+        {
+            _message!.Append(value).Append(' ', padding);
+        }
+        else
+        {
+            _message!.Append(' ', padding).Append(value);
+        }
     }
 }
