@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Controls;
@@ -20,6 +21,19 @@ namespace WinUIDesigner.Surface.Services;
 /// </summary>
 internal sealed partial class SurfaceService
 {
+    private static readonly ConditionalWeakTable<Type, RuntimePropertyMetadata> s_runtimePropertyMetadata = new();
+
+    private static readonly Lazy<AttachedPropertyDescriptor[]> s_attachedPropertyDescriptors = new(CreateAttachedPropertyDescriptors);
+
+    private static readonly Type[] s_attachedPropertyOwners =
+    [
+        typeof(Canvas),
+        typeof(Grid),
+        typeof(RelativePanel),
+        typeof(ScrollViewer),
+        typeof(ToolTipService)
+    ];
+
     private readonly DiagnosticsPropertySourceService _diagnosticsPropertySource;
 
     private readonly LiveValueSerializer _serializer;
@@ -43,38 +57,38 @@ internal sealed partial class SurfaceService
 
                 using var scope = _objectIdentity.EnterDocument(_objectIdentity.GetDocumentId(value));
                 {
-                    string[] propertyNames = [.. value.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                        .Where(property => property.CanRead &&
-                            property.GetIndexParameters().Length == 0 &&
-                            property.Name is not ("Parent" or "TemplatedParent" or "XamlRoot" or "DispatcherQueue" or "Dispatcher"))
-                        .Select(property => property.Name).Distinct()];
                     var runtimeType = value.GetType();
-                    foreach (string name in propertyNames)
+                    RuntimePropertyMetadata propertyMetadata = s_runtimePropertyMetadata.GetValue(runtimeType, CreateRuntimePropertyMetadata);
+                    Dictionary<string, BaseValueSource>? diagnosticsPropertySources = null;
+                    if (value is DependencyObject target)
                     {
-                        var property = runtimeType.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
-                        if (property is null || !property.CanRead || property.GetIndexParameters().Length != 0)
+                        if (propertyMetadata.DiagnosticPropertyNames.Length > 0 && _diagnosticsPropertySource.TryGetPropertySources(target, propertyMetadata.DiagnosticPropertyNames, out var sources))
                         {
-                            continue;
+                            diagnosticsPropertySources = sources;
                         }
+                    }
 
+                    foreach (RuntimePropertyDescriptor descriptor in propertyMetadata.Properties)
+                    {
+                        PropertyInfo property = descriptor.Property;
+                        string name = property.Name;
                         try
                         {
-                            var declaringType = property.DeclaringType ?? runtimeType;
-                            if (value is DependencyObject dependencyObject && (FindDependencyProperty(declaringType, name) ?? (declaringType == runtimeType ? null : FindDependencyProperty(runtimeType, name))) is DependencyProperty dependencyProperty)
+                            if (value is DependencyObject dependencyObject && descriptor.DependencyProperty is DependencyProperty dependencyProperty)
                             {
                                 if (name is "ActualWidth" or "ActualHeight")
                                 {
-                                    AddProperty(response.Properties, name, declaringType, dependencyObject.GetValue(dependencyProperty), BaseValueSource.Local);
+                                    AddProperty(response.Properties, name, descriptor.DeclaringType, dependencyObject.GetValue(dependencyProperty), BaseValueSource.Local);
                                 }
                                 else
                                 {
-                                    AddDependencyProperty(response.Properties, dependencyObject, name, declaringType, dependencyProperty);
+                                    AddDependencyProperty(response.Properties, dependencyObject, name, descriptor.DeclaringType, dependencyProperty, diagnosticsPropertySources);
                                 }
 
                                 continue;
                             }
 
-                            AddProperty(response.Properties, name, declaringType, property.GetValue(value), BaseValueSource.Local);
+                            AddProperty(response.Properties, name, descriptor.DeclaringType, property.GetValue(value), BaseValueSource.Local);
                         }
                         catch
                         {
@@ -85,40 +99,14 @@ internal sealed partial class SurfaceService
                     {
                         // Attached layout properties belong to their owner type, not to the
                         // selected element's CLR property list.
-                        foreach (Type owner in new[]
+                        foreach (AttachedPropertyDescriptor attached in propertyMetadata.AttachedProperties)
                         {
-                            typeof(Canvas),
-                            typeof(Grid),
-                            typeof(RelativePanel),
-                            typeof(ScrollViewer),
-                            typeof(ToolTipService)
-                        }
-
-                        )
-                        {
-                            foreach (PropertyInfo attached in owner.GetProperties(BindingFlags.Public | BindingFlags.Static))
+                            try
                             {
-                                if (!attached.Name.EndsWith("Property", StringComparison.Ordinal) || attached.PropertyType != typeof(DependencyProperty))
-                                {
-                                    continue;
-                                }
-
-                                string name = attached.Name[..^8];
-                                if (owner.GetMethod("Get" + name, BindingFlags.Public | BindingFlags.Static) is null)
-                                {
-                                    continue;
-                                }
-
-                                try
-                                {
-                                    if (attached.GetValue(null) is DependencyProperty dp)
-                                    {
-                                        AddDependencyProperty(response.Properties, element, name, owner, dp);
-                                    }
-                                }
-                                catch
-                                {
-                                }
+                                AddDependencyProperty(response.Properties, element, attached.Name, attached.DeclaringType, attached.DependencyProperty, diagnosticsPropertySources);
+                            }
+                            catch
+                            {
                             }
                         }
 
@@ -173,7 +161,7 @@ internal sealed partial class SurfaceService
         return state;
     }
 
-    private void AddDependencyProperty(List<LiveObjectPropertyValue> properties, DependencyObject target, string name, Type declaringType, DependencyProperty dependencyProperty)
+    private void AddDependencyProperty(List<LiveObjectPropertyValue> properties, DependencyObject target, string name, Type declaringType, DependencyProperty dependencyProperty, IReadOnlyDictionary<string, BaseValueSource>? diagnosticsPropertySources)
     {
         // DT size shadow properties preserve designer intent separately. Publishing
         // the effective Width/Height as well would make VS feed it back as authored.
@@ -182,7 +170,7 @@ internal sealed partial class SurfaceService
             return;
         }
 
-        if (_diagnosticsPropertySource.TryGetPropertySource(target, name, out BaseValueSource diagnosticsValueSource))
+        if (diagnosticsPropertySources is not null && diagnosticsPropertySources.TryGetValue(name, out BaseValueSource diagnosticsValueSource))
         {
             // The frontend edits according to BaseValueSource, not only the current
             // value. Omit Default values so runtime defaults are not authored to XAML.
@@ -272,6 +260,100 @@ internal sealed partial class SurfaceService
 
         return false;
     }
+
+    private static RuntimePropertyMetadata CreateRuntimePropertyMetadata(Type runtimeType)
+    {
+        string[] propertyNames = [.. runtimeType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(property => property.CanRead &&
+                property.GetIndexParameters().Length == 0 &&
+                property.Name is not ("Parent" or "TemplatedParent" or "XamlRoot" or "DispatcherQueue" or "Dispatcher"))
+            .Select(property => property.Name).Distinct()];
+        var descriptors = new List<RuntimePropertyDescriptor>(propertyNames.Length);
+        foreach (string name in propertyNames)
+        {
+            PropertyInfo? property = runtimeType.GetProperty(name, BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+            if (property is null || !property.CanRead || property.GetIndexParameters().Length != 0)
+            {
+                continue;
+            }
+
+            Type declaringType = property.DeclaringType ?? runtimeType;
+            DependencyProperty? dependencyProperty = null;
+            if (typeof(DependencyObject).IsAssignableFrom(runtimeType))
+            {
+                try
+                {
+                    dependencyProperty = FindDependencyProperty(declaringType, name) ?? (declaringType == runtimeType ? null : FindDependencyProperty(runtimeType, name));
+                }
+                catch
+                {
+                    continue;
+                }
+            }
+
+            descriptors.Add(new RuntimePropertyDescriptor(property, declaringType, dependencyProperty));
+        }
+
+        RuntimePropertyDescriptor[] runtimeProperties = [.. descriptors];
+        AttachedPropertyDescriptor[] attachedProperties = typeof(FrameworkElement).IsAssignableFrom(runtimeType)
+            ? s_attachedPropertyDescriptors.Value
+            : [];
+        var propertySourceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (RuntimePropertyDescriptor descriptor in runtimeProperties)
+        {
+            if (descriptor.DependencyProperty is not null && descriptor.Property.Name is not ("ActualWidth" or "ActualHeight"))
+            {
+                propertySourceNames.Add(descriptor.Property.Name);
+            }
+        }
+
+        foreach (AttachedPropertyDescriptor descriptor in attachedProperties)
+        {
+            propertySourceNames.Add(descriptor.Name);
+        }
+
+        return new RuntimePropertyMetadata(runtimeProperties, attachedProperties, [.. propertySourceNames]);
+    }
+
+    private static AttachedPropertyDescriptor[] CreateAttachedPropertyDescriptors()
+    {
+        var descriptors = new List<AttachedPropertyDescriptor>();
+        foreach (Type owner in s_attachedPropertyOwners)
+        {
+            foreach (PropertyInfo attached in owner.GetProperties(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (!attached.Name.EndsWith("Property", StringComparison.Ordinal) || attached.PropertyType != typeof(DependencyProperty))
+                {
+                    continue;
+                }
+
+                string name = attached.Name[..^8];
+                if (owner.GetMethod("Get" + name, BindingFlags.Public | BindingFlags.Static) is null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (attached.GetValue(null) is DependencyProperty dependencyProperty)
+                    {
+                        descriptors.Add(new AttachedPropertyDescriptor(name, owner, dependencyProperty));
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        return [.. descriptors];
+    }
+
+    private sealed record RuntimePropertyMetadata(RuntimePropertyDescriptor[] Properties, AttachedPropertyDescriptor[] AttachedProperties, string[] DiagnosticPropertyNames);
+
+    private sealed record RuntimePropertyDescriptor(PropertyInfo Property, Type DeclaringType, DependencyProperty? DependencyProperty);
+
+    private sealed record AttachedPropertyDescriptor(string Name, Type DeclaringType, DependencyProperty DependencyProperty);
 
     private static DependencyProperty? FindDependencyProperty(Type type, string propertyName)
     {

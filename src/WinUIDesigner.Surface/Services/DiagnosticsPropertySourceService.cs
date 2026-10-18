@@ -2,6 +2,7 @@
 // Licensed under MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
@@ -57,11 +58,11 @@ internal sealed class DiagnosticsPropertySourceService
         });
     }
 
-    public bool TryGetPropertySource(DependencyObject target, string propertyName, out BaseValueSource valueSource)
+    public bool TryGetPropertySources(DependencyObject target, string[] propertyNames, out Dictionary<string, BaseValueSource>? valueSources)
     {
-        valueSource = BaseValueSource.Unknown;
+        valueSources = null;
 
-        if (_nativeUnavailable)
+        if (_nativeUnavailable || propertyNames.Length == 0)
         {
             return false;
         }
@@ -77,7 +78,9 @@ internal sealed class DiagnosticsPropertySourceService
             // The native diagnostics API accepts the original WinRT IInspectable,
             // so temporarily marshal the managed DependencyObject to its ABI pointer.
             inspectable = WinRT.MarshalInspectable<object>.FromManaged(target, true);
-            int hr = NativeMethods.WinUIDesignerDiagnostics_GetPropertySource(inspectable, propertyName, out int nativeSource);
+            int[] nativeSources = new int[propertyNames.Length];
+            int[] found = new int[propertyNames.Length];
+            int hr = NativeMethods.WinUIDesignerDiagnostics_GetPropertySources(inspectable, propertyNames, (uint)propertyNames.Length, nativeSources, found);
             if (hr == NativeMethods.E_PENDING)
             {
                 return false;
@@ -87,28 +90,41 @@ internal sealed class DiagnosticsPropertySourceService
             {
                 if (hr < 0 && Interlocked.Exchange(ref _lookupFailureLogged, 1) == 0)
                 {
-                    WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics property-source lookup failed: property={propertyName}, hr=0x{hr:X8}.");
+                    WinUIDesignerLogger.LogTrace("Surface", $"WinUI diagnostics property-source lookup failed for {propertyNames.Length} properties: hr=0x{hr:X8}.");
                 }
 
                 return false;
             }
 
-            if (nativeSource == NativeMethods.XAML_DIAGNOSTICS_VALUE_SOURCE_VISUAL_STATE)
+            var sourcesByName = new Dictionary<string, BaseValueSource>(propertyNames.Length, StringComparer.OrdinalIgnoreCase);
+            for (int index = 0; index < propertyNames.Length; index++)
             {
-                // Windows XAML Diagnostics uses 14 for VisualState, while the VS protocol uses 14 for Accessibility.
-                valueSource = BaseValueSource.Unknown;
+                if (found[index] == 0)
+                {
+                    continue;
+                }
 
-                return true;
+                int nativeSource = nativeSources[index];
+                BaseValueSource valueSource;
+                if (nativeSource == NativeMethods.XAML_DIAGNOSTICS_VALUE_SOURCE_VISUAL_STATE)
+                {
+                    // Windows XAML Diagnostics uses 14 for VisualState, while the VS protocol uses 14 for Accessibility.
+                    valueSource = BaseValueSource.Unknown;
+                }
+                else if (nativeSource is >= (int)BaseValueSource.Unknown and <= (int)BaseValueSource.Coercion)
+                {
+                    valueSource = (BaseValueSource)nativeSource;
+                }
+                else
+                {
+                    continue;
+                }
+
+                sourcesByName.TryAdd(propertyNames[index], valueSource);
             }
 
-            if (nativeSource is >= (int)BaseValueSource.Unknown and <= (int)BaseValueSource.Coercion)
-            {
-                valueSource = (BaseValueSource)nativeSource;
-
-                return true;
-            }
-
-            return false;
+            valueSources = sourcesByName;
+            return true;
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {

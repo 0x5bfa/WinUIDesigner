@@ -403,17 +403,23 @@ extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_Init
     return initializeResult;
 }
 
-extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_GetPropertySource(
+extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_GetPropertySources(
     IInspectable* instance,
-    LPCWSTR propertyName,
-    int* valueSource)
+    LPCWSTR const* propertyNames,
+    unsigned int requestedPropertyCount,
+    int* valueSources,
+    int* found)
 {
-    if (instance == nullptr || propertyName == nullptr || valueSource == nullptr)
+    if (instance == nullptr || (requestedPropertyCount > 0 && (propertyNames == nullptr || valueSources == nullptr || found == nullptr)))
     {
         return E_POINTER;
     }
 
-    *valueSource = BaseValueSourceUnknown;
+    for (unsigned int index = 0; index < requestedPropertyCount; ++index)
+    {
+        valueSources[index] = BaseValueSourceUnknown;
+        found[index] = 0;
+    }
 
     ComPtr<IXamlDiagnostics> diagnostics;
     ComPtr<IVisualTreeService> visualTreeService;
@@ -446,26 +452,30 @@ extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_GetP
         return hr;
     }
 
-    HRESULT result = S_FALSE;
-    for (unsigned int index = 0; index < propertyCount; ++index)
+    for (unsigned int requestedIndex = 0; requestedIndex < requestedPropertyCount; ++requestedIndex)
     {
-        const PropertyChainValue& value = values[index];
-        if (value.PropertyName == nullptr || _wcsicmp(value.PropertyName, propertyName) != 0)
+        if (propertyNames[requestedIndex] == nullptr)
         {
             continue;
         }
 
-        if (value.PropertyChainIndex < sourceCount)
+        for (unsigned int valueIndex = 0; valueIndex < propertyCount; ++valueIndex)
         {
-            *valueSource = static_cast<int>(sources[value.PropertyChainIndex].Source);
-            result = S_OK;
+            const PropertyChainValue& value = values[valueIndex];
+            if (value.PropertyName == nullptr || _wcsicmp(value.PropertyName, propertyNames[requestedIndex]) != 0 || value.PropertyChainIndex >= sourceCount)
+            {
+                continue;
+            }
+
+            valueSources[requestedIndex] = static_cast<int>(sources[value.PropertyChainIndex].Source);
+            found[requestedIndex] = 1;
             break;
         }
     }
 
     FreePropertyChainSources(sources, sourceCount);
     FreePropertyChainValues(values, propertyCount);
-    return result;
+    return S_OK;
 }
 
 extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_SetRenderingEnabled(BOOL enabled)

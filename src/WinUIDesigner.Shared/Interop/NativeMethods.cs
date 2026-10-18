@@ -98,8 +98,13 @@ internal static class NativeMethods
     [DllImport("WinUIDesigner.DiagnosticsTap.dll")]
     internal static extern int WinUIDesignerDiagnostics_Initialize();
 
-    [DllImport("WinUIDesigner.DiagnosticsTap.dll")]
-    internal static extern int WinUIDesignerDiagnostics_GetPropertySource(IntPtr instance, [MarshalAs(UnmanagedType.LPWStr)] string propertyName, out int valueSource);
+    [DllImport("WinUIDesigner.DiagnosticsTap.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    internal static extern int WinUIDesignerDiagnostics_GetPropertySources(
+        IntPtr instance,
+        [In, MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.LPWStr, SizeParamIndex = 2)] string[] propertyNames,
+        uint propertyCount,
+        [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] int[] valueSources,
+        [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] int[] found);
 
     [DllImport("WinUIDesigner.DiagnosticsTap.dll")]
     internal static extern int WinUIDesignerDiagnostics_SetRenderingEnabled([MarshalAs(UnmanagedType.Bool)] bool enabled);
