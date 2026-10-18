@@ -118,7 +118,7 @@ public sealed partial class App : Application, IXamlMetadataProvider, IDisposabl
 
     XmlnsDefinition[] IXamlMetadataProvider.GetXmlnsDefinitions()
     {
-        return GeneratedMetadata.GetXmlnsDefinitions().Concat(ProjectRuntimeResolver.GetXmlnsDefinitions()).ToArray();
+        return [.. GeneratedMetadata.GetXmlnsDefinitions(), .. ProjectRuntimeResolver.GetXmlnsDefinitions()];
     }
 
     public void Dispose()

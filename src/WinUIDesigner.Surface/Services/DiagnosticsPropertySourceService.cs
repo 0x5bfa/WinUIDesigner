@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 
 namespace WinUIDesigner.Surface.Services;

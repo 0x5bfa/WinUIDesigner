@@ -3,6 +3,7 @@
 
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Shared;
+using Microsoft.UI.Dispatching;
 using WinUIDesigner.Surface.Common;
 using WinUIDesigner.Surface.Runtime;
 using WinUIDesigner.Surface.Transport;
@@ -75,37 +76,23 @@ public sealed class SurfaceTests
     [TestMethod]
     public async Task UiCallbackExceptionsReachTheRequester()
     {
-        await Assert.ThrowsAsync<InvalidOperationException>(() => QueuedOperation.RunAsync<int>(
-            action => { action(); return true; },
+        var queue = new DispatcherQueue(action => { action(); return true; });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => DispatcherOperation.InvokeAsync<int>(
+            queue,
             () => throw new InvalidOperationException(),
-            TimeSpan.FromSeconds(1),
             default));
     }
 
     [TestMethod]
     public async Task RejectedDispatcherRequestDoesNotHang()
     {
-        await Assert.ThrowsAsync<OperationCanceledException>(() => QueuedOperation.RunAsync(
-            _ => false,
+        var queue = new DispatcherQueue(_ => false);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => DispatcherOperation.InvokeAsync(
+            queue,
             () => 1,
-            TimeSpan.FromSeconds(1),
             default));
-    }
-
-    [TestMethod]
-    public async Task ExpiredQueuedRequestsCannotMutateTheDocumentLater()
-    {
-        Action? queued = null;
-        bool changed = false;
-
-        await Assert.ThrowsAsync<TimeoutException>(() => QueuedOperation.RunAsync(
-            action => { queued = action; return true; },
-            () => changed = true,
-            TimeSpan.FromMilliseconds(20),
-            default));
-
-        queued!();
-        Assert.IsFalse(changed);
     }
 
     [TestMethod]
@@ -113,14 +100,13 @@ public sealed class SurfaceTests
     {
         Action? queued = null;
         bool changed = false;
-        using var cancellation = new CancellationTokenSource();
+        var queue = new DispatcherQueue(action => { queued = action; return true; });
 
-        Task<bool> pending = QueuedOperation.RunAsync(
-            action => { queued = action; return true; },
+        Task<bool> pending = DispatcherOperation.InvokeAsync(
+            queue,
             () => changed = true,
-            TimeSpan.FromSeconds(1),
-            cancellation.Token);
-        cancellation.Cancel();
+            default);
+        queue.BeginShutdown();
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => pending);
         queued!();

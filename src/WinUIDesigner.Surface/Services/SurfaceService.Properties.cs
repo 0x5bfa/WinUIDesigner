@@ -7,10 +7,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls.Primitives;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Windows.Foundation;
 

@@ -10,8 +10,6 @@ using System.Reflection.PortableExecutable;
 using System.Runtime.Loader;
 using System.Runtime.InteropServices;
 using Microsoft.Windows.ApplicationModel.Resources;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Markup;
 
 namespace WinUIDesigner.Surface.Runtime;
 

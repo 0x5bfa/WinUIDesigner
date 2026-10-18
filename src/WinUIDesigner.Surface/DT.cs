@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using System.Runtime.CompilerServices;
 
 #pragma warning disable IDE0130 // Namespace does not match folder structure
+// Match the VS UWP designer contract: its DesignerInstanceBuilder serializes design-time properties under "XSurfUwp.DT".
 namespace XSurfUwp;
 #pragma warning restore IDE0130 // Namespace does not match folder structure
 

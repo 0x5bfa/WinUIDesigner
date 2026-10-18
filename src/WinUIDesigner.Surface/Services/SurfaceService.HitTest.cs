@@ -1,8 +1,6 @@
 // Copyright (c) 0x5BFA. All rights reserved.
 // Licensed under MIT License.
 
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using System;
 using System.Collections.Generic;

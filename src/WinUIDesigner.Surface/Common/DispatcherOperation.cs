@@ -4,7 +4,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.UI.Dispatching;
 
 namespace WinUIDesigner.Surface.Common;
 
@@ -34,8 +33,39 @@ internal static class DispatcherOperation
 
         try
         {
-            return await QueuedOperation.RunAsync(action => queue.TryEnqueue(() => action()), callback, _Timeout, shutdown.Token)
-                .ConfigureAwait(false);
+            var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            if (!queue.TryEnqueue(() =>
+            {
+                if (completion.Task.IsCompleted || shutdown.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                try
+                {
+                    completion.TrySetResult(callback());
+                }
+                catch (Exception ex)
+                {
+                    completion.TrySetException(ex);
+                }
+            }))
+            {
+                throw new OperationCanceledException("Unable to enqueue the designer request.");
+            }
+
+            try
+            {
+                return await completion.Task.WaitAsync(_Timeout, shutdown.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetException(ex);
+                _ = completion.Task.Exception;
+
+                throw;
+            }
         }
         finally
         {

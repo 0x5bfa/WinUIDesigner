@@ -4,24 +4,11 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Hosting;
-using Microsoft.UI.Xaml.Markup;
-using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.Graphics;
-using XSurfUwp;
 
 namespace WinUIDesigner.Surface;
 
-/// <summary>
-/// Hosts and positions the document visual tree inside the designer-provided window.
-/// Keeps the artboard transform, viewport clipping, and native child-window lifetime aligned
-/// while hosting the document inside the Visual Studio-provided HWND.
-/// </summary>
 internal sealed partial class DesignerSurface : IDisposable
 {
     private readonly Grid _viewportRoot;
@@ -48,6 +35,7 @@ internal sealed partial class DesignerSurface : IDisposable
     public DesignerSurface(FrameworkElement content, double width, double height)
     {
         _content = content;
+
         // Keep the HWND-sized viewport separate from the design surface itself.
         // The Visual Studio artboard sends pan/zoom for the design surface; applying
         // that transform to the XamlSource root also moves the viewport and breaks
@@ -56,19 +44,20 @@ internal sealed partial class DesignerSurface : IDisposable
         // Canvas arranges the document at its origin even when d:DesignWidth is
         // smaller than the chosen device. A Grid centers a Stretch child whose
         // explicit width is smaller, disagreeing with the frontend's root origin.
-        _viewportRoot = new Grid();
-        _transformRoot = (Canvas)XamlReader.Load(
-            "<Canvas xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
-            "Background=\"{ThemeResource ApplicationPageBackgroundThemeBrush}\" />");
+        _transformRoot = (Canvas)XamlReader.Load("<Canvas xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Background=\"{ThemeResource ApplicationPageBackgroundThemeBrush}\" />");
         _transformRoot.HorizontalAlignment = HorizontalAlignment.Left;
         _transformRoot.VerticalAlignment = VerticalAlignment.Top;
         _transformRoot.Children.Add(content);
+
+        _viewportRoot = new Grid();
         _viewportRoot.Children.Add(_transformRoot);
         _viewportRoot.LayoutUpdated += OnLayoutUpdated;
+
         if (!DT.IsSizePropertyShadowed(content, FrameworkElement.WidthProperty) && double.IsFinite(content.Width))
             DT.SetRuntimeWidth(content, content.Width);
         if (!DT.IsSizePropertyShadowed(content, FrameworkElement.HeightProperty) && double.IsFinite(content.Height))
             DT.SetRuntimeHeight(content, content.Height);
+
         SetDeviceSize(width, height);
     }
 
@@ -156,18 +145,9 @@ internal sealed partial class DesignerSurface : IDisposable
             // Give it a local top-level HWND on this thread, then reparent that HWND into
             // the Visual Studio artboard after the island has been initialized.
             _hostWindow = NativeMethods.CreateWindowEx(
-                0,
-                "STATIC",
-                "WinUIDesigner.RemoteSurface",
+                0, "STATIC", "WinUIDesigner.RemoteSurface",
                 NativeMethods.WS_POPUP | NativeMethods.WS_CLIPCHILDREN | NativeMethods.WS_CLIPSIBLINGS,
-                0,
-                0,
-                1,
-                1,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                IntPtr.Zero);
+                0, 0, 1, 1, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
             if (_hostWindow == IntPtr.Zero)
             {
                 throw new InvalidOperationException($"CreateWindowEx failed with Win32 error {Marshal.GetLastWin32Error()}.");
@@ -309,13 +289,16 @@ internal sealed partial class DesignerSurface : IDisposable
             (byte)((color1.R >> 1) + (color2.R >> 1)),
             (byte)((color1.G >> 1) + (color2.G >> 1)),
             (byte)((color1.B >> 1) + (color2.B >> 1))));
+
         // The shared frontend's background toggle sends colors, not a RequestedTheme
         // action. Use its chosen light/dark backdrop as the preview theme, so controls
         // and ThemeResource expressions change together without recreating the tree.
         _previewRequestedTheme = color1.R + color1.G + color1.B >= 3 * 128
             ? ElementTheme.Light
             : ElementTheme.Dark;
+
         _viewportRoot.RequestedTheme = _previewRequestedTheme ?? _appRequestedTheme;
+
         RefreshLayout();
     }
 

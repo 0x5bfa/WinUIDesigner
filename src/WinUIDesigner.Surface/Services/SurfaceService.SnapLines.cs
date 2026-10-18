@@ -3,9 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Windows.Foundation;
 
