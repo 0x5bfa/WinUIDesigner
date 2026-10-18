@@ -16,6 +16,8 @@ namespace WinUIDesigner.Surface.Services;
 /// </summary>
 internal sealed partial class SurfaceService
 {
+    private readonly record struct DeferredSetterInsertion(XamlAction Action, SetterBaseCollection Collection, int Index, SetterBase Setter);
+
     private readonly ResourceScopeService _resourceScopes;
     private readonly Dictionary<long, object?> _actionObjects = [];
     private readonly Dictionary<long, object?> _trackedActionObjects = [];
@@ -39,6 +41,7 @@ internal sealed partial class SurfaceService
         }
 
         XamlAction? failedAction = null;
+        var deferredSetterInsertions = new List<DeferredSetterInsertion>();
 
         try
         {
@@ -74,8 +77,14 @@ internal sealed partial class SurfaceService
                 }
 
                 failedAction = actions[index];
-                Execute(failedAction);
+                Execute(failedAction, deferredSetterInsertions: deferredSetterInsertions);
                 TrackActionObjects();
+            }
+
+            foreach (DeferredSetterInsertion insertion in deferredSetterInsertions)
+            {
+                failedAction = insertion.Action;
+                XamlRuntimeUtilities.AddChild(insertion.Collection, insertion.Index, insertion.Setter);
             }
 
             CompleteActionBatch();
@@ -119,10 +128,16 @@ internal sealed partial class SurfaceService
         }
 
         object? captured = null;
+        var deferredSetterInsertions = new List<DeferredSetterInsertion>();
         var actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
         foreach (XamlAction action in actions)
         {
-            Execute(action, (_, value) => captured = value);
+            Execute(action, (_, value) => captured = value, deferredSetterInsertions);
+        }
+
+        foreach (DeferredSetterInsertion insertion in deferredSetterInsertions)
+        {
+            XamlRuntimeUtilities.AddChild(insertion.Collection, insertion.Index, insertion.Setter);
         }
 
         return serializer.Serialize(captured);
@@ -133,6 +148,7 @@ internal sealed partial class SurfaceService
         using var scope = _objectIdentity.EnterDocument(document.DocumentId);
 
         object? root = null;
+        var deferredSetterInsertions = new List<DeferredSetterInsertion>();
         var actions = XamlActionJsonSerializer.Deserialize(document.Actions ?? []);
 
         for (int index = 0; index < actions.Count; index++)
@@ -153,13 +169,25 @@ internal sealed partial class SurfaceService
                     }
 
                     root = value;
-                });
+                }, deferredSetterInsertions);
 
                 TrackActionObjects();
             }
             catch (Exception ex)
             {
                 throw new DocumentConstructionException(ex, action);
+            }
+        }
+
+        foreach (DeferredSetterInsertion insertion in deferredSetterInsertions)
+        {
+            try
+            {
+                XamlRuntimeUtilities.AddChild(insertion.Collection, insertion.Index, insertion.Setter);
+            }
+            catch (Exception ex)
+            {
+                throw new DocumentConstructionException(ex, insertion.Action);
             }
         }
 
@@ -194,7 +222,10 @@ internal sealed partial class SurfaceService
         }
     }
 
-    private void Execute(XamlAction action, Action<int, object?>? setSurfaceContentOverride = null)
+    private void Execute(
+        XamlAction action,
+        Action<int, object?>? setSurfaceContentOverride = null,
+        List<DeferredSetterInsertion>? deferredSetterInsertions = null)
     {
         switch (action)
         {
@@ -315,7 +346,18 @@ internal sealed partial class SurfaceService
                 break;
             case AddChildAction addChild:
                 object childOwner = (ResolveObject(addChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {addChild.ParentHandle}."));
-                XamlRuntimeUtilities.AddChild(childOwner, addChild.Index, ResolveActionValue(addChild.ChildHandle, childOwner));
+                object? child = ResolveActionValue(addChild.ChildHandle, childOwner);
+                if (deferredSetterInsertions is not null
+                    && childOwner is SetterBaseCollection setterCollection
+                    && child is SetterBase setter)
+                {
+                    deferredSetterInsertions.Add(new(action, setterCollection, addChild.Index, setter));
+                }
+                else
+                {
+                    XamlRuntimeUtilities.AddChild(childOwner, addChild.Index, child);
+                }
+
                 break;
             case RemoveChildAction removeChild:
                 XamlRuntimeUtilities.RemoveChild((ResolveObject(removeChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {removeChild.ParentHandle}.")), removeChild.Index);

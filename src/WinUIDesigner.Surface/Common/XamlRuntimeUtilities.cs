@@ -39,6 +39,14 @@ internal static class XamlRuntimeUtilities
             return null;
         }
 
+        string typeName = serializedTypeName.Trim().Split(',')[0].Trim();
+        // Visual Studio's shared action stream uses the WinRT signature name;
+        // .NET projects Windows.UI.Xaml.Interop.TypeName as System.Type.
+        if (typeName is "Windows.UI.Xaml.Interop.TypeName" or "Microsoft.UI.Xaml.Interop.TypeName")
+        {
+            return typeof(Type);
+        }
+
         // Shared VS action contracts can spell framework types with the UWP prefix;
         // translate that prefix before looking in the WinUI runtime assemblies.
         string candidate = serializedTypeName.Trim().Replace("Windows.UI.Xaml", "Microsoft.UI.Xaml", StringComparison.Ordinal);

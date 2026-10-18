@@ -26,6 +26,7 @@ namespace WinUIDesigner.Surface.Services;
 /// </summary>
 internal sealed partial class SurfaceService : IDisposable
 {
+    private const long _ApplicationLiveHandle = 1;
     private const int _FreezeCompositionTimeoutMilliseconds = 200;
     private static readonly Size _DefaultSurfaceSize = new(800, 600);
     private const string _XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -55,6 +56,9 @@ internal sealed partial class SurfaceService : IDisposable
         _protocolHandler = protocolHandler;
         _dispatcherQueue = dispatcherQueue;
         _objectIdentity = objectIdentity;
+        // Construction actions use live handle 1 for the surface application's
+        // Application.Current instance, which is not created by an action.
+        _objectIdentity.RegisterHandle(_ApplicationLiveHandle, Application.Current);
         _visualTreeService = new(protocolHandler, objectIdentity);
         _resourceScopes = new ResourceScopeService(objectIdentity);
         _diagnosticsPropertySource = new DiagnosticsPropertySourceService();
