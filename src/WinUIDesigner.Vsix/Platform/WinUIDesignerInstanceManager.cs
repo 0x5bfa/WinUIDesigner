@@ -11,9 +11,15 @@ using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolat
 
 namespace WinUIDesigner.Platform;
 
+#if VS2022
+internal sealed class WinUIDesignerInstanceManager(
+    ISurfaceProcessMarkupProvider markupProvider, ISurfaceProcessContext surfaceProcessContext, IInstanceBuilderPlatform platform, IProtocolHandler protocolHandler, IInstanceBuildingTelemetry telemetry)
+    : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler, telemetry)
+#else
 internal sealed class WinUIDesignerInstanceManager(
     ISurfaceProcessMarkupProvider markupProvider, ISurfaceProcessContext surfaceProcessContext, IInstanceBuilderPlatform platform, IProtocolHandler protocolHandler)
     : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler)
+#endif
 {
     protected override LiveMarkupLinkResult TryLinkDocumentNode(ILiveNode liveNode, bool canDelay)
     {

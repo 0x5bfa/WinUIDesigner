@@ -13,12 +13,25 @@ namespace WinUIDesigner.Platform;
 // manager that prepares documents and coordinates app-level preview resources.
 internal sealed class WinUISurfaceProcessContext(IProjectContext project) : UwpSurfaceProcessContext(project)
 {
+#if VS2022
+    protected override DesignerInstanceManager CreateDesignerInstanceManager(
+        ISurfaceProcessMarkupProvider markupProvider,
+        ISurfaceProcessContext surfaceProcessContext,
+        IInstanceBuilderPlatform platform,
+        IProtocolHandler protocolHandler,
+        IInstanceBuildingTelemetry telemetry)
+#else
     protected override DesignerInstanceManager CreateDesignerInstanceManager(
         ISurfaceProcessMarkupProvider markupProvider,
         ISurfaceProcessContext surfaceProcessContext,
         IInstanceBuilderPlatform platform,
         IProtocolHandler protocolHandler)
+#endif
     {
+#if VS2022
+        return new WinUIDesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler, telemetry);
+#else
         return new WinUIDesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler);
+#endif
     }
 }

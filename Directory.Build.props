@@ -4,6 +4,7 @@
 		<LangVersion>preview</LangVersion>
 		<Nullable>enable</Nullable>
 		<Deterministic>true</Deterministic>
-		<WinUIDesignerSurfaceTargetFramework>net10.0-windows10.0.26100.0</WinUIDesignerSurfaceTargetFramework>
+		<WinUIDesignerSurfaceTargetFramework Condition="'$(WinUIDesignerSurfaceTargetFramework)' == '' and $([MSBuild]::VersionGreaterThanOrEquals('$(MSBuildVersion)', '18.0'))">net10.0-windows10.0.19041.0</WinUIDesignerSurfaceTargetFramework>
+		<WinUIDesignerSurfaceTargetFramework Condition="'$(WinUIDesignerSurfaceTargetFramework)' == ''">net8.0-windows10.0.19041.0</WinUIDesignerSurfaceTargetFramework>
 	</PropertyGroup>
 </Project>

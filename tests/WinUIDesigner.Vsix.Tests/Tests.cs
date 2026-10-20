@@ -87,26 +87,35 @@ public sealed class ToolboxTests
         string? configuredPath = Environment.GetEnvironmentVariable("WINUIDESIGNER_PROJECTION_PATH");
         if (!string.IsNullOrWhiteSpace(configuredPath)) return configuredPath;
 
+        DirectoryInfo? repositoryDirectory = null;
         for (DirectoryInfo? directory = new(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
             if (File.Exists(Path.Combine(directory.FullName, "WinUIDesigner.slnx")))
             {
-                string surfaceOutputDirectory = Path.Combine(directory.FullName,
-                    "src", "WinUIDesigner.Surface", "bin", "Release",
-                    "net10.0-windows10.0.26100.0");
-                foreach (string runtimeIdentifier in new[] { "win-x64", "win-arm64" })
-                {
-                    string projectionPath = Path.Combine(surfaceOutputDirectory, runtimeIdentifier, "Microsoft.WinUI.dll");
-                    if (File.Exists(projectionPath)) return projectionPath;
-                }
-
-                string frameworkOutputPath = Path.Combine(surfaceOutputDirectory, "Microsoft.WinUI.dll");
-                if (File.Exists(frameworkOutputPath)) return frameworkOutputPath;
+                repositoryDirectory = directory;
+                break;
             }
         }
 
+        if (repositoryDirectory is null)
+        {
+            throw new FileNotFoundException(
+                "Could not locate WinUIDesigner.slnx from the test output directory. Set WINUIDESIGNER_PROJECTION_PATH to Microsoft.WinUI.dll.");
+        }
+
+        string surfaceOutputDirectory = Path.Combine(repositoryDirectory.FullName,
+            "src", "WinUIDesigner.Surface", "bin", "Release");
+        if (Directory.Exists(surfaceOutputDirectory))
+        {
+            string? projectionPath = Directory
+                .EnumerateFiles(surfaceOutputDirectory, "Microsoft.WinUI.dll", SearchOption.AllDirectories)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+            if (projectionPath is not null) return projectionPath;
+        }
+
         throw new FileNotFoundException(
-            "Could not locate WinUIDesigner.slnx from the test output directory. Set WINUIDESIGNER_PROJECTION_PATH to Microsoft.WinUI.dll.");
+            $"Could not locate Microsoft.WinUI.dll under '{surfaceOutputDirectory}'. Build WinUIDesigner.Surface first or set WINUIDESIGNER_PROJECTION_PATH to Microsoft.WinUI.dll.");
     }
 
     private static bool IsVisualCandidate(TypeDefinition type, AssemblyDefinition projection)
