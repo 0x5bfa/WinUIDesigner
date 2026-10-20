@@ -11,7 +11,7 @@ namespace WinUIDesigner.Surface.Services;
 /// </summary>
 internal sealed class ResourceScopeService(ObjectIdentityRegistry identity)
 {
-    private readonly Dictionary<object, object> _parents = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, object> _parents = new(ReferenceEqualityComparer.Instance);
 
     private string? _themeAssembly;
 

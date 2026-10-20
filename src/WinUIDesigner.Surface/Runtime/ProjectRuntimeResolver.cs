@@ -19,11 +19,11 @@ namespace WinUIDesigner.Surface.Runtime;
 /// </summary>
 internal static class ProjectRuntimeResolver
 {
-    private static readonly Dictionary<string, string> _Assemblies = [with(StringComparer.OrdinalIgnoreCase)];
+    private static readonly Dictionary<string, string> _Assemblies = new(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly Dictionary<string, string> _Types = [with(StringComparer.Ordinal)];
+    private static readonly Dictionary<string, string> _Types = new(StringComparer.Ordinal);
 
-    private static readonly Dictionary<string, string> _NativeLibraries = [with(StringComparer.OrdinalIgnoreCase)];
+    private static readonly Dictionary<string, string> _NativeLibraries = new(StringComparer.OrdinalIgnoreCase);
     private static readonly List<string> _PriFiles = [];
 
     private static readonly List<string> _ProviderTypes = [];
@@ -194,7 +194,7 @@ internal static class ProjectRuntimeResolver
 
     public static IXamlType? GetXamlType(string name)
     {
-        _resolving ??= [with(StringComparer.Ordinal)];
+        _resolving ??= new(StringComparer.Ordinal);
         if (!_resolving.Add(name))
         {
             return null;

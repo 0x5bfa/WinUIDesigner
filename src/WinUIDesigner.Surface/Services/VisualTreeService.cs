@@ -247,7 +247,7 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
 
     private static void AppendAuthoredElements(DependencyObject element, List<DependencyObject> elements, HashSet<object>? visited = null)
     {
-        visited ??= [with(ReferenceEqualityComparer.Instance)];
+        visited ??= new(ReferenceEqualityComparer.Instance);
         if (!visited.Add(element))
         {
             return;

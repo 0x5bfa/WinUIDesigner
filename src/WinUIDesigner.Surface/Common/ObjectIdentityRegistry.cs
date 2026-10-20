@@ -14,11 +14,11 @@ namespace WinUIDesigner.Surface.Common;
 /// </summary>
 internal sealed partial class ObjectIdentityRegistry
 {
-    private readonly Dictionary<object, long> _objectToHandle = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, long> _objectToHandle = new(ReferenceEqualityComparer.Instance);
 
     private readonly Dictionary<long, object> _handleToObject = [];
 
-    private readonly Dictionary<object, SourceInfo> _sourceInfo = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, SourceInfo> _sourceInfo = new(ReferenceEqualityComparer.Instance);
 
     private long _nextHandle = 1;
 
@@ -26,7 +26,7 @@ internal sealed partial class ObjectIdentityRegistry
 
     private readonly Dictionary<int, HashSet<object>> _documents = [];
 
-    private readonly Dictionary<object, HashSet<int>> _owners = [with(ReferenceEqualityComparer.Instance)];
+    private readonly Dictionary<object, HashSet<int>> _owners = new(ReferenceEqualityComparer.Instance);
 
     public IDisposable EnterDocument(int documentId)
     {
@@ -50,7 +50,7 @@ internal sealed partial class ObjectIdentityRegistry
 
         if (!_documents.TryGetValue(_currentDocument, out var objects))
         {
-            _documents[_currentDocument] = objects = [with(ReferenceEqualityComparer.Instance)];
+            _documents[_currentDocument] = objects = new(ReferenceEqualityComparer.Instance);
         }
 
         objects.Add(value);
