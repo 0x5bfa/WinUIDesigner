@@ -12,6 +12,8 @@
 		<StartAction>Program</StartAction>
 		<StartProgram>$(VsInstallRoot)\Common7\IDE\devenv.exe</StartProgram>
 		<StartArguments>/rootsuffix Exp</StartArguments>
+		<!-- MonoMod.RuntimeDetour supplies this attribute through MonoMod.Backports. -->
+		<DefineConstants>$(DefineConstants);WINUIDESIGNER_USE_MONOMOD_BACKPORTS</DefineConstants>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(VisualStudioVersion)' == '17.0'">

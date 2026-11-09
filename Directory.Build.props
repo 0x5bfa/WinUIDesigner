@@ -6,5 +6,7 @@
 		<Deterministic>true</Deterministic>
 		<WinUIDesignerSurfaceTargetFramework Condition="'$(WinUIDesignerSurfaceTargetFramework)' == '' and $([MSBuild]::VersionGreaterThanOrEquals('$(MSBuildVersion)', '18.0'))">net10.0-windows10.0.19041.0</WinUIDesignerSurfaceTargetFramework>
 		<WinUIDesignerSurfaceTargetFramework Condition="'$(WinUIDesignerSurfaceTargetFramework)' == ''">net8.0-windows10.0.19041.0</WinUIDesignerSurfaceTargetFramework>
+		<WinUIDesignerSurfaceTestsTargetFramework Condition="'$(WinUIDesignerSurfaceTestsTargetFramework)' == '' and $([MSBuild]::VersionGreaterThanOrEquals('$(MSBuildVersion)', '18.0'))">net10.0</WinUIDesignerSurfaceTestsTargetFramework>
+		<WinUIDesignerSurfaceTestsTargetFramework Condition="'$(WinUIDesignerSurfaceTestsTargetFramework)' == ''">net8.0</WinUIDesignerSurfaceTestsTargetFramework>
 	</PropertyGroup>
 </Project>

@@ -1,7 +1,7 @@
 <Project Sdk="MSTest.Sdk/4.4.1">
 
 	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
+		<TargetFramework>$(WinUIDesignerSurfaceTestsTargetFramework)</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<TestingExtensionsProfile>None</TestingExtensionsProfile>
 	</PropertyGroup>
