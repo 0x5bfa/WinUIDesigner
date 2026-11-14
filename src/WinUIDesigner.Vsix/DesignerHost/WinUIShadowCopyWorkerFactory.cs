@@ -6,7 +6,6 @@ using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Diagnostics;
 using System.Linq;
 
 namespace WinUIDesigner.DesignerHost;
@@ -15,20 +14,28 @@ namespace WinUIDesigner.DesignerHost;
 // so reject other project kinds before using the Core worker implementation.
 internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
 {
-    // Microsoft.WindowsAppSDK 2.5.1 resolves to this Microsoft.WinUI.dll version.
-    // The assembly is bundled inside WinUISurface.exe for VSIX single-file deployment.
-    private const string _VerifiedWinUIRuntimeFileVersion = "3.0.0.2609";
-
     public IHostShadowCopyWorker CreateWorker(SurfaceProcessInfo surfaceProcessInfo, IHostProject hostProject, IHostTelemetryService hostTelemetryService, IEnumerable<string> controlAssembliesForShadowCopy)
     {
-        if (!string.Equals(surfaceProcessInfo.PlatformIdentifier?.TargetFrameworkIdentifier, ".NETCoreApp", StringComparison.Ordinal))
+        try
         {
-            throw new NotSupportedException("WinUI Designer currently supports .NETCoreApp projects only.");
+            return CreateWorkerCore(surfaceProcessInfo, hostProject, controlAssembliesForShadowCopy);
         }
-
-        if (!string.Equals(surfaceProcessInfo.PlatformIdentifier?.TargetRuntime, "Managed", StringComparison.OrdinalIgnoreCase))
+        catch (Exception exception)
         {
-            throw new NotSupportedException($"WinUI Designer requires a managed project. Runtime={surfaceProcessInfo.PlatformIdentifier?.TargetRuntime}, architecture={surfaceProcessInfo.RuntimeArchitecture}.");
+            // Visual Studio shows this failure on the design surface but writes nothing to this extension's log.
+            WinUIDesignerLogger.LogError("Host", $"The surface process for '{hostProject?.ProjectName}' cannot be prepared.", exception);
+
+            throw;
+        }
+    }
+
+    private static IHostShadowCopyWorker CreateWorkerCore(SurfaceProcessInfo surfaceProcessInfo, IHostProject hostProject, IEnumerable<string> controlAssembliesForShadowCopy)
+    {
+        // The designer pane normally rejects such projects earlier with a readable message. Repeat the checks
+        // here because the surface process can belong to another project than the one that owns the document.
+        if (WinUIProjectRequirements.GetUnsupportedReason(surfaceProcessInfo.PlatformIdentifier, hostProject.References?.Select(reference => reference.Path)) is { } reason)
+        {
+            throw new NotSupportedException(reason);
         }
 
         var payloadArchitecture = string.Equals(surfaceProcessInfo.RuntimeArchitecture, "x64", StringComparison.OrdinalIgnoreCase) ||
@@ -44,18 +51,6 @@ internal sealed class WinUIShadowCopyWorkerFactory : IShadowCopyWorkerFactory
         if (!File.Exists(payloadSurface))
         {
             throw new FileNotFoundException("The designer process was not found. Try reinstalling the VSIX.", payloadSurface);
-        }
-
-        var projectWinUI = hostProject.References.Select(reference => reference.Path)
-            .FirstOrDefault(reference => string.Equals(Path.GetFileName(reference), "Microsoft.WinUI.dll", StringComparison.OrdinalIgnoreCase));
-        if (projectWinUI is not null && File.Exists(projectWinUI))
-        {
-            var actual = FileVersionInfo.GetVersionInfo(projectWinUI).FileVersion;
-
-            if (!string.Equals(_VerifiedWinUIRuntimeFileVersion, actual, StringComparison.Ordinal))
-            {
-                throw new NotSupportedException($"WinUI Designer requires Windows App SDK 2.5.1 (Microsoft.WinUI.dll {_VerifiedWinUIRuntimeFileVersion}). Runtime: {actual}");
-            }
         }
 
         return new WinUICoreShadowCopyWorker(surfaceProcessInfo, hostProject, controlAssembliesForShadowCopy, payloadSurface);
