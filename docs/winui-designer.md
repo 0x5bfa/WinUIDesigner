@@ -108,6 +108,48 @@ The surface records stable runtime identities and source information, and report
 
 Implementation: [document preparation](../src/WinUIDesigner.Vsix/Platform/WinUIDesignerInstanceManager.cs), [construction and tree notifications](../src/WinUIDesigner.Surface/Services/SurfaceService.cs), and [project type/resource resolution](../src/WinUIDesigner.Surface/Runtime/ProjectRuntimeResolver.cs).
 
+### Namespace policies
+
+Some members of a document apply only under a condition: those under a conditional XAML namespace (`xmlns:c7="...?IsApiContractPresent(...)"`) and those under an Uno Platform prefix (`win:`, `android:`, `not_win:`). A namespace policy classifies the members written under one `xmlns` prefix. It can keep them as plain members of their bare namespace, drop them, or leave them as written. The platform policy decides first, then the conditional policy. Both policies currently leave every prefix alone, so documents load as they did before; the sections below describe each policy.
+
+The decision is made per prefix, not per namespace: `win`, `not_android`, and the default namespace all name the presentation namespace. Neither LINQ to XML nor the designer's document model keeps the prefix a member was written with, so both sides read it back from the source text.
+
+The policies apply on both loading paths, so a member is treated the same way on either.
+
+| Path | Where the policies apply |
+| --- | --- |
+| Prepared XAML | The surface parses the prepared XAML once, rewrites that document, and passes the result to the XAML reader. Source mapping uses the same document: a dropped element cannot claim a source position, and line information still refers to the prepared file. XAML snippets that are parsed on their own go through the same rewrite. |
+| Construction actions | Actions carry CLR names only, so the surface cannot tell which prefix a member had. The instance manager asks, for each property it is about to build, whether the property was written under a dropped prefix. |
+
+A document without a policy namespace is recognized early and is not processed further: the surface looks at its `xmlns` declarations, and the Visual Studio side scans the text once each time it changes. A policy that fails is logged and skipped; it does not fail document construction.
+
+Implementation: [policies and namespace scanning](../src/WinUIDesigner.Shared/Markup), [XAML rewriting](../src/WinUIDesigner.Surface/Markup/XamlNamespaceRewriter.cs), [surface integration](../src/WinUIDesigner.Surface/Services/SurfaceService.NamespacePolicies.cs), and [document-model filtering](../src/WinUIDesigner.Vsix/Platform/XamlMemberDispositionService.cs).
+
+#### What the WinUI XAML reader does on its own
+
+`XamlReader.Load` already implements both features for XAML text. Measured with Windows App SDK 2.5.1 in a standalone application:
+
+| Markup | Result |
+| --- | --- |
+| Attribute, element, setter, merged dictionary, or property element under `IsApiContractPresent` / `IsApiContractNotPresent` | Applied when the condition holds, skipped otherwise. |
+| The same property set under two complementary conditions | The branch whose condition holds is applied, in either attribute order. |
+| `IsTypePresent`, `IsPropertyPresent` | Evaluated. `Microsoft.UI.Xaml` types and their properties count as present. |
+| A condition on a `using:` namespace | Evaluated. |
+| A custom `IXamlCondition` | `Evaluate` is called once per argument. |
+| A custom condition whose type cannot be resolved | The process ends with an access violation; no exception is raised. |
+| The same `x:Key` in two complementary branches | One entry; no error. |
+| An element or attribute under a prefix listed in `mc:Ignorable`, including a `#using:` URI and an element inside a typed collection | Skipped. |
+| An element or attribute in an unknown namespace that is not ignorable | `XamlParseException`. |
+| A `win:` attribute on an element from a `using:` namespace | `XamlParseException`: the property is not found. |
+| An event handler attribute, prefixed or not | Accepted and ignored. |
+| `x:Class` on the root | `XamlParseException`. |
+
+Prepared XAML that reaches the reader unchanged is therefore loaded correctly already. The policies cover what the reader cannot: the construction-action path, source mapping of skipped elements, the crash on an unresolved condition type, and previewing the markup for another Windows version or platform.
+
+#### Conditional namespaces
+
+#### Uno platform prefixes
+
 ## Embedding the surface
 
 The extension hosts the document in `DesktopWindowXamlSource` and attaches its window beneath the designer overlay. This diagram expands the WinUI display adapter after document construction.
