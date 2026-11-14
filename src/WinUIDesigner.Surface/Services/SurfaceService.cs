@@ -28,8 +28,9 @@ internal sealed partial class SurfaceService : IDisposable
         _objectIdentity = objectIdentity;
 
         // Construction actions use live handle 1 for the surface application's
-        // Application.Current instance, which is not created by an action.
-        _objectIdentity.RegisterHandle(ApplicationLiveHandle, Application.Current);
+        // Application.Current instance, which is not created by an action and
+        // must stay registered whichever documents come and go.
+        _objectIdentity.RegisterProcessObject(ApplicationLiveHandle, Application.Current);
         _visualTreeService = new(protocolHandler, objectIdentity);
         _resourceScopes = new ResourceScopeService(objectIdentity);
         _diagnosticsPropertySource = new DiagnosticsPropertySourceService();
