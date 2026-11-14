@@ -1,0 +1,21 @@
+<!--  Copyright (c) 0x5BFA. All rights reserved. Licensed under MIT License.  -->
+<!--
+    This dictionary is never loaded. It exists for the XAML compiler: a type gets an entry in the generated
+    XAML metadata only when compiled markup mentions it, and XamlReader.Load resolves the members of a type
+    from a using: namespace through that metadata alone. Prepared documents carry their sizes as the DT
+    attached properties below; without this file every document that sets a width or a height fails to
+    load and is built from construction actions instead.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:dt="using:XSurfUwp">
+    <Border
+        x:Key="DesignTimeSizeProperties"
+        dt:DT.DesignHeight="0"
+        dt:DT.DesignWidth="0"
+        dt:DT.RootHeight="0"
+        dt:DT.RootWidth="0"
+        dt:DT.RuntimeHeight="0"
+        dt:DT.RuntimeWidth="0" />
+</ResourceDictionary>
