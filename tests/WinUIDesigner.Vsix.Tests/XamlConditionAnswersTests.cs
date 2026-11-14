@@ -9,7 +9,8 @@ using WinUIDesigner.Protocol;
 
 /// <summary>
 /// Covers how the Visual Studio side obtains and uses the surface's answers to conditional XAML conditions:
-/// what it returns before the surface answered, while a request is in flight, and when the surface never answers.
+/// what it returns before the surface answered, while a request is in flight, when an answer arrives between
+/// two documents, and when the surface never answers.
 /// </summary>
 [TestClass]
 public sealed class XamlConditionAnswersTests
@@ -129,12 +130,90 @@ public sealed class XamlConditionAnswersTests
         Assert.AreEqual(false, answers.Evaluate(_C7N, Namespaces));
         Assert.AreEqual(1, surface.ChangeCount);
 
+        // The contradicting answer arrives while a document may be being built: it waits for the next one.
         surface.Release();
+        await WaitFor(() => !answers.IsRequestInFlight);
+        Assert.AreEqual(true, answers.Evaluate(_C7, Namespaces));
+        Assert.AreEqual(false, answers.Evaluate(_C7N, Namespaces));
+        Assert.AreEqual(1, surface.ChangeCount);
+
         await answers.AskAsync(Queries(_C7), _Long);
 
         Assert.AreEqual(false, answers.Evaluate(_C7, Namespaces));
         Assert.AreEqual(true, answers.Evaluate(_C7N, Namespaces));
         Assert.AreEqual(2, surface.ChangeCount);
+    }
+
+    [TestMethod]
+    public async Task LateAnswerTakesEffectWithTheNextDocument()
+    {
+        var surface = new FakeSurface { Hold = true };
+        XamlConditionAnswers answers = surface.CreateAnswers();
+
+        await answers.AskAsync(Queries(_C7, _NewExperience), TimeSpan.FromMilliseconds(50));
+        Assert.IsNull(answers.Evaluate(_C7, Namespaces));
+
+        // The reply arrives after the document was sent, possibly while its actions are being built.
+        surface.Release();
+        await WaitFor(() => !answers.IsRequestInFlight);
+        Assert.IsFalse(answers.SurfaceAnswers);
+        Assert.IsNull(answers.Evaluate(_C7, Namespaces));
+        Assert.IsNull(answers.Evaluate(_NewExperience, Namespaces));
+        Assert.AreEqual(0, surface.ChangeCount);
+
+        // The next document, even one without conditions, starts with the answers.
+        await answers.AskAsync([], _Long);
+
+        Assert.IsTrue(answers.SurfaceAnswers);
+        Assert.AreEqual(true, answers.Evaluate(_C7, Namespaces));
+        Assert.AreEqual(true, answers.Evaluate(_NewExperience, Namespaces));
+        Assert.AreEqual(1, surface.ChangeCount);
+        Assert.AreEqual(1, surface.RequestCount);
+    }
+
+    [TestMethod]
+    public async Task FirstAnswerIsAwaitedLonger()
+    {
+        var surface = new FakeSurface { Hold = true };
+        XamlConditionAnswers answers = surface.CreateAnswers();
+
+        // A surface that has just started answers once it is ready.
+        Task first = answers.AskAsync(Queries(_C7), TimeSpan.FromMilliseconds(50), _Long);
+        await Task.Delay(500);
+        Assert.IsFalse(first.IsCompleted, "The first answer is waited for longer than the usual time.");
+
+        surface.Release();
+        await first;
+        Assert.IsTrue(answers.SurfaceAnswers);
+        Assert.AreEqual(0, surface.Warnings.Count);
+
+        // Once the surface has answered, the usual time applies.
+        var elapsed = Stopwatch.StartNew();
+        await answers.AskAsync(Queries(_C99), TimeSpan.FromMilliseconds(50), _Long);
+        Assert.IsTrue(elapsed.Elapsed < TimeSpan.FromSeconds(5), elapsed.Elapsed.ToString());
+        Assert.AreEqual(1, surface.Warnings.Count);
+        StringAssert.Contains(surface.Warnings[0], "did not answer");
+    }
+
+    [TestMethod]
+    public async Task SurfaceThatNeverAnswersCostsTheLongWaitOnce()
+    {
+        var surface = new FakeSurface { Hold = true };
+        XamlConditionAnswers answers = surface.CreateAnswers();
+        TimeSpan firstAnswerTimeout = TimeSpan.FromMilliseconds(800);
+
+        var elapsed = Stopwatch.StartNew();
+        await answers.AskAsync(Queries(_C7), TimeSpan.FromMilliseconds(50), firstAnswerTimeout);
+        Assert.IsTrue(elapsed.Elapsed >= TimeSpan.FromMilliseconds(700), elapsed.Elapsed.ToString());
+
+        elapsed.Restart();
+        await answers.AskAsync(Queries(_C99), TimeSpan.FromMilliseconds(50), firstAnswerTimeout);
+        await answers.AskAsync(Queries(_NewExperience), TimeSpan.FromMilliseconds(50), firstAnswerTimeout);
+        Assert.IsTrue(elapsed.Elapsed < TimeSpan.FromMilliseconds(700), elapsed.Elapsed.ToString());
+
+        Assert.IsFalse(answers.SurfaceAnswers);
+        Assert.AreEqual(1, surface.RequestCount);
+        Assert.AreEqual(3, surface.Warnings.Count);
     }
 
     [TestMethod]
@@ -197,14 +276,25 @@ public sealed class XamlConditionAnswersTests
     [TestMethod]
     public async Task EmptyQuestionShowsWhetherTheSurfaceAnswersAtAll()
     {
-        var surface = new FakeSurface();
+        var surface = new FakeSurface { Hold = true };
         XamlConditionAnswers answers = surface.CreateAnswers();
 
+        // A document without conditions does not wait, and a second one does not ask again.
         await answers.AskAsync([], _Long);
         await answers.AskAsync([], _Long);
-        await WaitFor(() => answers.SurfaceAnswers && surface.ChangeCount == 1);
-        await answers.AskAsync([], _Long);
+        Assert.AreEqual(1, surface.RequestCount);
 
+        surface.Hold = false;
+        surface.Release();
+        await WaitFor(() => !answers.IsRequestInFlight);
+        Assert.IsFalse(answers.SurfaceAnswers);
+
+        // The reply takes effect with the next document.
+        await answers.AskAsync([], _Long);
+        Assert.IsTrue(answers.SurfaceAnswers);
+        Assert.AreEqual(1, surface.ChangeCount);
+
+        await answers.AskAsync([], _Long);
         Assert.AreEqual(1, surface.RequestCount);
         Assert.AreEqual(0, surface.Requests[0].Conditions!.Count);
         Assert.AreEqual(0, surface.Warnings.Count);
@@ -412,12 +502,15 @@ public sealed class XamlConditionAnswersTests
     }
 
     /// <summary>
-    /// Lets the surface answer the empty question, after which conditions are evaluated.
+    /// Lets the surface answer the empty question and puts the answer into effect, after which conditions are evaluated.
     /// </summary>
     private static async Task WaitForTheFirstAnswer(XamlConditionAnswers answers, FakeSurface surface)
     {
         await answers.AskAsync([], _Long);
-        await WaitFor(() => answers.SurfaceAnswers && surface.ChangeCount == 1);
+        await WaitFor(() => !answers.IsRequestInFlight);
+        await answers.AskAsync([], _Long);
+        Assert.IsTrue(answers.SurfaceAnswers);
+        Assert.AreEqual(1, surface.ChangeCount);
         Assert.AreEqual(1, surface.RequestCount);
     }
 

@@ -220,21 +220,21 @@ sequenceDiagram
     Conditions-->>Service: Answers, the ones prepared XAML is rewritten with
     Service-->>Protocol: Reply
     Protocol-->>Manager: Answers, kept per question
-    Note over Manager: Wait at most two seconds,<br/>then continue with 516 CreateSurface
+    Note over Manager: Wait at most two seconds, twenty for the<br/>first answer, then continue with 516 CreateSurface
     Manager->>Manager: ShouldIgnoreProperty and GetInstanceBuilder<br/>drop what the answers exclude
 ```
 
-Nothing waits for the surface while a document is being built. The answers are used as follows:
+The first wait is longer because a surface process that has just started answers only once it is ready, which took about six seconds in a running designer; the document waits for that start anyway. The long wait is spent once, also when the surface never answers.
+
+Nothing waits for the surface while a document is being built, and answers take effect only before a document is sent, never while Visual Studio builds one. A verdict that changed halfway through would build an element as written and then drop its properties; the surface cannot create a `Setter` without its `Property`. An answer that arrives later takes effect with the next document that is loaded and discards the verdicts reached without it. The answers are used as follows:
 
 | Situation | Result |
 | --- | --- |
 | The surface has not answered any request | No predicate is evaluated; the members are built as written. A surface that does not know the message never answers. |
 | The predicate was answered | The answer of the surface. |
 | A predicate that appears later, about a contract or a `Windows.*` type | Answered by Visual Studio, which runs on the same operating system, and confirmed by the surface in the background. |
-| A custom condition that appears later | Not satisfied until the surface has answered. |
-| Another type or property predicate that appears later | Left as written until the surface has answered. |
-
-An answer that arrives later discards the verdicts that were reached without it and applies to what is built afterwards.
+| A custom condition that appears later | Not satisfied until the surface has answered and the next document is loaded. |
+| Another type or property predicate that appears later | Left as written until the surface has answered and the next document is loaded. |
 
 ##### Limitations
 
@@ -242,6 +242,7 @@ An answer that arrives later discards the verdicts that were reached without it 
 - The live tree has no object for a dropped element, but construction actions address children by their index in the document. After an element is inserted or removed next to a dropped sibling, the preview can differ from the document until it is reloaded.
 - A dictionary that the XAML reader loads by itself, such as the compiled resources of a control library, is not rewritten. The reader evaluates its predicates, with its own answers in the surface process, and it still ends the process on a predicate it cannot handle, such as a custom condition whose type it does not find.
 - A custom condition runs without the state of the application: the designer does not run the code that sets feature flags at startup.
+- Visual Studio's XAML language service reports `XLS0310 '<prefix>:<Type>' is an invalid conditional method` for a custom condition. Its validation (`UwpNamespaceCondition.Validate` in `Microsoft.VisualStudio.DesignTools.XamlLanguageServiceBase.dll`) accepts only the six `ApiInformation` methods, and it has no extension point: the platform metadata returns an internal namespace generator. The error stays in the Error List; it does not affect the preview.
 - A predicate is evaluated once per surface process. A condition class that changed, or whose answer would be different now, takes effect only in a new surface process.
 - Contract predicates describe the machine the designer runs on. Previewing another Windows version is not implemented.
 

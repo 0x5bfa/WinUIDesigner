@@ -87,6 +87,22 @@ internal static class XamlConditionExchange
     }
 
     /// <summary>
+    /// Returns whether <paramref name="response"/> answers the request created from <paramref name="queries"/>:
+    /// one outcome per question.
+    /// </summary>
+    public static bool IsReplyTo(IReadOnlyList<XamlConditionQuery> queries, EvaluateXamlConditionsResponse? response)
+    {
+        List<bool?>? outcomes = response?.Outcomes;
+        if (outcomes is null || outcomes.Count != queries.Count)
+        {
+            // An empty request is answered by an empty reply, whose list may not survive the transport.
+            return response is not null && queries.Count == 0;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Records the answers of a reply in <paramref name="conditions"/>, in Visual Studio.
     /// </summary>
     /// <param name="queries">The queries the request was created from.</param>
@@ -101,11 +117,16 @@ internal static class XamlConditionExchange
         out bool changed)
     {
         changed = false;
-        List<bool?>? outcomes = response?.Outcomes;
-        if (outcomes is null || outcomes.Count != queries.Count)
+        if (!IsReplyTo(queries, response))
         {
-            // An empty request is answered by an empty reply, whose list may not survive the transport.
-            return response is not null && queries.Count == 0;
+            return false;
+        }
+
+        List<bool?>? outcomes = response!.Outcomes;
+        if (outcomes is null)
+        {
+            // The reply to an empty request.
+            return true;
         }
 
         for (int index = 0; index < queries.Count; index++)

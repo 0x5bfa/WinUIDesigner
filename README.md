@@ -17,6 +17,7 @@ Download and open a vsix file from Visual Studio Marketplace. WinUI 3 designer w
 - Windows App SDK 2.5.1 is required.
 - A custom XAML condition (`IXamlCondition`) runs without the app's state: code that sets feature flags at startup does not run in the designer.
 - A conditional XAML namespace is evaluated once per designer surface process; a condition that changes afterwards has no effect until that process is started again.
+- Visual Studio's XAML editor reports `XLS0310 '<prefix>:<Type>' is an invalid conditional method` for a custom XAML condition. The error comes from Visual Studio's own validation, which knows only the `ApiInformation` methods; the preview is not affected.
 
 ## Structure
 

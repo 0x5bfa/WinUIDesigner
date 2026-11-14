@@ -20,6 +20,11 @@ internal sealed partial class WinUIDesignerInstanceManager
     // on its UI thread. Loading a document must not wait long for either.
     private static readonly TimeSpan _ConditionAnswerTimeout = TimeSpan.FromSeconds(2);
 
+    // A surface process that has just started answers once it is ready, which took about six seconds in a
+    // running designer. The document that is about to be sent waits for the same start anyway. The wait is
+    // spent once, also when the surface never answers.
+    private static readonly TimeSpan _FirstConditionAnswerTimeout = TimeSpan.FromSeconds(20);
+
     private static readonly object _Reported = new();
 
     // Places in the source text that were looked at for a lost value already; the keys die with their documents.
@@ -61,7 +66,8 @@ internal sealed partial class WinUIDesignerInstanceManager
             AddConditions(queries, scanned, document);
         }
 
-        await answers.AskAsync(new List<XamlConditionQuery>(queries.Values), _ConditionAnswerTimeout).ConfigureAwait(false);
+        // The answers that arrived take effect here, before anything of this request is built.
+        await answers.AskAsync(new List<XamlConditionQuery>(queries.Values), _ConditionAnswerTimeout, _FirstConditionAnswerTimeout).ConfigureAwait(false);
         if (queries.Count > 0)
         {
             WinUIDesignerLogger.LogTrace("Platform", $"Conditional XAML: the documents of this request contain {queries.Count} condition(s); the surface {(answers.SurfaceAnswers ? "answers" : "has not answered yet")}.");
