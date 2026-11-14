@@ -24,6 +24,13 @@ public sealed class VsDesignerApiShapeTests
     private const string _XmlElementReference = "Microsoft.VisualStudio.DesignTools.Markup.Xaml.XmlElementReference";
     private const string _XmlNamespaceResolver = "Microsoft.VisualStudio.DesignTools.Markup.IXmlNamespaceResolver";
     private const string _CreateSurfaceRequestInfo = "Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM.CreateSurfaceRequestInfo";
+    private const string _UwpInstanceBuilder = "Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Uwp.UwpInstanceBuilder";
+    private const string _LiveNodeProxy = "Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.LiveNodeProxy";
+    private const string _InstanceBuilderContext = "Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.IInstanceBuilderContext";
+    private const string _ProtocolHandler = "Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking.IProtocolHandler";
+    private const string _SurfaceProcessMarkupProviderContract = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.ISurfaceProcessMarkupProvider";
+    private const string _SurfaceProcessDocument = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.ISurfaceProcessDocument";
+    private const string _MarkupDocument = "Microsoft.VisualStudio.DesignTools.Markup.IMarkupDocument";
 
     private static readonly Lazy<DesignerAssemblies> _Assemblies = new(DesignerAssemblies.Load);
 
@@ -185,6 +192,105 @@ public sealed class VsDesignerApiShapeTests
         Assert.IsTrue(
             type.Methods.Any(method => method.IsConstructor && !method.IsStatic && !method.HasParameters && IsVisibleToDerivedClasses(method)),
             $"{type.FullName} needs an accessible parameterless constructor.");
+    }
+
+    [TestMethod]
+    public void InstanceBuilderCanBeSubclassedWithoutArguments()
+    {
+        // The builder for nodes a namespace policy drops derives from it and passes nothing to its constructor.
+        TypeDefinition type = RequireType(_UwpInstanceBuilder);
+
+        Assert.IsTrue(type.IsPublic, $"{type.FullName} must be public.");
+        Assert.IsFalse(type.IsSealed, $"{type.FullName} must not be sealed.");
+        Assert.IsTrue(
+            type.Methods.Any(method => method.IsConstructor && !method.IsStatic && IsVisibleToDerivedClasses(method) && method.Parameters.All(parameter => parameter.HasDefault)),
+            $"{type.FullName} needs an accessible constructor that can be called without arguments. Constructors found: {DescribeAll(type.Methods.Where(method => method.IsConstructor && !method.IsStatic))}");
+    }
+
+    [TestMethod]
+    [DataRow("CanInstantiate", "IInstanceBuilderContext,DocumentNode")]
+    [DataRow("Instantiate", "IInstanceBuilderContext,LiveNodeProxy")]
+    [DataRow("Initialize", "IInstanceBuilderContext,LiveNodeProxy,BuildOrder")]
+    [DataRow("ReferencePropertyOrChild", "IInstanceBuilderContext,DocumentNode")]
+    [DataRow("UpdateProperty", "IInstanceBuilderContext,DocumentCompositeNode,DocumentNode,DocumentNode,IProperty")]
+    [DataRow("UpdateEvent", "IInstanceBuilderContext,DocumentCompositeNode,DocumentNode,DocumentNode,IEvent")]
+    [DataRow("UpdateChild", "IInstanceBuilderContext,DocumentCompositeNode,DocumentNode,DocumentNode,Int32")]
+    public void InstanceBuilderLetsDerivedClassesReplaceWhatItBuilds(string methodName, string parameterTypes)
+    {
+        MethodDefinition method = RequireMethod(_UwpInstanceBuilder, methodName, parameterTypes.Split(','));
+
+        AssertOverridable(method);
+    }
+
+    [TestMethod]
+    public void LiveNodeProxyCanBeInvalidated()
+    {
+        // An invalid proxy is how a builder tells its caller that no object was created.
+        MethodDefinition method = RequireMethod(_LiveNodeProxy, "Invalidate");
+
+        Assert.IsTrue(method.IsPublic && !method.IsStatic, $"Expected a public instance method: {Describe(method)}");
+    }
+
+    [TestMethod]
+    public void InstanceBuilderContextHandsOutTheProxyOfANode()
+    {
+        // Later parameters, if any, have defaults: the extension passes the node alone.
+        TypeDefinition type = RequireType(_InstanceBuilderContext);
+        MethodDefinition[] candidates = type.Methods.Where(method => method.Name == "GetLiveNodeProxy").ToArray();
+
+        Assert.IsTrue(
+            candidates.Any(method =>
+                method.Parameters.Count >= 1
+                && method.Parameters[0].ParameterType.Name == "DocumentNode"
+                && method.Parameters.Skip(1).All(parameter => parameter.HasDefault)
+                && method.ReturnType.Name == "LiveNodeProxy"),
+            $"{_InstanceBuilderContext}.GetLiveNodeProxy(DocumentNode) was not found. Methods named GetLiveNodeProxy: {DescribeAll(candidates)}");
+    }
+
+    [TestMethod]
+    public void ProtocolHandlerSendsARequestOfAnyMessageNumber()
+    {
+        // The extension sends a message of its own to the surface and awaits the reply.
+        MethodDefinition method = RequireMethod(_ProtocolHandler, "SendMessageAsync", "Int32", "Object");
+
+        Assert.AreEqual(1, method.GenericParameters.Count, $"Expected one type parameter for the reply: {Describe(method)}");
+        Assert.AreEqual("Task`1", method.ReturnType.Name, $"Unexpected return type: {Describe(method)}");
+    }
+
+    [TestMethod]
+    public void ProtocolHandlerTellsWhenTheConnectionCloses()
+    {
+        PropertyDefinition property = RequireProperty(_ProtocolHandler, "CancellationToken");
+
+        Assert.AreEqual("CancellationToken", property.PropertyType.Name, $"Unexpected type of {_ProtocolHandler}.CancellationToken.");
+    }
+
+    [TestMethod]
+    public void InstanceManagerExposesItsProtocolHandlerAndMarkupProvider()
+    {
+        PropertyDefinition protocolHandler = RequireProperty(_DesignerInstanceManager, "ProtocolHandler");
+        PropertyDefinition markupProvider = RequireProperty(_DesignerInstanceManager, "MarkupProvider");
+
+        Assert.AreEqual("IProtocolHandler", protocolHandler.PropertyType.Name, $"Unexpected type of {_DesignerInstanceManager}.ProtocolHandler.");
+        Assert.IsTrue(protocolHandler.GetMethod is { IsStatic: false } getProtocolHandler && IsVisibleToDerivedClasses(getProtocolHandler), $"{_DesignerInstanceManager}.ProtocolHandler needs a getter derived classes can call.");
+        Assert.AreEqual("ISurfaceProcessMarkupProvider", markupProvider.PropertyType.Name, $"Unexpected type of {_DesignerInstanceManager}.MarkupProvider.");
+        Assert.IsTrue(markupProvider.GetMethod is { IsStatic: false } getMarkupProvider && IsVisibleToDerivedClasses(getMarkupProvider), $"{_DesignerInstanceManager}.MarkupProvider needs a getter derived classes can call.");
+    }
+
+    [TestMethod]
+    public void MarkupProviderListsTheDocumentsItKnows()
+    {
+        // Their text is scanned for conditional namespaces before a document is sent to the surface.
+        PropertyDefinition registered = RequireProperty(_SurfaceProcessMarkupProviderContract, "RegisteredDocuments");
+        PropertyDefinition application = RequireProperty(_SurfaceProcessMarkupProviderContract, "AppXaml");
+        PropertyDefinition document = RequireProperty(_SurfaceProcessDocument, "Document");
+
+        StringAssert.StartsWith(registered.PropertyType.Name, "IEnumerable", $"Unexpected type of {_SurfaceProcessMarkupProviderContract}.RegisteredDocuments.");
+        Assert.AreEqual("ISurfaceProcessDocument", application.PropertyType.Name, $"Unexpected type of {_SurfaceProcessMarkupProviderContract}.AppXaml.");
+        Assert.AreEqual("IMarkupDocument", document.PropertyType.Name, $"Unexpected type of {_SurfaceProcessDocument}.Document.");
+        Assert.IsTrue(
+            RequireType(_MarkupDocument).Interfaces.Any(implemented => implemented.InterfaceType.Name == "IDocumentRoot"),
+            $"{_MarkupDocument} must be a document root.");
     }
 
     private static TypeDefinition RequireType(string fullName)

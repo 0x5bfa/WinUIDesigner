@@ -63,6 +63,9 @@ internal sealed partial class SurfaceService : IDisposable
         _registrationIds.Add(protocolHandler.RegisterMessageObserver<GoToStateRequest, ResponseWithError>((int)DesignerMessageId.GoToState, HandleGoToState));
         _registrationIds.Add(protocolHandler.RegisterMessageObserver<StoryboardRequest, ResponseWithError>((int)DesignerMessageId.Storyboard, HandleStoryboardAction));
 
+        // A message of this extension: the Visual Studio side asks which conditional XAML namespaces apply.
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<EvaluateXamlConditionsRequest, EvaluateXamlConditionsResponse>((int)DesignerMessageId.EvaluateXamlConditions, HandleEvaluateXamlConditionsAsync));
+
         _diagnosticsPropertySource.StartInitialization();
     }
 

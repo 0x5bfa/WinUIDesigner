@@ -437,7 +437,9 @@ internal static class XamlNamespaceRewriter
 
                 Report($"The root element {Describe(element, elementPrefix)} is under a dropped prefix; it is kept because a document needs its root.");
             }
-            else if (disposition == XamlPrefixDisposition.Keep && elementBinding is not null)
+
+            // A root that stays under a prefix whose declaration is re-pointed moves to the bare namespace with it.
+            if (elementBinding is not null && (disposition == XamlPrefixDisposition.Keep || (isRoot && IsRepointed(elementBinding))))
             {
                 XName normalized = XNamespace.Get(elementBinding.NormalizedNamespace) + element.Name.LocalName;
                 if (normalized != element.Name)
@@ -534,7 +536,7 @@ internal static class XamlNamespaceRewriter
                     {
                         // Two attributes now set the same member. The XAML reader applies
                         // attributes in document order, so the later one wins.
-                        Report($"Attribute {replacement.Name.LocalName} of {Describe(element, elementPrefix)} is set twice; the later value is used.");
+                        Warn($"Attribute {replacement.Name.LocalName} of {Describe(element, elementPrefix)} is set twice; the later value is used.");
                         rewritten.RemoveAt(index);
                         _droppedAttributes++;
                         break;
@@ -609,7 +611,9 @@ internal static class XamlNamespaceRewriter
 
             // A plain property belongs to its element. An attached property is looked up by its owner type:
             // without a prefix that is the default namespace, so the prefix can only go when both agree.
-            if (localName.IndexOf('.') < 0 || target == GetDefaultNamespace())
+            // Where no default namespace is declared at all the prefix stays in any case: the XAML reader
+            // ends the process on an attribute without a prefix there.
+            if (_scope.ContainsKey(string.Empty) && (localName.IndexOf('.') < 0 || target == GetDefaultNamespace()))
             {
                 return XName.Get(localName);
             }
@@ -624,16 +628,32 @@ internal static class XamlNamespaceRewriter
                 return string.Empty;
             }
 
-            return Classify(binding) == XamlPrefixDisposition.Keep ? binding.NormalizedNamespace : binding.Uri.Original;
+            return IsRepointed(binding) ? binding.NormalizedNamespace : binding.Uri.Original;
         }
 
         /// <summary>
-        /// Points a kept declaration at its bare namespace instead of removing it: the prefix can still be
+        /// Returns whether the declaration of a prefix ends up bound to its bare namespace.
+        /// </summary>
+        /// <remarks>
+        /// That is the case for a kept prefix, and for a dropped one whose namespace carries a condition.
+        /// The XAML reader interprets the condition of every declaration it sees, whether the prefix is used
+        /// or not, and ends the process on some conditions it cannot interpret. A condition that was decided
+        /// here therefore never reaches the reader.
+        /// </remarks>
+        private bool IsRepointed(Binding binding)
+        {
+            XamlPrefixDisposition disposition = Classify(binding);
+            return disposition == XamlPrefixDisposition.Keep
+                || (disposition == XamlPrefixDisposition.Drop && binding.Uri.IsConditional);
+        }
+
+        /// <summary>
+        /// Points a declaration at its bare namespace instead of removing it: the prefix can still be
         /// referenced from attribute values such as <c>TargetType="c:Button"</c>.
         /// </summary>
         private void Repoint(Binding binding)
         {
-            if (Classify(binding) != XamlPrefixDisposition.Keep)
+            if (!IsRepointed(binding))
             {
                 return;
             }
@@ -784,6 +804,22 @@ internal static class XamlNamespaceRewriter
             try
             {
                 _options.Report?.Invoke(message);
+            }
+            catch (Exception)
+            {
+                // A diagnostics receiver must not interfere with the rewrite.
+            }
+        }
+
+        /// <summary>
+        /// Reports markup that is most likely a mistake of its author.
+        /// </summary>
+        private void Warn(string message)
+        {
+            _diagnostics.Add(message);
+            try
+            {
+                (_options.ReportWarning ?? _options.Report)?.Invoke(message);
             }
             catch (Exception)
             {

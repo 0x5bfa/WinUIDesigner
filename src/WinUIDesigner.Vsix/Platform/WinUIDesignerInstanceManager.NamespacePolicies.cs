@@ -28,6 +28,7 @@ internal sealed partial class WinUIDesignerInstanceManager
         // A property written under a dropped prefix does not exist in the previewed document.
         if (_memberDispositions.GetPropertyDisposition(parentNode, property) == XamlPrefixDisposition.Drop)
         {
+            ReportValueLostToDroppedProperty(parentNode, property);
             shouldLogError = false;
             return true;
         }

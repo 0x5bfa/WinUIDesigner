@@ -219,7 +219,11 @@ internal sealed class XamlMemberDispositionService
         }
     }
 
-    private XamlPrefixDisposition Classify(XamlSourcePrefix source)
+    /// <summary>
+    /// Returns the verdict for members written under <paramref name="source"/>. A prefix that is unknown
+    /// or not bound to a namespace yields <see cref="XamlPrefixDisposition.Leave"/>.
+    /// </summary>
+    public XamlPrefixDisposition Classify(XamlSourcePrefix source)
     {
         if (!source.IsKnown || source.Namespace is null)
         {

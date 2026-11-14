@@ -48,6 +48,12 @@ internal sealed class XamlNamespaceRewriteOptions
     public Action<string>? Report { get; set; }
 
     /// <summary>
+    /// Gets or sets the receiver of messages about markup that is most likely a mistake of its author, such as
+    /// one member that two attributes set. Without one, these messages go to <see cref="Report"/>.
+    /// </summary>
+    public Action<string>? ReportWarning { get; set; }
+
+    /// <summary>
     /// Gets or sets a classification that takes precedence over the namespace policies. It receives the prefix,
     /// its parsed namespace and whether the prefix is ignorable; <see langword="null"/> defers to the policies.
     /// Unit tests use it to exercise the rewrite mechanics independently of the policies.

@@ -10,6 +10,15 @@
 		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ToolboxItemData.cs" Link="ToolboxItemData.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ProvideStaticXamlToolboxItemsAttribute.cs" Link="ProvideStaticXamlToolboxItemsAttribute.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ProvideStaticWinUIToolboxItemsAttribute.cs" Link="ProvideStaticWinUIToolboxItemsAttribute.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/Platform/XamlConditionAnswers.cs" Link="XamlConditionAnswers.cs" Visible="false" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- The condition code is shared by both designer processes, so its tests run on both runtimes. -->
+		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionTests.cs" Link="Shared/XamlConditionTests.cs" Visible="false" />
+		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionServiceTests.cs" Link="Shared/XamlConditionServiceTests.cs" Visible="false" />
+		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionExchangeTests.cs" Link="Shared/XamlConditionExchangeTests.cs" Visible="false" />
+		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionProtocolTests.cs" Link="Shared/XamlConditionProtocolTests.cs" Visible="false" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -45,6 +54,9 @@
 		</Reference>
 		<Reference Include="Microsoft.VisualStudio.DesignTools.XamlDesignerHost">
 			<HintPath>$(VsInstallRoot)/Common7/IDE/PrivateAssemblies/Microsoft.VisualStudio.DesignTools.XamlDesignerHost.dll</HintPath>
+		</Reference>
+		<Reference Include="Microsoft.VisualStudio.DesignTools.RuntimeHostBase">
+			<HintPath>$(VsInstallRoot)/Common7/IDE/PrivateAssemblies/Microsoft.VisualStudio.DesignTools.RuntimeHostBase.dll</HintPath>
 		</Reference>
 	</ItemGroup>
 

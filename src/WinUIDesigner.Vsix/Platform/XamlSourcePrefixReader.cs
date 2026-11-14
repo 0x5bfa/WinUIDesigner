@@ -2,6 +2,7 @@
 // Licensed under MIT License.
 
 using System;
+using System.Collections.Generic;
 using Microsoft.VisualStudio.DesignTools.Markup;
 using Microsoft.VisualStudio.DesignTools.Markup.DocumentModel;
 using Microsoft.VisualStudio.DesignTools.Markup.Metadata;
@@ -84,6 +85,54 @@ internal readonly struct XamlSourcePrefix
 }
 
 /// <summary>
+/// An attribute as it is written in the XAML source text, together with the other attributes of its element.
+/// </summary>
+internal readonly struct XamlSourceAttribute
+{
+    private readonly IReadOnlyList<XamlAttributeName>? _elementAttributes;
+    private readonly XmlElementReference? _owner;
+
+    public XamlSourceAttribute(XamlAttributeName name, IReadOnlyList<XamlAttributeName> elementAttributes, XmlElementReference owner)
+    {
+        Name = name;
+        _elementAttributes = elementAttributes;
+        _owner = owner;
+        IsKnown = true;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the source text of the attribute was read.
+    /// </summary>
+    public bool IsKnown { get; }
+
+    /// <summary>
+    /// Gets the name the attribute is written with.
+    /// </summary>
+    public XamlAttributeName Name { get; }
+
+    /// <summary>
+    /// Gets the names of all attributes in the start tag of the element, this one included, in the order
+    /// they are written. The document model does not have them all: it keeps one value per property.
+    /// </summary>
+    public IReadOnlyList<XamlAttributeName> ElementAttributes => _elementAttributes ?? Array.Empty<XamlAttributeName>();
+
+    /// <summary>
+    /// Returns what <paramref name="prefix"/> is bound to where the attribute is written.
+    /// </summary>
+    public XamlSourcePrefix ResolvePrefix(string prefix)
+    {
+        try
+        {
+            return _owner is null ? XamlSourcePrefix.None : XamlSourcePrefixReader.Resolve(prefix, _owner);
+        }
+        catch (Exception)
+        {
+            return XamlSourcePrefix.None;
+        }
+    }
+}
+
+/// <summary>
 /// Reads the prefix a document node was written with from the XAML source text.
 /// </summary>
 /// <remarks>
@@ -96,6 +145,9 @@ internal static class XamlSourcePrefixReader
 {
     // A qualified name is short; the limit bounds what is read for a start tag of any length.
     private const int _MaxNameLength = 512;
+
+    // Bounds what is read to list the attributes of one element.
+    private const int _MaxStartTagLength = 64 * 1024;
 
     /// <summary>
     /// Returns the prefix the element of <paramref name="node"/> was written with.
@@ -143,6 +195,36 @@ internal static class XamlSourcePrefixReader
         }
     }
 
+    /// <summary>
+    /// Returns the attribute <paramref name="property"/> was written as on <paramref name="parentNode"/>,
+    /// with the names of all attributes of that element.
+    /// </summary>
+    /// <returns>
+    /// The attribute; <see cref="XamlSourceAttribute.IsKnown"/> is <see langword="false"/> when the property
+    /// was not written as an attribute or its text cannot be read for any reason.
+    /// </returns>
+    public static XamlSourceAttribute ReadAttribute(DocumentCompositeNode? parentNode, IProperty? property)
+    {
+        try
+        {
+            if (parentNode is null
+                || property is null
+                || parentNode.GetContainerContext(property) is not XmlAttributeReference attribute
+                || attribute.Parent is not XmlElementReference owner
+                || !XamlStartTagReader.TryReadAttributeName(ReadText(attribute, attribute.TextRange, _MaxNameLength), out XamlAttributeName name))
+            {
+                return default;
+            }
+
+            string? startTag = ReadText(owner, owner.StartTagRange ?? owner.TextRange, _MaxStartTagLength);
+            return new XamlSourceAttribute(name, XamlStartTagReader.ReadAttributeNames(startTag), owner);
+        }
+        catch (Exception)
+        {
+            return default;
+        }
+    }
+
     private static XamlSourcePrefix ReadElementPrefix(XmlElementReference element)
     {
         // An element with content tracks its start tag separately; a self-closing element is its own start tag.
@@ -169,14 +251,14 @@ internal static class XamlSourcePrefixReader
             : Resolve(prefix, owner);
     }
 
-    private static XamlSourcePrefix Resolve(string prefix, XmlElementReference scope)
+    internal static XamlSourcePrefix Resolve(string prefix, XmlElementReference scope)
     {
         XmlNamespace? xmlNamespace = scope.GetXmlNamespace(XmlnsPrefix.ToPrefix(prefix));
         bool isIgnorable = xmlNamespace is not null && scope.IsIgnorable(xmlNamespace);
         return new XamlSourcePrefix(prefix, xmlNamespace, isIgnorable, scope);
     }
 
-    private static string? ReadText(XamlSourceContext context, ITextRange? range)
+    private static string? ReadText(XamlSourceContext context, ITextRange? range, int maxLength = _MaxNameLength)
     {
         IReadableSelectableTextBuffer? buffer = context.TextBuffer;
         if (buffer is null || range is null)
@@ -190,7 +272,7 @@ internal static class XamlSourcePrefixReader
             return null;
         }
 
-        int length = Math.Min(Math.Min(range.Length, _MaxNameLength), buffer.Length - offset);
+        int length = Math.Min(Math.Min(range.Length, maxLength), buffer.Length - offset);
         return length > 0 ? buffer.GetText(offset, length) : null;
     }
 }

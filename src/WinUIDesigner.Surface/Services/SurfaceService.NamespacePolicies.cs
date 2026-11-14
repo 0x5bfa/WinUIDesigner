@@ -83,6 +83,7 @@ internal sealed partial class SurfaceService
         {
             SourceXaml = xaml,
             Report = message => WinUIDesignerLogger.LogTrace("Surface", $"Namespace policies ({description}): {message}"),
+            ReportWarning = message => WinUIDesignerLogger.LogWarning("Surface", $"Namespace policies ({description}): {message}"),
         };
 
         // Each policy configures itself in its own file. The platform decides first, then the condition.
