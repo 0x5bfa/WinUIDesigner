@@ -36,7 +36,7 @@ internal sealed partial class WinUIDesignerInstanceManager(
 
         var request = new CreateSurfaceRequestInfo()
         {
-            Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions),
+            Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions || PlatformPrefixesRequireConstructionActions(targetDocument)),
         };
 
         if (MarkupProvider is WinUISurfaceProcessMarkupProvider provider)
@@ -57,13 +57,13 @@ internal sealed partial class WinUIDesignerInstanceManager(
             }
             else if (appXaml is not null && appXaml.ConstructionState <= ConstructionState.Prepared)
             {
-                request.Application = MakeCreateDocumentInfo(appXaml, provider.IsAppXamlEvicted);
+                request.Application = MakeCreateDocumentInfo(appXaml, provider.IsAppXamlEvicted || PlatformPrefixesRequireConstructionActions(appXaml));
             }
 
             if (provider.DesignTimeResources is { } resources
                 && resources.ConstructionState == ConstructionState.Prepared)
             {
-                request.DesignTimeResources = MakeCreateDocumentInfo(resources);
+                request.DesignTimeResources = MakeCreateDocumentInfo(resources, PlatformPrefixesRequireConstructionActions(resources));
             }
         }
 

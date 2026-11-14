@@ -24,6 +24,14 @@ public sealed class VsDesignerApiShapeTests
     private const string _XmlElementReference = "Microsoft.VisualStudio.DesignTools.Markup.Xaml.XmlElementReference";
     private const string _XmlNamespaceResolver = "Microsoft.VisualStudio.DesignTools.Markup.IXmlNamespaceResolver";
     private const string _CreateSurfaceRequestInfo = "Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM.CreateSurfaceRequestInfo";
+    private const string _FallbackTypeUtility = "Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.FallbackTypeUtility";
+    private const string _FallbackTypeInfo = "Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.FallbackTypeInfo";
+    private const string _SurfaceProcessDocument = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.SurfaceProcessDocument";
+    private const string _SurfaceProcessInfo = "Microsoft.VisualStudio.DesignTools.DesignerContract.SurfaceProcessInfo";
+    private const string _HostShadowCacheContent = "Microsoft.VisualStudio.DesignTools.DesignerContract.IHostShadowCacheContent";
+    private const string _XamlResult = "Microsoft.VisualStudio.DesignTools.Markup.XmlModify.XamlResult";
+    private const string _ConstructionState = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.ConstructionState";
+    private const string _DocumentContext = "Microsoft.VisualStudio.DesignTools.Markup.DocumentModel.IDocumentContext";
 
     private static readonly Lazy<DesignerAssemblies> _Assemblies = new(DesignerAssemblies.Load);
 
@@ -121,6 +129,104 @@ public sealed class VsDesignerApiShapeTests
 
         Assert.IsTrue(method.IsPublic && method.IsStatic, $"Expected a public static method: {Describe(method)}");
         Assert.IsTrue(RequireType(_XamlCleaner).IsPublic, $"{_XamlCleaner} must be public.");
+    }
+
+    [TestMethod]
+    public void FallbackTypeUtilityTellsWhichTypesTheCleanerCannotResolve()
+    {
+        MethodDefinition method = RequireMethod(_FallbackTypeUtility, "DoesTypeAlwaysNeedFallback", "IType");
+
+        Assert.IsTrue(method.IsPublic && method.IsStatic, $"Expected a public static method: {Describe(method)}");
+        Assert.AreEqual("Boolean", method.ReturnType.Name, $"Unexpected return type: {Describe(method)}");
+    }
+
+    [TestMethod]
+    public void FallbackTypeInfoHasAValueForNoFallback()
+    {
+        PropertyDefinition property = RequireProperty(_FallbackTypeInfo, "Invalid");
+
+        Assert.IsTrue(property.GetMethod is { IsPublic: true, IsStatic: true }, $"{_FallbackTypeInfo}.Invalid needs a public static getter.");
+        Assert.AreEqual("FallbackTypeInfo", property.PropertyType.Name, $"Unexpected type of {_FallbackTypeInfo}.Invalid.");
+        Assert.IsTrue(RequireType(_FallbackTypeInfo).IsValueType, $"{_FallbackTypeInfo} must be a value type.");
+    }
+
+    [TestMethod]
+    public void MarkupProviderLetsDerivedClassesFindTheShadowCacheFile()
+    {
+        MethodDefinition method = RequireMethod(_SurfaceProcessMarkupProvider, "GetShadowCachePath", "SurfaceProcessDocument");
+
+        Assert.IsTrue(IsVisibleToDerivedClasses(method), $"Expected a protected or public method: {Describe(method)}");
+        Assert.IsFalse(method.IsStatic, $"Expected an instance method: {Describe(method)}");
+        Assert.AreEqual("String", method.ReturnType.Name, $"Unexpected return type: {Describe(method)}");
+    }
+
+    [TestMethod]
+    public void MarkupProviderLetsDerivedClassesReachTheShadowCache()
+    {
+        PropertyDefinition surfaceInfo = RequireProperty(_SurfaceProcessMarkupProvider, "SurfaceInfo");
+        Assert.IsTrue(
+            surfaceInfo.GetMethod is { IsStatic: false } getter && IsVisibleToDerivedClasses(getter),
+            $"{_SurfaceProcessMarkupProvider}.SurfaceInfo needs a getter that derived classes can call.");
+        Assert.AreEqual("SurfaceProcessInfo", surfaceInfo.PropertyType.Name, $"Unexpected type of {_SurfaceProcessMarkupProvider}.SurfaceInfo.");
+
+        PropertyDefinition shadowCache = RequireProperty(_SurfaceProcessInfo, "ShadowCacheContent");
+        Assert.IsTrue(shadowCache.GetMethod is { IsPublic: true, IsStatic: false }, $"{_SurfaceProcessInfo}.ShadowCacheContent needs a public instance getter.");
+        Assert.AreEqual("IHostShadowCacheContent", shadowCache.PropertyType.Name, $"Unexpected type of {_SurfaceProcessInfo}.ShadowCacheContent.");
+    }
+
+    [TestMethod]
+    public void ShadowCacheWritesAndLocatesTextFiles()
+    {
+        MethodDefinition write = RequireMethod(_HostShadowCacheContent, "CacheFileFromText", "String", "String");
+        Assert.IsTrue(write.IsPublic && !write.IsStatic, $"Expected a public instance method: {Describe(write)}");
+
+        MethodDefinition locate = RequireMethod(_HostShadowCacheContent, "GetCachedPath", "String");
+        Assert.IsTrue(locate.IsPublic && !locate.IsStatic, $"Expected a public instance method: {Describe(locate)}");
+        Assert.AreEqual("String", locate.ReturnType.Name, $"Unexpected return type: {Describe(locate)}");
+    }
+
+    [TestMethod]
+    public void CleaningResultExposesItsXamlAndItsFailure()
+    {
+        PropertyDefinition xaml = RequireProperty(_XamlResult, "Xaml");
+        Assert.IsTrue(xaml.GetMethod is { IsPublic: true, IsStatic: false }, $"{_XamlResult}.Xaml needs a public instance getter.");
+        Assert.AreEqual("String", xaml.PropertyType.Name, $"Unexpected type of {_XamlResult}.Xaml.");
+
+        PropertyDefinition exception = RequireProperty(_XamlResult, "Exception");
+        Assert.IsTrue(exception.GetMethod is { IsPublic: true, IsStatic: false }, $"{_XamlResult}.Exception needs a public instance getter.");
+        Assert.AreEqual("Exception", exception.PropertyType.Name, $"Unexpected type of {_XamlResult}.Exception.");
+    }
+
+    [TestMethod]
+    public void SurfaceProcessDocumentExposesItsMarkupDocumentAndItsState()
+    {
+        TypeDefinition type = RequireType(_SurfaceProcessDocument);
+        Assert.IsTrue(type.IsPublic, $"{type.FullName} must be public.");
+
+        PropertyDefinition document = RequireProperty(_SurfaceProcessDocument, "Document");
+        Assert.IsTrue(document.GetMethod is { IsPublic: true, IsStatic: false }, $"{_SurfaceProcessDocument}.Document needs a public instance getter.");
+        Assert.AreEqual("IMarkupDocument", document.PropertyType.Name, $"Unexpected type of {_SurfaceProcessDocument}.Document.");
+
+        PropertyDefinition state = RequireProperty(_SurfaceProcessDocument, "ConstructionState");
+        Assert.IsTrue(state.GetMethod is { IsPublic: true, IsStatic: false }, $"{_SurfaceProcessDocument}.ConstructionState needs a public instance getter.");
+        Assert.AreEqual("ConstructionState", state.PropertyType.Name, $"Unexpected type of {_SurfaceProcessDocument}.ConstructionState.");
+
+        // A document is prepared a second time only while it is prepared or about to be loaded.
+        TypeDefinition states = RequireType(_ConstructionState);
+        Assert.IsTrue(states.IsEnum, $"{states.FullName} must be an enumeration.");
+        foreach (string name in new[] { "Prepared", "Loading" })
+        {
+            Assert.IsTrue(states.Fields.Any(field => field.IsStatic && field.Name == name), $"{states.FullName} has no member {name}.");
+        }
+    }
+
+    [TestMethod]
+    public void DocumentContextNamesItsProject()
+    {
+        PropertyDefinition property = RequireProperty(_DocumentContext, "Project");
+
+        Assert.IsTrue(property.GetMethod is { IsPublic: true, IsStatic: false }, $"{_DocumentContext}.Project needs a public instance getter.");
+        Assert.AreEqual("IProject", property.PropertyType.Name, $"Unexpected type of {_DocumentContext}.Project.");
     }
 
     [TestMethod]

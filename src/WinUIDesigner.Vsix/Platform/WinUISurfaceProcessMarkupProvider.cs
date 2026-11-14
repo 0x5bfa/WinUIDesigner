@@ -6,7 +6,7 @@ using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents;
 
 namespace WinUIDesigner.Platform;
 
-internal sealed class WinUISurfaceProcessMarkupProvider : UwpSurfaceProcessMarkupProvider
+internal sealed partial class WinUISurfaceProcessMarkupProvider : UwpSurfaceProcessMarkupProvider
 {
     public ISurfaceProcessDocument? DesignTimeResources { get; private set; }
 
