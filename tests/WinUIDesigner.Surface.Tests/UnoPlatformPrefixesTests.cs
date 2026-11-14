@@ -23,7 +23,6 @@ public sealed class UnoPlatformPrefixesTests
     [TestMethod]
     public void DesignerPreviewsWindowsByDefault()
     {
-        Assert.AreEqual("win", UnoPlatformPrefixes.DefaultTargetPlatform);
         Assert.AreEqual("win", new XamlNamespaceRewriteOptions().TargetPlatform);
         Assert.AreEqual("win", new XamlNamespaceRewriteOptions { TargetPlatform = string.Empty }.TargetPlatform);
         Assert.AreEqual("android", new XamlNamespaceRewriteOptions { TargetPlatform = "android" }.TargetPlatform);

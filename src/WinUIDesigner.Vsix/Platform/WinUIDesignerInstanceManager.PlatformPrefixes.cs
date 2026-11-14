@@ -22,9 +22,10 @@ internal sealed partial class WinUIDesignerInstanceManager
     /// elements reach the surface in the prepared XAML and the namespace policies decide about them there.
     /// </summary>
     /// <remarks>
-    /// Off by default: the second cleaning has only been exercised outside a running designer. While it is
-    /// off, such a document is built from construction actions, which are generated from a document model
-    /// that leaves out the members of an ignorable namespace nothing resolves.
+    /// Off by default: loading a document this way was confirmed in Visual Studio 18.13, but editing it
+    /// afterwards and Visual Studio 17.14 have not been checked. While it is off, such a document is built
+    /// from construction actions, which are generated from a document model that leaves out the members of
+    /// an ignorable namespace nothing resolves.
     /// </remarks>
     private static readonly bool _ReprepareRawPlatformElements = IsSwitchOn(ReprepareRawPlatformElementsVariable);
 
