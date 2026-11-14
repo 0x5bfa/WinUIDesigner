@@ -14,6 +14,7 @@ using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Metadata;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.UI.PlatformPane;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Utility;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views;
+using Microsoft.VisualStudio.DesignTools.Utility.Clipboard;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.SurfaceIsolation;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.UI.PlatformPane;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views;
@@ -27,6 +28,9 @@ namespace WinUIDesigner.Platform;
 /// </summary>
 public sealed class WinUIPlatform : XamlPlatform
 {
+    // The clipboard belongs to the session, so every designer document shares one guard and one report per outage.
+    private static readonly GuardedClipboard _Clipboard = new(new OleClipboard(), ReportClipboardAvailability);
+
     private UwpDisplaySettingsProvider? _displaySettingsProvider;
     private PlatformPaneModel? _platformPaneModel;
 
@@ -112,6 +116,9 @@ public sealed class WinUIPlatform : XamlPlatform
     {
         var viewModel = new UwpSceneViewModel(DesignerContext, document);
 
+        // Visual Studio reads the clipboard to enable its Paste command and does not expect that to fail.
+        viewModel.Clipboard = _Clipboard;
+
         var view = new WinUISceneView(viewModel);
 
         WinUIDesignerLogger.LogInformation("Platform", "Minimal WinUISceneView instantiated.");
@@ -180,5 +187,17 @@ public sealed class WinUIPlatform : XamlPlatform
     protected override void RegisterNodePropertyBuilders()
     {
         base.RegisterSurfaceIsolatedDocumentNodePropertyBuilders();
+    }
+
+    private static void ReportClipboardAvailability(Exception? failure)
+    {
+        if (failure is null)
+        {
+            WinUIDesignerLogger.LogInformation("Platform", "The clipboard can be read again.");
+        }
+        else
+        {
+            WinUIDesignerLogger.LogWarning("Platform", $"The clipboard cannot be read ({failure.Message}); the designer treats it as empty until it can be read again.");
+        }
     }
 }
