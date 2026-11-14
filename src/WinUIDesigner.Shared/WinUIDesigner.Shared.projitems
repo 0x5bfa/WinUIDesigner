@@ -13,5 +13,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)Protocol\DesignerMessageId.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Diagnostics\WinUIDesignerLogger.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Diagnostics\InterpolatedStringHandlerAttribute.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DesignTime\**\*.cs" />
   </ItemGroup>
 </Project>

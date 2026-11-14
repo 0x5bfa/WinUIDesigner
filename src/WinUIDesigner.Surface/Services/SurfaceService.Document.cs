@@ -36,7 +36,7 @@ internal sealed partial class SurfaceService
     private bool _hasXamlControlsResources;
     private ElementTheme _appRequestedTheme = ElementTheme.Default;
 
-    private async Task<CreateSurfaceResponseInfo> HandleCreateSurfaceAsync(CreateSurfaceRequestInfo requestInfo)
+    private async Task<CreateSurfaceResponseInfo> HandleCreateSurfaceAsync(CreateSurfaceRequestContract requestInfo)
     {
         try
         {
@@ -63,6 +63,8 @@ internal sealed partial class SurfaceService
             {
                 throw new ArgumentException("A nonzero document ID is required.");
             }
+
+            StoreDesignTimeOptions(requestInfo);
 
             await DispatcherOperation.InvokeAsync(_dispatcherQueue, () =>
             {

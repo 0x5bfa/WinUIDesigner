@@ -36,13 +36,16 @@ internal sealed partial class SurfaceService : IDisposable
         _serializer = new LiveValueSerializer(objectIdentity);
 
         // The matching request/response types come from the Visual Studio side.
-        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestInfo, CreateSurfaceResponseInfo>((int)DesignerMessageId.CreateSurface, HandleCreateSurfaceAsync));
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CreateSurfaceRequestContract, CreateSurfaceResponseInfo>((int)DesignerMessageId.CreateSurface, HandleCreateSurfaceAsync));
         _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<CloseDocumentRequestInfo, ResponseWithError>((int)DesignerMessageId.CloseDocument, HandleCloseDocumentAsync));
         _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetPanZoomTransformRequestInfo, ResponseWithError>((int)DesignerMessageId.SetPanZoomTransform, HandleSetPanZoomTransformAsync));
         _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetArtboardColorsRequestInfo, ResponseWithError>((int)DesignerMessageId.SetArtboardColors, HandleSetArtboardColorsAsync));
         _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetDeviceSizeRequestInfo, ResponseWithError>((int)DesignerMessageId.SetDeviceSize, HandleSetDeviceSizeAsync));
         _registrationIds.Add(protocolHandler.RegisterMessageObserver<SetFreezeStateInfo>((int)DesignerMessageId.SetFreezeState, HandleSetFreezeState));
         _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<SetSurfacePositionRequestInfo, ResponseWithError>((int)DesignerMessageId.SetSurfacePosition, HandleSetSurfacePositionAsync));
+
+        // A second, reply-less CloseDocument observer drops the design-time options kept for the document.
+        _registrationIds.Add(protocolHandler.RegisterMessageObserver<CloseDocumentRequestInfo>((int)DesignerMessageId.CloseDocument, ForgetDesignTimeOptions));
 
         // Visual Studio's HitTestRequest uses System.Windows.Point/Rect even for the
         // platform-neutral wire protocol. Keep the WinUI surface independent of WPF
@@ -104,6 +107,7 @@ internal sealed partial class SurfaceService : IDisposable
         _appRequestedTheme = ElementTheme.Default;
 
         _publishedSurfaceBounds.Clear();
+        ClearDesignTimeOptions();
         _visualTreeService.Clear();
         _objectIdentity.Clear();
     }
