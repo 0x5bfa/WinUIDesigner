@@ -38,6 +38,7 @@ internal sealed partial class WinUIDesignerInstanceManager(
         {
             Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions),
         };
+        request = WinUICreateSurfaceRequestInfo.WithDesignTimeOptions(request, SurfaceProcessContext);
 
         if (MarkupProvider is WinUISurfaceProcessMarkupProvider provider)
         {
