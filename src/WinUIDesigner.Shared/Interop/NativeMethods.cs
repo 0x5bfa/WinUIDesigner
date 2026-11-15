@@ -108,4 +108,22 @@ internal static class NativeMethods
 
     [DllImport("WinUIDesigner.DiagnosticsTap.dll")]
     internal static extern int WinUIDesignerDiagnostics_SetRenderingEnabled([MarshalAs(UnmanagedType.Bool)] bool enabled);
+
+    [DllImport("WinUIDesigner.DiagnosticsTap.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    internal static extern int WinUIDesignerDiagnostics_AddChild(IntPtr owner, string collectionPropertyName, IntPtr child, uint index);
+
+    [DllImport("WinUIDesigner.DiagnosticsTap.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    internal static extern int WinUIDesignerDiagnostics_RemoveChild(IntPtr owner, string collectionPropertyName, uint index);
+
+    [DllImport("WinUIDesigner.DiagnosticsTap.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    internal static extern int WinUIDesignerDiagnostics_ClearChildren(IntPtr owner, string collectionPropertyName);
+
+    [DllImport("WinUIDesigner.DiagnosticsTap.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    internal static extern int WinUIDesignerDiagnostics_SetProperty(IntPtr instance, string propertyName, IntPtr value);
+
+    [DllImport("WinUIDesigner.DiagnosticsTap.dll")]
+    internal static extern int WinUIDesignerDiagnostics_AddDictionaryItem(IntPtr dictionary, IntPtr key, IntPtr value);
+
+    [DllImport("WinUIDesigner.DiagnosticsTap.dll")]
+    internal static extern int WinUIDesignerDiagnostics_RemoveDictionaryItem(IntPtr dictionary, IntPtr key);
 }

@@ -33,6 +33,7 @@ internal sealed partial class SurfaceService : IDisposable
         _visualTreeService = new(protocolHandler, objectIdentity);
         _resourceScopes = new ResourceScopeService(objectIdentity);
         _diagnosticsPropertySource = new DiagnosticsPropertySourceService();
+        _styleEdits = new StyleEditService(_diagnosticsPropertySource.StartInitialization);
         _serializer = new LiveValueSerializer(objectIdentity);
 
         // The matching request/response types come from the Visual Studio side.

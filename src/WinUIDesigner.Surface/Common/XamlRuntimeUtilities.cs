@@ -159,21 +159,8 @@ internal static class XamlRuntimeUtilities
 
     public static void SetPropertyValue(object target, string fullPropertyName, object? value)
     {
-        // The native UWP SetPropertyAction evaluates custom extensions before
-        // assigning their result. Keep the extension proxy intact for later edits.
-        if (value is MarkupExtension extension)
-        {
-            try
-            {
-                value = typeof(MarkupExtension).GetMethod("ProvideValue",
-                    BindingFlags.Instance | BindingFlags.NonPublic, Type.EmptyTypes)!.Invoke(extension, null);
-            }
-            catch (TargetInvocationException ex) when (ex.InnerException is not null)
-            {
-                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-                throw;
-            }
-        }
+        // Keep the extension proxy intact for later edits.
+        value = ProvideMarkupExtensionValue(value);
 
         ResolveProperty(target, fullPropertyName, out PropertyInfo? property, out DependencyProperty? dependencyProperty);
         if (dependencyProperty is not null && target is DependencyObject dependencyObject)
@@ -193,6 +180,31 @@ internal static class XamlRuntimeUtilities
 
         int propertySeparator = fullPropertyName.IndexOf(':');
         throw new MissingMemberException(target.GetType().FullName, propertySeparator < 0 ? fullPropertyName : fullPropertyName[..propertySeparator]);
+    }
+
+    /// <summary>
+    /// Returns the value a custom markup extension provides, or the value itself.
+    /// </summary>
+    /// <remarks>
+    /// The native UWP SetPropertyAction evaluates custom extensions before it assigns their result.
+    /// </remarks>
+    public static object? ProvideMarkupExtensionValue(object? value)
+    {
+        if (value is not MarkupExtension extension)
+        {
+            return value;
+        }
+
+        try
+        {
+            return typeof(MarkupExtension).GetMethod("ProvideValue",
+                BindingFlags.Instance | BindingFlags.NonPublic, Type.EmptyTypes)!.Invoke(extension, null);
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw;
+        }
     }
 
     public static void ClearPropertyValue(object target, string fullPropertyName, bool useDefaultValue, string? defaultValue, string? defaultValueType)
