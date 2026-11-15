@@ -905,6 +905,9 @@ internal sealed class ConditionalXamlSwitches : IDisposable
         private readonly Button _reset;
         private string _titleText = string.Empty;
 
+        // Set while Update writes the check box, so that only the user's switching sets an override.
+        private bool _updating;
+
         public RowView(ConditionalXamlSwitches owner, string key)
         {
             _owner = owner;
@@ -915,7 +918,11 @@ internal sealed class ConditionalXamlSwitches : IDisposable
             _title.SetResourceReference(TextBlock.ForegroundProperty, EnvironmentColors.CommandBarTextActiveBrushKey);
             CheckBox = new CheckBox { Content = _title, VerticalContentAlignment = VerticalAlignment.Top };
             CheckBox.SetResourceReference(FrameworkElement.StyleProperty, VsResourceKeys.CheckBoxStyleKey);
-            CheckBox.Click += (_, _) => _owner.Guard("switching a condition", () => _owner.SetOverride(Key, _titleText, CheckBox.IsChecked == true));
+
+            // Checked and Unchecked rather than Click: switching through UI Automation (screen readers, UI tests)
+            // toggles the check box without a click.
+            CheckBox.Checked += (_, _) => OnSwitched();
+            CheckBox.Unchecked += (_, _) => OnSwitched();
 
             _branches = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(20, 2, 0, 0) };
             _status = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(20, 1, 0, 0) };
@@ -954,7 +961,16 @@ internal sealed class ConditionalXamlSwitches : IDisposable
         {
             _titleText = row.Title;
             _title.Text = row.Title;
-            CheckBox.IsChecked = row.Value == true;
+            _updating = true;
+            try
+            {
+                CheckBox.IsChecked = row.Value == true;
+            }
+            finally
+            {
+                _updating = false;
+            }
+
             CheckBox.IsEnabled = row.IsSwitchable && canSwitch;
             _title.Opacity = CheckBox.IsEnabled ? 1.0 : 0.6;
             AutomationProperties.SetName(CheckBox, row.Title);
@@ -970,6 +986,14 @@ internal sealed class ConditionalXamlSwitches : IDisposable
             _reset.IsEnabled = canSwitch;
             AutomationProperties.SetName(_reset, "Reset " + row.Title);
             AutomationProperties.SetHelpText(_reset, "Lets this condition follow its evaluation again.");
+        }
+
+        private void OnSwitched()
+        {
+            if (!_updating)
+            {
+                _owner.Guard("switching a condition", () => _owner.SetOverride(Key, _titleText, CheckBox.IsChecked == true));
+            }
         }
     }
 }
