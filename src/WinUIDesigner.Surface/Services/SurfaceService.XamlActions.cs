@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.InstanceBuilders.Shared;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
+using WinUIDesigner.Surface.Markup;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -68,6 +69,8 @@ internal sealed partial class SurfaceService
             // Keep the wire order: later actions can refer to objects or names created
             // by earlier actions in this same transaction.
             using var documentScope = _objectIdentity.EnterDocument(documentId);
+            using var actionDocumentScope = EnterActionDocument(documentId);
+            BeginResourceDictionaryReports();
             foreach (XamlAction action in actions)
             {
                 failedAction = action;
@@ -142,6 +145,7 @@ internal sealed partial class SurfaceService
         object? root = null;
         var deferredSetterInsertions = new List<DeferredSetterInsertion>();
         var actions = XamlActionJsonSerializer.Deserialize(document.Actions ?? []);
+        using var actionDocumentScope = EnterActionDocument(document.DocumentId);
 
         for (int index = 0; index < actions.Count; index++)
         {
@@ -321,18 +325,37 @@ internal sealed partial class SurfaceService
                 XamlRuntimeUtilities.MeasureElement((ResolveObject(measure.ElementHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {measure.ElementHandle}.")));
                 break;
             case GetPropertyAction getProperty:
-                _actionObjects[getProperty.PropertyValueHandle] = XamlRuntimeUtilities.GetPropertyValue((ResolveObject(getProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getProperty.ParentHandle}.")), getProperty.FullPropertyName);
+                object valueOwner = (ResolveObject(getProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getProperty.ParentHandle}."));
+                _actionObjects[getProperty.PropertyValueHandle] = ResourceDictionarySourceUri.IsSourceProperty(getProperty.FullPropertyName)
+                    ? GetResourceDictionarySource(valueOwner)
+                    : XamlRuntimeUtilities.GetPropertyValue(valueOwner, getProperty.FullPropertyName);
                 break;
             case SetPropertyAction setProperty:
                 object propertyOwner = (ResolveObject(setProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {setProperty.ParentHandle}."));
+                if (ResourceDictionarySourceUri.IsSourceProperty(setProperty.FullPropertyName))
+                {
+                    // Visual Studio's source of a dictionary: the design-time URI of its prepared copy.
+                    SetResourceDictionarySource(propertyOwner, ResolveObject(setProperty.PropertyValueHandle));
+                    break;
+                }
+
                 XamlRuntimeUtilities.SetPropertyValue(propertyOwner, setProperty.FullPropertyName,
                     ResolveActionValue(setProperty.PropertyValueHandle, propertyOwner));
                 break;
             case ClearPropertyAction clearProperty:
-                XamlRuntimeUtilities.ClearPropertyValue((ResolveObject(clearProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearProperty.ParentHandle}.")), clearProperty.FullPropertyName, clearProperty.UseDefaultValue, clearProperty.DefaultValue, clearProperty.DefaultValueType);
+                object clearedOwner = (ResolveObject(clearProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearProperty.ParentHandle}."));
+                if (ResourceDictionarySourceUri.IsSourceProperty(clearProperty.FullPropertyName))
+                {
+                    ClearResourceDictionarySource(clearedOwner);
+                    break;
+                }
+
+                XamlRuntimeUtilities.ClearPropertyValue(clearedOwner, clearProperty.FullPropertyName, clearProperty.UseDefaultValue, clearProperty.DefaultValue, clearProperty.DefaultValueType);
                 break;
             case ClearCollectionPropertyAction clearCollection:
-                XamlRuntimeUtilities.ClearCollectionProperty((ResolveObject(clearCollection.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearCollection.ParentHandle}.")), clearCollection.FullPropertyName);
+                object collectionOwner = (ResolveObject(clearCollection.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearCollection.ParentHandle}."));
+                XamlRuntimeUtilities.ClearCollectionProperty(collectionOwner, clearCollection.FullPropertyName);
+                RestoreResourceDictionarySourceContent(collectionOwner, clearCollection.FullPropertyName);
                 break;
             case UpdateEventHandlerAction updateEvent:
                 XamlRuntimeUtilities.UpdateEventHandler((ResolveObject(updateEvent.EventOwner) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateEvent.EventOwner}.")), updateEvent.FullEventName, (ResolveObject(updateEvent.HandlerOwner) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateEvent.HandlerOwner}.")), updateEvent.HandlerOwnerType, updateEvent.OldHandler, updateEvent.NewHandler);

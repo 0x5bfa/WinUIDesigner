@@ -6,6 +6,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <ResourceDictionary Source="ms-appx:///Themes/SourceResources.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <SolidColorBrush x:Key="AppTestBrush" Color="DarkOrange" />
             <Style

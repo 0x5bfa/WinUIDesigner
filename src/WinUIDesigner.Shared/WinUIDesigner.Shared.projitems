@@ -10,7 +10,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Interop\NativeMethods.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Protocol\DesignerMessageId.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Markup\**\*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Protocol\**\*.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Diagnostics\WinUIDesignerLogger.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Diagnostics\InterpolatedStringHandlerAttribute.cs" />
   </ItemGroup>

@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Windows.Foundation;
+using WinUIDesigner.Markup;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -22,6 +23,7 @@ internal sealed partial class SurfaceService
     private const string _XamlNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
     private const string _BlendDesignNamespace = "http://schemas.microsoft.com/expression/blend/2008";
     private const string _XSurfUwpNamespace = "using:XSurfUwp";
+    private const string _XamlControlsNamespace = "using:Microsoft.UI.Xaml.Controls";
     private readonly Dictionary<int, DesignerSurface> _surfaces = [];
     private readonly SemaphoreSlim _constructionGate = new(1, 1);
     private readonly Dictionary<int, ResourceDictionary> _resourceDocuments = [];
@@ -66,6 +68,7 @@ internal sealed partial class SurfaceService
 
             await DispatcherOperation.InvokeAsync(_dispatcherQueue, () =>
             {
+                BeginResourceDictionaryReports();
                 CloseSurfaceDocument(document.DocumentId);
                 return true;
             }, _protocolHandler.CancellationToken).ConfigureAwait(false);
@@ -100,11 +103,13 @@ internal sealed partial class SurfaceService
                 if (requestInfo.Application is not null)
                 {
                     string? appXaml = TryReadPreparedXaml(requestInfo.Application) ?? requestInfo.Application.InitialXamlContent;
-                    XDocument? appDocument = string.IsNullOrWhiteSpace(appXaml) ? null : XDocument.Parse(appXaml);
+
+                    // Look at App.xaml the way it is going to be loaded: an element the namespace policies drop does not count.
+                    XDocument? appDocument = string.IsNullOrWhiteSpace(appXaml) ? null : LoadPreparedXaml(appXaml, requestInfo.Application.DocumentId);
 
                     _hasXamlControlsResources = appDocument?.Root?.DescendantsAndSelf()
                         .Any(element => element.Name.LocalName == "XamlControlsResources"
-                            && element.Name.NamespaceName == "using:Microsoft.UI.Xaml.Controls") == true;
+                            && IsXamlControlsNamespace(element.Name.NamespaceName)) == true;
 
                     string? requestedTheme = (string?)appDocument?.Root?.Attribute("RequestedTheme");
                     _appRequestedTheme = Enum.TryParse(requestedTheme, true, out ElementTheme theme)
@@ -479,7 +484,7 @@ internal sealed partial class SurfaceService
         }
     }
 
-    private async Task<(object Root, string? PreparedXaml)> BuildDocumentAsync(CreateDocumentInfo document, bool resources)
+    private async Task<(object Root, XDocument? PreparedXaml)> BuildDocumentAsync(CreateDocumentInfo document, bool resources)
     {
         Exception? parseFailure = null;
         if (!document.HasActions)
@@ -495,11 +500,13 @@ internal sealed partial class SurfaceService
                         throw new InvalidOperationException("The prepared document has no XAML.");
                     }
 
-                    string runtimeXaml = xaml;
+                    // Parse the prepared XAML once. The namespace policies, the clean-up below and the source
+                    // mapping all work on this document, so its line information keeps referring to the prepared file.
+                    XDocument preparedXaml = LoadPreparedXaml(xaml, document.DocumentId);
+                    XElement? runtimeRoot = preparedXaml.Root;
                     if (resources)
                     {
-                        XDocument resourceDocument = XDocument.Parse(runtimeXaml);
-                        XElement resourceRoot = resourceDocument.Root
+                        XElement resourceRoot = runtimeRoot
                             ?? throw new InvalidOperationException("The resource document is empty.");
                         if (resourceRoot.Name.LocalName == "Application")
                         {
@@ -514,61 +521,26 @@ internal sealed partial class SurfaceService
                                 }
                             }
 
-                            runtimeXaml = dictionary.ToString();
+                            runtimeRoot = dictionary;
                         }
                     }
 
-                    XDocument cleanedXaml = XDocument.Parse(runtimeXaml, LoadOptions.PreserveWhitespace);
-                    XNamespace x = _XamlNamespace;
-                    cleanedXaml.Root?.Attribute(x + "Class")?.Remove();
-
-                    if (cleanedXaml.Root is not null)
+                    if (runtimeRoot is not null)
                     {
-                        foreach (XElement element in cleanedXaml.Root.DescendantsAndSelf())
-                        {
-                            // The UWP cleaner can suppress project code and emit its own stand-in.
-                            // Keep that decision, but use a WinUI control instead of UwpSurface.
-                            if (element.Name.NamespaceName == "using:XSurfUwp.Fallback"
-                                && ("XSurfUwp.Fallback." + element.Name.LocalName is "XSurfUwp.Fallback.FallbackControl" or "XSurfUwp.Fallback.LayoutFaultFallbackControl"))
-                            {
-                                element.Name = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml/presentation") + "ContentControl";
-                                if (element.Attribute("Content") is null && element.Attribute("Tag") is { } originalType)
-                                {
-                                    element.SetAttributeValue("Content", originalType.Value);
-                                }
-                            }
-
-                            foreach (XAttribute attribute in new List<XAttribute>(element.Attributes()))
-                            {
-                                if (!attribute.IsNamespaceDeclaration && attribute.Name.NamespaceName == _XSurfUwpNamespace)
-                                {
-                                    if (attribute.Name.LocalName is not (
-                                        "DT.RootWidth" or "DT.DesignWidth" or "DT.RuntimeWidth" or
-                                        "DT.RootHeight" or "DT.DesignHeight" or "DT.RuntimeHeight"))
-                                    {
-                                        attribute.Remove();
-                                    }
-
-                                    continue;
-                                }
-
-                                if (attribute.IsNamespaceDeclaration && attribute.Value == _XSurfUwpNamespace)
-                                {
-                                    if (attribute.Name.LocalName == "d")
-                                    {
-                                        attribute.Value = _BlendDesignNamespace;
-                                    }
-                                }
-                            }
-                        }
+                        // First: the clean-up removes the design-time sources together with the other design-time attributes.
+                        MergeResourceDictionarySources(runtimeRoot, document);
+                        PrepareForXamlReader(runtimeRoot);
                     }
 
-                    string sanitizedXaml = cleanedXaml.Root is null
-                        ? runtimeXaml
-                        : cleanedXaml.ToString(SaveOptions.DisableFormatting);
+                    // App.xaml contributes only its resource dictionary; every other document is loaded whole.
+                    string sanitizedXaml = runtimeRoot is null
+                        ? xaml
+                        : ReferenceEquals(runtimeRoot, preparedXaml.Root)
+                            ? preparedXaml.ToString(SaveOptions.DisableFormatting)
+                            : runtimeRoot.ToString(SaveOptions.DisableFormatting);
                     object root = XamlReader.Load(sanitizedXaml);
                     _objectIdentity.Track(root);
-                    return (root, (string?)xaml);
+                    return (root, (XDocument?)preparedXaml);
                 }, _protocolHandler.CancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -595,7 +567,7 @@ internal sealed partial class SurfaceService
         {
             if (!resources)
             {
-                return (BuildDocument(actionsDocument), (string?)null);
+                return (BuildDocument(actionsDocument), (XDocument?)null);
             }
             // Isolate action-built App resources from the designer's own dictionary.
 
@@ -604,7 +576,7 @@ internal sealed partial class SurfaceService
             try
             {
                 object root = BuildDocument(actionsDocument);
-                return (root is Application app ? (object)app.Resources : root, (string?)null);
+                return (root is Application app ? (object)app.Resources : root, (XDocument?)null);
             }
             finally
             {
@@ -728,6 +700,63 @@ internal sealed partial class SurfaceService
             entry.Value.RefreshLayout();
             _visualTreeService.PublishMutationIfChanged(entry.Value.Content);
             PublishSurfaceBounds(entry.Key, entry.Value);
+        }
+    }
+
+    private static bool IsXamlControlsNamespace(string namespaceName)
+    {
+        // XamlControlsResources is usually written under its CLR namespace, but the presentation namespace
+        // contains the type as well, and either namespace can carry a condition.
+        string baseUri = XamlNamespaceUri.Parse(namespaceName).BaseUri;
+        return baseUri == _XamlControlsNamespace || baseUri == XamlNamespaceUri.PresentationNamespace;
+    }
+
+    /// <summary>
+    /// Removes from prepared XAML what Visual Studio adds for its own UWP surface and the WinUI XAML reader does not
+    /// know: <c>x:Class</c>, the design-time attributes other than the sizes, and the UWP stand-in controls.
+    /// </summary>
+    /// <param name="runtimeRoot">The element that is going to be loaded, changed in place.</param>
+    private static void PrepareForXamlReader(XElement runtimeRoot)
+    {
+        XNamespace x = _XamlNamespace;
+        runtimeRoot.Attribute(x + "Class")?.Remove();
+
+        foreach (XElement element in runtimeRoot.DescendantsAndSelf())
+        {
+            // The UWP cleaner can suppress project code and emit its own stand-in.
+            // Keep that decision, but use a WinUI control instead of UwpSurface.
+            if (element.Name.NamespaceName == "using:XSurfUwp.Fallback"
+                && ("XSurfUwp.Fallback." + element.Name.LocalName is "XSurfUwp.Fallback.FallbackControl" or "XSurfUwp.Fallback.LayoutFaultFallbackControl"))
+            {
+                VisualTreeService.RenameForRuntime(element, XNamespace.Get(XamlNamespaceUri.PresentationNamespace) + "ContentControl");
+                if (element.Attribute("Content") is null && element.Attribute("Tag") is { } originalType)
+                {
+                    element.SetAttributeValue("Content", originalType.Value);
+                }
+            }
+
+            foreach (XAttribute attribute in new List<XAttribute>(element.Attributes()))
+            {
+                if (!attribute.IsNamespaceDeclaration && attribute.Name.NamespaceName == _XSurfUwpNamespace)
+                {
+                    if (attribute.Name.LocalName is not (
+                        "DT.RootWidth" or "DT.DesignWidth" or "DT.RuntimeWidth" or
+                        "DT.RootHeight" or "DT.DesignHeight" or "DT.RuntimeHeight"))
+                    {
+                        attribute.Remove();
+                    }
+
+                    continue;
+                }
+
+                if (attribute.IsNamespaceDeclaration && attribute.Value == _XSurfUwpNamespace)
+                {
+                    if (attribute.Name.LocalName == "d")
+                    {
+                        attribute.Value = _BlendDesignNamespace;
+                    }
+                }
+            }
         }
     }
 

@@ -1,0 +1,13 @@
+<!--
+    A dictionary that App.xaml merges through ResourceDictionary.Source and that merges another dictionary the
+    same way, with a source relative to this file. The designer shows the resources of both.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ConditionalResources.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <SolidColorBrush x:Key="SourceHeadingBrush" Color="SteelBlue" />
+</ResourceDictionary>

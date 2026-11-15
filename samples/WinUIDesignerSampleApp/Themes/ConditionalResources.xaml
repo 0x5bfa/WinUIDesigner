@@ -1,0 +1,29 @@
+<!--
+    Conditional XAML in a resource dictionary, as styles copied from WinUI's generic.xaml use it.
+    ConditionalXamlPage merges the dictionary through ResourceDictionary.Source as
+    ms-appx:///Themes/ConditionalResources.xaml; Themes/SourceResources.xaml merges it as ConditionalResources.xaml.
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:contract7NotPresent="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractNotPresent(Windows.Foundation.UniversalApiContract,7)"
+    xmlns:contract7Present="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractPresent(Windows.Foundation.UniversalApiContract,7)"
+    xmlns:contract99NotPresent="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractNotPresent(Windows.Foundation.UniversalApiContract,99)"
+    xmlns:contract99Present="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractPresent(Windows.Foundation.UniversalApiContract,99)">
+
+    <!--  A property set under two complementary conditions: SeaGreen where contract 7 is present.  -->
+    <SolidColorBrush
+        x:Key="ConditionalAccentBrush"
+        contract7NotPresent:Color="Firebrick"
+        contract7Present:Color="SeaGreen" />
+
+    <!--  If/else setters: rounded corners with contract 7, and a thick border because there is no contract 99.  -->
+    <Style x:Key="ConditionalCardStyle" TargetType="Border">
+        <Setter Property="Padding" Value="12" />
+        <Setter Property="BorderBrush" Value="{StaticResource ConditionalAccentBrush}" />
+        <contract7Present:Setter Property="CornerRadius" Value="8" />
+        <contract7NotPresent:Setter Property="CornerRadius" Value="0" />
+        <contract99NotPresent:Setter Property="BorderThickness" Value="3" />
+        <contract99Present:Setter Property="BorderThickness" Value="1" />
+    </Style>
+</ResourceDictionary>
