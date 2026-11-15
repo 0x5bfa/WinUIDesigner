@@ -10,6 +10,7 @@ using System.Xml.Linq;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using WinUIDesigner.Markup;
+using WinUIDesigner.Surface.Markup;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -57,8 +58,10 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
             var markupElements = new List<XElement>();
             foreach (XElement element in preparedXaml.Root.DescendantsAndSelf())
             {
+                // A merged dictionary inserted from another file has positions in that file, not in this document.
                 if (!element.Name.LocalName.Contains('.', StringComparison.Ordinal)
-                    && !element.Ancestors().Any(parent => parent.Name.LocalName is "ControlTemplate" or "DataTemplate" or "ItemsPanelTemplate"))
+                    && !element.Ancestors().Any(parent => parent.Name.LocalName is "ControlTemplate" or "DataTemplate" or "ItemsPanelTemplate")
+                    && !ResourceDictionarySourceExpander.IsInserted(element))
                 {
                     markupElements.Add(element);
                 }

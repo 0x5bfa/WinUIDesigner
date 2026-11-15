@@ -1,7 +1,7 @@
 <!--
     Conditional XAML in a resource dictionary, as styles copied from WinUI's generic.xaml use it.
-    An application or a page merges the dictionary through ResourceDictionary.Source:
-    ms-appx:///WinUIDesignerSampleApp/Themes/ConditionalResources.xaml
+    ConditionalXamlPage merges the dictionary through ResourceDictionary.Source as
+    ms-appx:///Themes/ConditionalResources.xaml; Themes/SourceResources.xaml merges it as ConditionalResources.xaml.
 -->
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"

@@ -108,6 +108,70 @@ The surface records stable runtime identities and source information, and report
 
 Implementation: [document preparation](../src/WinUIDesigner.Vsix/Platform/WinUIDesignerInstanceManager.cs), [construction and tree notifications](../src/WinUIDesigner.Surface/Services/SurfaceService.cs), and [project type/resource resolution](../src/WinUIDesigner.Surface/Runtime/ProjectRuntimeResolver.cs).
 
+### Merged resource dictionaries
+
+A dictionary merged through `ResourceDictionary.Source` contributes its resources to the preview: in the edited document, in App.xaml and in the design-time resources, together with the dictionaries it merges in turn.
+
+```xml
+<ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="ms-appx:///Themes/ConditionalResources.xaml" />
+    <ResourceDictionary Source="ms-appx:///Some.Library/Themes/Styles.xaml" />
+</ResourceDictionary.MergedDictionaries>
+```
+
+The surface cannot follow such a source by itself. `WinUISurface.exe` is not the application's package, so `ms-appx:///` does not lead to the project's files, and compiled XAML in a PRI file is nothing the XAML reader can read. Visual Studio delivers the XAML instead, with the machinery of its UWP designer:
+
+1. When Visual Studio's XAML cleaner prepares a document, `UwpResourceDictionaryCleanerHandler` resolves every `Source` against the document, also by assembly name into a referenced project, and calls `SurfaceProcessMarkupProvider.RegisterRelatedDocument`. That registers the dictionary as a related document, cleans it like any document, and writes the prepared copy into the shadow cache, the folder the surface reads documents from. The UWP designer skips this for an unchanged dictionary when the application has a compiled App.xbf; the host of this extension has none (`WpfHostShadowCopyWorker.HasAppXbf` is false), so every dictionary is prepared.
+2. The cleaner replaces the attribute with the design-time property `DT.ResourceDictionarySource` of `using:XSurfUwp`. Its value is the design-time URI of the copy, such as `ms-appx:///Some.Library/Themes/~vs]~1234~Styles.xaml`, which names the file `Some.Library\Themes\~vs]~1234~Styles.xaml` below the shadow cache.
+3. Construction actions carry the same value: for a `Source`, `UwpDesignerResourceDictionaryBuilder` calls `DesignerInstanceBuilderUtility.SetDesignTimeResourceDictionarySource`, which prepares the copy the same way and sets the property `ResourceDictionarySource:XSurfUwp.DT`.
+
+Microsoft's UWP surface hands that value to a native function (`XSurfUwp.DT.SetResourceDictionarySource` calls `UpdateResourceDictionarySource` of `Microsoft.VisualStudio.DesignTools.UwpTap.dll`). The WinUI surface reads the prepared copy itself, applies the [namespace policies](#namespace-policies) to it, expands the sources it contains, and merges the result into the dictionary that carried the source. Visual Studio prepares every copy before it sends the document, so no message of this extension is involved.
+
+| Path | What the surface does |
+| --- | --- |
+| Prepared XAML | Before the XAML reader runs, the content of the copy is inserted as the last merged dictionary of the element that carried the source. The document and its dictionaries load in one pass, so a `StaticResource` of the document finds what the dictionaries define. |
+| Construction actions | When the property is set, the dictionary is read on its own with the XAML reader and added as the last merged dictionary of the object Visual Studio created. Clearing the property removes it again. |
+
+The last merged dictionary is looked up first, as the entries of a `Source` win over the dictionaries merged inline at run time. Each merge gets an object of its own, as at run time; a dictionary merged in several places is read and rewritten once.
+
+Inserting one document into another has to respect two rules of the WinUI reader, measured with Windows App SDK 2.5.1. It accepts `mc:Ignorable` on the root element only, so what an inserted dictionary declares ignorable is removed, as the reader would skip it. And it reads the prefix of an element name with the outermost declaration of that prefix, so a prefix of the inserted dictionary that the document binds to another namespace is renamed, in its declaration and in the attribute values that use it. This matters in practice: Visual Studio's cleaner names its own prefixes `_0`, `_1` and so on in every file, for different namespaces.
+
+What a merged dictionary sees while it loads differs between the paths:
+
+| Situation | Prepared XAML | Construction actions | WinUI at run time |
+| --- | --- | --- | --- |
+| A `StaticResource` to the application's resources | Found | Found | Found |
+| In App.xaml, a `StaticResource` to a dictionary merged earlier | Found | Found: Visual Studio attaches each object to its parent before it sets its properties (`BuildOrder.AttachThenInitialize`) | Found |
+| In a page, a `StaticResource` to a dictionary merged earlier | Found | Not found | Not found |
+
+A dictionary that Visual Studio does not find in the solution, such as one compiled into a NuGet package or a binary reference, keeps its source. The surface asks the WinUI runtime to load it, whose resource manager also looks into the PRI files staged from the project; when that succeeds the dictionary is merged with its source, otherwise it is left out. The namespace policies do not apply to such a dictionary, as to any dictionary the reader loads by itself.
+
+Elements of an inserted dictionary are not offered as the source of live elements: their line numbers belong to another file.
+
+#### When a dictionary cannot be merged
+
+Every dictionary that cannot be merged is left empty and reported once per request as a warning in the log, which names the dictionary, the document or dictionary that merges it, and the reason. The document goes on loading.
+
+| Situation | Result |
+| --- | --- |
+| The prepared copy does not exist or cannot be read | Left empty. |
+| The copy is not well-formed XML, or its root element is not a resource dictionary | Left empty. |
+| The source is not in the solution and the runtime cannot load it | Left empty. |
+| A chain of dictionaries reaches a member of the chain again, such as `A.xaml → B.xaml → A.xaml` | The repeated reference is left empty; the message lists the chain. |
+| Dictionaries are nested more than 32 levels deep | The deeper ones are left empty. |
+| The XAML reader rejects a dictionary inserted into prepared XAML | The prepared document fails to load, and the surface asks for construction actions as for any document. On that path each dictionary loads on its own, and only the one the reader rejects is reported and left empty. |
+| The XAML reader rejects a dictionary on the construction-action path | Left empty. |
+
+A dictionary left empty can still make the document fail when the document uses its resources, as at run time.
+
+#### Caching and edits
+
+The surface keeps each dictionary it read from a prepared copy, with the policies applied and its own sources expanded, for as long as the copy and every copy merged into it have the text they had; the text is compared rather than the time stamp. Whether the runtime loads a source outside the solution is remembered for the lifetime of the surface process.
+
+Visual Studio prepares a related document once while it is registered and does not prepare it again when it is edited; nothing reaches the surface. An edit of a merged dictionary therefore appears when the designer is reloaded, which starts a new surface process and prepares every document again. Reopening a page is not enough while the dictionary stays registered. Updating an open preview while its dictionary is edited is not implemented.
+
+Implementation: [source URIs](../src/WinUIDesigner.Surface/Markup/ResourceDictionarySourceUri.cs), [expansion](../src/WinUIDesigner.Surface/Markup/ResourceDictionarySourceExpander.cs), [insertion into a document](../src/WinUIDesigner.Surface/Markup/XamlFragmentGrafter.cs), [cache](../src/WinUIDesigner.Surface/Markup/PreparedResourceDictionaryCache.cs), and [surface integration](../src/WinUIDesigner.Surface/Services/SurfaceService.ResourceDictionarySources.cs). The [sample page](../samples/WinUIDesignerSampleApp/ConditionalXamlPage.xaml) merges a dictionary itself and uses one that [App.xaml](../samples/WinUIDesignerSampleApp/App.xaml) merges through [a dictionary that merges another](../samples/WinUIDesignerSampleApp/Themes/SourceResources.xaml).
+
 ### Namespace policies
 
 Some members of a document apply only under a condition: those under a conditional XAML namespace (`xmlns:c7="...?IsApiContractPresent(...)"`) and those under an Uno Platform prefix (`win:`, `android:`, `not_win:`). A namespace policy classifies the members written under one `xmlns` prefix. It can keep them as plain members of their bare namespace, drop them, or leave them as written. The platform policy decides first, then the conditional policy. The platform policy currently leaves every prefix alone; the sections below describe each policy.

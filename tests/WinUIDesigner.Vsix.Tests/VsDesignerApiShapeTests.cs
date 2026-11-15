@@ -4,6 +4,7 @@
 using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Mono.Cecil;
+using Mono.Cecil.Cil;
 
 /// <summary>
 /// Pins the shape of the members of Visual Studio's closed-source XAML designer that the extension overrides
@@ -31,6 +32,13 @@ public sealed class VsDesignerApiShapeTests
     private const string _SurfaceProcessMarkupProviderContract = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.ISurfaceProcessMarkupProvider";
     private const string _SurfaceProcessDocument = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.ISurfaceProcessDocument";
     private const string _MarkupDocument = "Microsoft.VisualStudio.DesignTools.Markup.IMarkupDocument";
+    private const string _UwpSurfaceProcessMarkupProvider = "Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents.UwpSurfaceProcessMarkupProvider";
+    private const string _UwpResourceDictionaryCleanerHandler = "Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents.XamlModify.UwpResourceDictionaryCleanerHandler";
+    private const string _UwpXamlCleanerContext = "Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents.XamlModify.UwpXamlCleanerContext";
+    private const string _UwpDesignerResourceDictionaryBuilder = "Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.SurfaceIsolation.UwpDesignerResourceDictionaryBuilder";
+    private const string _DesignerInstanceBuilderUtility = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.DesignerInstanceBuilderUtility";
+    private const string _UwpStandInInfo = "Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.SurfaceIsolation.UwpStandInInfo";
+    private const string _WpfHostShadowCopyWorker = "Microsoft.VisualStudio.DesignTools.XamlDesignerHost.Platform.ShadowCopy.WpfHostShadowCopyWorker";
 
     private static readonly Lazy<DesignerAssemblies> _Assemblies = new(DesignerAssemblies.Load);
 
@@ -291,6 +299,107 @@ public sealed class VsDesignerApiShapeTests
         Assert.IsTrue(
             RequireType(_MarkupDocument).Interfaces.Any(implemented => implemented.InterfaceType.Name == "IDocumentRoot"),
             $"{_MarkupDocument} must be a document root.");
+    }
+
+    // The surface merges a dictionary named through ResourceDictionary.Source from the copy Visual Studio prepares
+    // for it. The tests below pin what that relies on: who prepares the copy, how its URI looks, and under which
+    // name the source reaches the surface on either path.
+
+    [TestMethod]
+    public void MarkupProviderPreparesTheDictionariesADocumentMerges()
+    {
+        MethodDefinition method = RequireMethod(_SurfaceProcessMarkupProvider, "RegisterRelatedDocument", "String", "IDocumentContext", "Boolean");
+
+        Assert.IsTrue(method.IsPublic && !method.IsStatic, $"Expected a public instance method: {Describe(method)}");
+        Assert.AreEqual("SurfaceProcessDocumentResult", method.ReturnType.Name, $"Unexpected return type: {Describe(method)}");
+    }
+
+    [TestMethod]
+    public void PreparedCopyIsNamedWithTheDesignTimeMarker()
+    {
+        // "~vs]~{project item id}~{file name}": the surface reads the document id after the marker.
+        MethodDefinition method = RequireMethod(_SurfaceProcessMarkupProvider, "CreateDesignTimeFileName", "IDocumentLocator");
+
+        Assert.IsTrue(LoadsString(method, "~vs]~"), $"{Describe(method)} no longer names prepared copies with \"~vs]~\".");
+    }
+
+    [TestMethod]
+    public void UwpMarkupProviderWritesAPreparedCopyWhereItsUriPoints()
+    {
+        // ms-appx:///Folder/~vs]~id~File.xaml is written to Folder\~vs]~id~File.xaml below the shadow cache.
+        MethodDefinition uri = RequireMethod(_UwpSurfaceProcessMarkupProvider, "CreateDesignTimeSurfaceUri", "IMarkupDocument");
+        MethodDefinition path = RequireMethod(_UwpSurfaceProcessMarkupProvider, "GetShadowCachePath", "SurfaceProcessDocument");
+
+        Assert.AreEqual(_UwpSurfaceProcessMarkupProvider, uri.DeclaringType.FullName, $"The UWP provider no longer creates the design-time URI itself: {Describe(uri)}");
+        Assert.AreEqual(_UwpSurfaceProcessMarkupProvider, path.DeclaringType.FullName, $"The UWP provider no longer chooses the path of a prepared copy itself: {Describe(path)}");
+    }
+
+    [TestMethod]
+    public void HostShadowCopyWorkerHasNoApplicationXbf()
+    {
+        // With an App.xbf, Visual Studio's cleaner keeps the runtime source of an unchanged dictionary instead of
+        // preparing a copy. The WinUI worker inherits this answer.
+        PropertyDefinition property = RequireProperty(_WpfHostShadowCopyWorker, "HasAppXbf");
+        MethodDefinition getter = property.GetMethod;
+
+        Assert.IsNotNull(getter, $"{_WpfHostShadowCopyWorker}.HasAppXbf needs a getter.");
+        Assert.IsTrue(
+            getter.HasBody && getter.Body.Instructions.Select(instruction => instruction.OpCode).SequenceEqual(new[] { OpCodes.Ldc_I4_0, OpCodes.Ret }),
+            $"{_WpfHostShadowCopyWorker}.HasAppXbf no longer returns false.");
+    }
+
+    [TestMethod]
+    public void CleanerWritesTheSourceOfADictionaryAsADesignTimeProperty()
+    {
+        MethodDefinition method = RequireMethod(_UwpResourceDictionaryCleanerHandler, "HandleAttribute", "XamlCleanerAttributeData", "IXmlCleaner");
+
+        Assert.IsTrue(LoadsString(method, "DT.ResourceDictionarySource"), $"{Describe(method)} no longer writes DT.ResourceDictionarySource.");
+        Assert.IsTrue(Calls(method, "RegisterRelatedDocument"), $"{Describe(method)} no longer prepares the dictionary it names.");
+        Assert.IsTrue(Calls(method, "get_DesignTimeSurfaceUri"), $"{Describe(method)} no longer passes the design-time URI of the prepared copy.");
+    }
+
+    [TestMethod]
+    public void CleanerPutsDesignTimePropertiesIntoTheXSurfUwpNamespace()
+    {
+        PropertyDefinition property = RequireProperty(_UwpXamlCleanerContext, "DesignTimeNamespaceUri");
+
+        Assert.IsTrue(LoadsString(property.GetMethod, "using:XSurfUwp"), $"{_UwpXamlCleanerContext}.DesignTimeNamespaceUri is no longer \"using:XSurfUwp\".");
+    }
+
+    [TestMethod]
+    public void ConstructionActionsSetTheSourceOfADictionaryThroughTheDesignTimeProperty()
+    {
+        MethodDefinition update = RequireMethod(_UwpDesignerResourceDictionaryBuilder, "UpdateProperty", "IInstanceBuilderContext", "DocumentCompositeNode", "DocumentNode", "DocumentNode", "IProperty");
+        MethodDefinition set = RequireMethod(_DesignerInstanceBuilderUtility, "SetDesignTimeResourceDictionarySource", "DesignerInstanceBuilderContext", "DocumentNode", "DocumentNode", "IProperty", "Boolean");
+        MethodDefinition validate = RequireMethod(_DesignerInstanceBuilderUtility, "TryGetAndValidateResourceDictionaryForSource", "DesignerInstanceBuilderContext", "DocumentNode", "ISurfaceProcessDocument&");
+
+        Assert.IsTrue(Calls(update, "SetDesignTimeResourceDictionarySource"), $"{Describe(update)} no longer sets the design-time source.");
+        Assert.IsTrue(Calls(set, "TryGetDesignTimeResourceDictionarySource"), $"{Describe(set)} no longer looks up the design-time source.");
+        Assert.IsTrue(Calls(validate, "RegisterRelatedDocument"), $"{Describe(validate)} no longer prepares the dictionary through the markup provider.");
+        Assert.AreEqual(
+            "DT.ResourceDictionarySource",
+            RequireType(_UwpStandInInfo).Fields.Single(field => field.Name == "ResourceDictionarySourceHandlePropertyName").Constant,
+            $"{_UwpStandInInfo}.ResourceDictionarySourceHandlePropertyName changed.");
+    }
+
+    [TestMethod]
+    public void DesignTimePropertiesAreSerializedWithTheXSurfUwpOwner()
+    {
+        // Construction actions name the property "ResourceDictionarySource:XSurfUwp.DT".
+        TypeDefinition type = RequireType(_UwpDesignerInstanceBuilderPlatform);
+        MethodDefinition[] constructors = type.Methods.Where(method => method.IsConstructor && !method.IsStatic).ToArray();
+
+        Assert.IsTrue(constructors.Any(constructor => LoadsString(constructor, "XSurfUwp.DT")), $"No constructor of {_UwpDesignerInstanceBuilderPlatform} creates the design-time builder for \"XSurfUwp.DT\".");
+    }
+
+    private static bool LoadsString(MethodDefinition method, string value)
+    {
+        return method.HasBody && method.Body.Instructions.Any(instruction => instruction.OpCode == OpCodes.Ldstr && (string)instruction.Operand == value);
+    }
+
+    private static bool Calls(MethodDefinition method, string methodName)
+    {
+        return method.HasBody && method.Body.Instructions.Any(instruction => instruction.Operand is MethodReference called && called.Name == methodName);
     }
 
     private static TypeDefinition RequireType(string fullName)

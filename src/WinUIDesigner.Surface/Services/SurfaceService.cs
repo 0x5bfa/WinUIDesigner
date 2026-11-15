@@ -105,6 +105,7 @@ internal sealed partial class SurfaceService : IDisposable
         _designTimeResourceDocumentId = null;
         _hasXamlControlsResources = false;
         _appRequestedTheme = ElementTheme.Default;
+        _resourceDictionarySources?.Cache.Clear();
 
         _publishedSurfaceBounds.Clear();
         _visualTreeService.Clear();

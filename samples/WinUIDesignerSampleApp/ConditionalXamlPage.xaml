@@ -10,15 +10,31 @@
     xmlns:legacyMode="http://schemas.microsoft.com/winfx/2006/xaml/presentation?cond:FeatureFlagCondition(LegacyMode)"
     xmlns:newExperience="http://schemas.microsoft.com/winfx/2006/xaml/presentation?cond:FeatureFlagCondition(NewExperience)">
     <Page.Resources>
-        <!--  Conditional setters: the heading is semi-bold because contract 7 is present, and not red.  -->
-        <Style x:Key="ConditionalHeadingStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="20" />
-            <contract7Present:Setter Property="FontWeight" Value="SemiBold" />
-            <contract99Present:Setter Property="Foreground" Value="Red" />
-        </Style>
+        <ResourceDictionary>
+            <!--  A dictionary merged through Source, with conditional XAML of its own.  -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Themes/ConditionalResources.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!--  Conditional setters: the heading is semi-bold because contract 7 is present, and not red.  -->
+            <Style x:Key="ConditionalHeadingStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="20" />
+                <contract7Present:Setter Property="FontWeight" Value="SemiBold" />
+                <contract99Present:Setter Property="Foreground" Value="Red" />
+            </Style>
+        </ResourceDictionary>
     </Page.Resources>
     <StackPanel Margin="24" Spacing="12">
         <TextBlock Style="{StaticResource ConditionalHeadingStyle}" Text="Conditional XAML" />
+
+        <!--
+            Resources of merged dictionaries: the card style comes from Themes/ConditionalResources.xaml, merged above;
+            its border is sea green, 3 thick and rounded because contract 7 is present and contract 99 is not.
+            The steel-blue text comes from Themes/SourceResources.xaml, which App.xaml merges.
+        -->
+        <Border Style="{StaticResource ConditionalCardStyle}">
+            <TextBlock Foreground="{StaticResource SourceHeadingBrush}" Text="Styled by dictionaries merged through ResourceDictionary.Source." />
+        </Border>
 
         <!--  Elements: the first and the last of these four are shown.  -->
         <contract7Present:TextBlock Text="Contract 7 is present." />
