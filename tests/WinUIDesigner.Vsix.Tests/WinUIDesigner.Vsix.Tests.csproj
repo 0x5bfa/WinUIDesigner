@@ -11,6 +11,8 @@
 		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ProvideStaticXamlToolboxItemsAttribute.cs" Link="ProvideStaticXamlToolboxItemsAttribute.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ProvideStaticWinUIToolboxItemsAttribute.cs" Link="ProvideStaticWinUIToolboxItemsAttribute.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Vsix/Platform/XamlConditionAnswers.cs" Link="XamlConditionAnswers.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/Platform/DesignTimeOptionsSettings.cs" Link="DesignTimeOptionsSettings.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/Platform/ConditionalXamlSwitchRow.cs" Link="ConditionalXamlSwitchRow.cs" Visible="false" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -19,6 +21,8 @@
 		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionServiceTests.cs" Link="Shared/XamlConditionServiceTests.cs" Visible="false" />
 		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionExchangeTests.cs" Link="Shared/XamlConditionExchangeTests.cs" Visible="false" />
 		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionProtocolTests.cs" Link="Shared/XamlConditionProtocolTests.cs" Visible="false" />
+		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionOverridesTests.cs" Link="Shared/XamlConditionOverridesTests.cs" Visible="false" />
+		<Compile Include="../WinUIDesigner.Surface.Tests/XamlConditionSwitchesTests.cs" Link="Shared/XamlConditionSwitchesTests.cs" Visible="false" />
 	</ItemGroup>
 
 	<ItemGroup>

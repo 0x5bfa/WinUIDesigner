@@ -8,6 +8,7 @@ using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
 using WinUIDesigner.DesignTime;
+using WinUIDesigner.Markup;
 using WinUIDesigner.Protocol;
 
 namespace WinUIDesigner.Platform;
@@ -90,7 +91,12 @@ internal sealed class WinUICreateSurfaceRequestInfo : CreateSurfaceRequestInfo
     private static string? FindTransportFailure()
     {
         const int documentId = 516;
-        string options = new DesignTimeOptions(DesignTimeTargetPlatform.AndroidSkia, 7).Serialize();
+
+        // The overrides carry arbitrary text of custom conditions, so the probe carries some as well.
+        string options = new DesignTimeOptions(
+            DesignTimeTargetPlatform.AndroidSkia,
+            7,
+            XamlConditionOverrides.Empty.With("using:Probe|Flag( é ∑ \"q\" \\ / %;=, (x) )", holds: true)).Serialize();
         var request = new WinUICreateSurfaceRequestInfo()
         {
             Document = new CreateDocumentInfo() { DocumentId = documentId },

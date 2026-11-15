@@ -66,12 +66,24 @@ internal sealed partial class WinUIDesignerInstanceManager
             AddConditions(queries, scanned, document);
         }
 
-        // The answers that arrived take effect here, before anything of this request is built.
+        // The answers that arrived, and the user's overrides, take effect here, before anything of this request is built.
         await answers.AskAsync(new List<XamlConditionQuery>(queries.Values), _ConditionAnswerTimeout, _FirstConditionAnswerTimeout).ConfigureAwait(false);
         if (queries.Count > 0)
         {
-            WinUIDesignerLogger.LogTrace("Platform", $"Conditional XAML: the documents of this request contain {queries.Count} condition(s); the surface {(answers.SurfaceAnswers ? "answers" : "has not answered yet")}.");
+            WinUIDesignerLogger.LogTrace("Platform", $"Conditional XAML: the documents of this request contain {queries.Count} condition(s); the surface {(answers.SurfaceAnswers ? "answers" : "has not answered yet")}; the user forces {answers.Overrides.Count} condition(s).");
         }
+    }
+
+    /// <summary>
+    /// Returns what a condition evaluates to without the user's overrides, as far as this pipeline knows it.
+    /// </summary>
+    /// <returns>
+    /// Whether the condition holds as written, or <see langword="null"/> while no document of this surface process
+    /// has been prepared or the surface has not answered the condition.
+    /// </returns>
+    internal bool? EvaluateConditionIgnoringOverrides(XamlConditionQuery query)
+    {
+        return Volatile.Read(ref _conditionAnswers)?.EvaluateIgnoringOverrides(query);
     }
 
     /// <summary>
@@ -146,10 +158,20 @@ internal sealed partial class WinUIDesignerInstanceManager
             ProtocolHandler.CancellationToken,
             _memberDispositions.Invalidate,
             XamlConditionAnswers.CreateLocalProbes(),
-            (message, exception) => WinUIDesignerLogger.LogWarning("Platform", message, exception));
+            (message, exception) => WinUIDesignerLogger.LogWarning("Platform", message, exception),
+            ReadConditionOverrides);
 
         _memberDispositions.EvaluateCondition = answers.Evaluate;
         return answers;
+    }
+
+    /// <summary>
+    /// Returns the conditions the user forces: the ones of the design-time options that the CreateSurface request
+    /// carries to the surface, so that both loading paths apply the same ones.
+    /// </summary>
+    private XamlConditionOverrides ReadConditionOverrides()
+    {
+        return DesignTimeTargetProvider.GetDesignTimeOptions(SurfaceProcessContext).ConditionOverrides;
     }
 
     private void AddConditions(Dictionary<string, XamlConditionQuery> queries, HashSet<IDocumentRoot> scanned, ISurfaceProcessDocument? document)

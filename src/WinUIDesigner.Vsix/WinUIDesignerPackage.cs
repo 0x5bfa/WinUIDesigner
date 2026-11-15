@@ -64,6 +64,7 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 
         var optionsPage = (WinUIDesignerOptionsPage)GetDialogPage(typeof(WinUIDesignerOptionsPage));
         WinUIDesignerLogger.ConfigureVerboseLogging(optionsPage.EnableVerboseLogging);
+        optionsPage.ApplyDesignerSettings();
 
         if (_getPlatformCreatorHook is not null)
         {

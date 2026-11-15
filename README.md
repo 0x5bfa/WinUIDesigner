@@ -11,6 +11,8 @@ Download and open a vsix file from Visual Studio Marketplace. WinUI 3 designer w
 
 The MSBuild properties `WinUIDesignerTargetPlatform` (for example `android`) and `WinUIDesignerWindowsVersion` (for example `1809`) set the Uno Platform target and the Windows version a project's XAML is previewed for; see [Design-time options](docs/winui-designer.md#design-time-options).
 
+The **Conditions** drop-down in the designer's toolbar lists the conditions of the [conditional XAML](https://learn.microsoft.com/windows/apps/develop/testing/conditional-xaml) namespaces of a document. Check or clear a condition to preview the other branch; the choice applies to every document of the project, is kept with the solution, and reloads the designer. **Reset** returns a condition to its evaluation. See [Switching conditions in the designer](docs/winui-designer.md#switching-conditions-in-the-designer); the drop-down can be turned off under Tools > Options > WinUI Designer.
+
 ## Limitations
 
 - Only C# WinUI projects are supported.
@@ -18,7 +20,7 @@ The MSBuild properties `WinUIDesignerTargetPlatform` (for example `android`) and
 - `Window` and its subclasses cannot be previewed; only `FrameworkElement` subclasses are supported.
 - Windows App SDK 2.5.1 is required.
 - A custom XAML condition (`IXamlCondition`) runs without the app's state: code that sets feature flags at startup does not run in the designer.
-- A conditional XAML namespace is evaluated once per designer surface process; a condition that changes afterwards has no effect until that process is started again.
+- A conditional XAML namespace is evaluated once per designer surface process; a condition that changes afterwards has no effect until that process is started again. Switching a condition in the Conditions drop-down starts it again.
 - Visual Studio's XAML editor reports `XLS0310 '<prefix>:<Type>' is an invalid conditional method` for a custom XAML condition. The error comes from Visual Studio's own validation, which knows only the `ApiInformation` methods; the preview is not affected.
 
 ## Structure

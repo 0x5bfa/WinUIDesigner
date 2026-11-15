@@ -10,6 +10,7 @@ using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.Project;
 using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation;
 using Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Documents;
 using WinUIDesigner.DesignTime;
+using WinUIDesigner.Markup;
 
 namespace WinUIDesigner.Platform;
 
@@ -17,7 +18,7 @@ namespace WinUIDesigner.Platform;
 // manager that prepares documents and coordinates app-level preview resources.
 // The context also owns the design-time options of its surface process, so a library
 // that shares the surface process of its application shares the options as well.
-internal sealed class WinUISurfaceProcessContext : UwpSurfaceProcessContext, IDesignTimeTargetProvider
+internal sealed class WinUISurfaceProcessContext : UwpSurfaceProcessContext, IDesignTimeTargetProvider, IXamlConditionEvaluationSource
 {
     private const string _Category = "Platform";
 
@@ -25,6 +26,9 @@ internal sealed class WinUISurfaceProcessContext : UwpSurfaceProcessContext, IDe
     private readonly Dispatcher _dispatcher;
     private DesignTimeOptions? _designTimeOptions;
     private bool _isDisposed;
+
+    // The instance manager of the current surface process; Visual Studio creates one for every process it starts.
+    private WinUIDesignerInstanceManager? _instanceManager;
 
     public WinUISurfaceProcessContext(IProjectContext project)
         : base(project)
@@ -103,6 +107,20 @@ internal sealed class WinUISurfaceProcessContext : UwpSurfaceProcessContext, IDe
         RestartAfter(ShortDelay);
     }
 
+    public bool? EvaluateIgnoringOverrides(XamlConditionQuery query)
+    {
+        try
+        {
+            return Volatile.Read(ref _instanceManager)?.EvaluateConditionIgnoringOverrides(query);
+        }
+        catch (Exception exception)
+        {
+            // Only the user interface asks; it shows the value as unknown.
+            WinUIDesignerLogger.LogTrace(_Category, $"Evaluating the condition '{query?.Condition.Text}' for the designer's user interface failed: {exception}");
+            return null;
+        }
+    }
+
 #if VS2022
     protected override DesignerInstanceManager CreateDesignerInstanceManager(
         ISurfaceProcessMarkupProvider markupProvider,
@@ -119,10 +137,12 @@ internal sealed class WinUISurfaceProcessContext : UwpSurfaceProcessContext, IDe
 #endif
     {
 #if VS2022
-        return new WinUIDesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler, telemetry);
+        var instanceManager = new WinUIDesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler, telemetry);
 #else
-        return new WinUIDesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler);
+        var instanceManager = new WinUIDesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler);
 #endif
+        Volatile.Write(ref _instanceManager, instanceManager);
+        return instanceManager;
     }
 
     protected override void Dispose(bool disposing)
@@ -132,6 +152,7 @@ internal sealed class WinUISurfaceProcessContext : UwpSurfaceProcessContext, IDe
             // A restart requested after this point would leave the base class's timer running forever.
             _isDisposed = true;
             SurfaceProcessStarted -= OnSurfaceProcessStarted;
+            Volatile.Write(ref _instanceManager, null);
         }
 
         base.Dispose(disposing);
@@ -147,7 +168,8 @@ internal sealed class WinUISurfaceProcessContext : UwpSurfaceProcessContext, IDe
             WinUIDesignerLogger.LogInformation(
                 _Category,
                 $"Design-time options of the surface for '{ProjectContext?.ProjectName}': {options} "
-                    + $"({options.TargetPlatform.DisplayName}, {WindowsVersionCatalog.Describe(options.ContractVersion)}; {source}).");
+                    + $"({options.TargetPlatform.DisplayName}, {WindowsVersionCatalog.Describe(options.ContractVersion)}, "
+                    + $"{options.ConditionOverrides.Count} conditional XAML condition(s) forced; {source}).");
 
             if (previous is not null && !previous.Equals(options))
             {

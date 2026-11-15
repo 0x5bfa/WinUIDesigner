@@ -31,6 +31,13 @@ public sealed class VsDesignerApiShapeTests
     private const string _SurfaceProcessMarkupProviderContract = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.ISurfaceProcessMarkupProvider";
     private const string _SurfaceProcessDocument = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolation.ISurfaceProcessDocument";
     private const string _MarkupDocument = "Microsoft.VisualStudio.DesignTools.Markup.IMarkupDocument";
+    private const string _SceneView = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views.SceneView";
+    private const string _UwpSceneView = "Microsoft.VisualStudio.DesignTools.UwpSurfaceDesigner.Views.UwpSceneView";
+    private const string _SceneScrollViewer = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views.SceneScrollViewer";
+    private const string _DeviceToolBar = "Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Views.Device.DeviceToolBar";
+    private const string _DocumentRoot = "Microsoft.VisualStudio.DesignTools.Markup.DocumentModel.IDocumentRoot";
+    private const string _MarkupTextBuffer = "Microsoft.VisualStudio.DesignTools.Utility.Text.IMarkupTextBuffer";
+    private const string _MarkupTextReader = "Microsoft.VisualStudio.DesignTools.Utility.Text.IMarkupTextReader";
 
     private static readonly Lazy<DesignerAssemblies> _Assemblies = new(DesignerAssemblies.Load);
 
@@ -171,6 +178,72 @@ public sealed class VsDesignerApiShapeTests
         MethodDefinition method = RequireMethod(_XamlSceneView, "CreateScrollViewer", "Artboard");
 
         AssertOverridable(method);
+    }
+
+    [TestMethod]
+    public void SceneScrollViewerExposesItsDeviceToolBar()
+    {
+        // The conditional XAML switches go into the grid of the device toolbar, the child of a Border.
+        PropertyDefinition property = RequireProperty(_SceneScrollViewer, "DeviceToolBar");
+
+        Assert.IsTrue(property.GetMethod is { IsPublic: true, IsStatic: false }, $"{_SceneScrollViewer}.DeviceToolBar needs a public instance getter.");
+        Assert.AreEqual("DeviceToolBar", property.PropertyType.Name, $"Unexpected type of {_SceneScrollViewer}.DeviceToolBar.");
+        Assert.AreEqual("System.Windows.Controls.Border", RequireType(_DeviceToolBar).BaseType?.FullName, $"{_DeviceToolBar} must derive from Border.");
+    }
+
+    [TestMethod]
+    public void SceneScrollViewerHoldsItsContentLikeAUserControl()
+    {
+        // Without a device toolbar, the switches go into a strip above the content of the scroll viewer.
+        TypeDefinition type = RequireType(_SceneScrollViewer);
+
+        Assert.AreEqual("System.Windows.Controls.UserControl", type.BaseType?.FullName, $"{_SceneScrollViewer} must derive from UserControl.");
+    }
+
+    [TestMethod]
+    public void SceneViewLetsDerivedClassesReleaseTheirState()
+    {
+        MethodDefinition method = RequireMethod(_UwpSceneView, "DisposeInternal", "Boolean");
+
+        AssertOverridable(method);
+        Assert.IsTrue(method.IsFamily || method.IsFamilyOrAssembly, $"Expected a protected method: {Describe(method)}");
+    }
+
+    [TestMethod]
+    public void SceneViewExposesItsDocumentAndProject()
+    {
+        PropertyDefinition document = RequireProperty(_SceneView, "DocumentRoot");
+        PropertyDefinition project = RequireProperty(_SceneView, "ProjectContext");
+
+        Assert.IsTrue(document.GetMethod is { IsPublic: true, IsStatic: false }, $"{_SceneView}.DocumentRoot needs a public instance getter.");
+        Assert.AreEqual("IDocumentRoot", document.PropertyType.Name, $"Unexpected type of {_SceneView}.DocumentRoot.");
+        Assert.IsTrue(project.GetMethod is { IsPublic: true, IsStatic: false }, $"{_SceneView}.ProjectContext needs a public instance getter.");
+        Assert.AreEqual("IProjectContext", project.PropertyType.Name, $"Unexpected type of {_SceneView}.ProjectContext.");
+    }
+
+    [TestMethod]
+    public void DocumentRootExposesItsText()
+    {
+        // The switches list the conditions of the document's current text and follow its edits.
+        PropertyDefinition buffer = RequireProperty(_DocumentRoot, "TextBuffer");
+        Assert.AreEqual("IMarkupTextBuffer", buffer.PropertyType.Name, $"Unexpected type of {_DocumentRoot}.TextBuffer.");
+
+        TypeDefinition bufferType = RequireType(_MarkupTextBuffer);
+        EventDefinition? textChanged = bufferType.Events.FirstOrDefault(candidate => candidate.Name == "TextChanged");
+        Assert.IsNotNull(textChanged, $"{_MarkupTextBuffer}.TextChanged was not found.");
+        Assert.AreEqual("EventHandler`1", textChanged.EventType.Name, $"Unexpected type of {_MarkupTextBuffer}.TextChanged.");
+        Assert.AreEqual(
+            "TextChangedEventArgs",
+            (textChanged.EventType as GenericInstanceType)?.GenericArguments.Single().Name,
+            $"Unexpected arguments of {_MarkupTextBuffer}.TextChanged.");
+        Assert.IsTrue(
+            bufferType.Interfaces.Any(implemented => implemented.InterfaceType.FullName == _MarkupTextReader),
+            $"{_MarkupTextBuffer} must be a {_MarkupTextReader}.");
+
+        Assert.AreEqual("Int32", RequireProperty(_MarkupTextReader, "Version").PropertyType.Name, $"Unexpected type of {_MarkupTextReader}.Version.");
+        Assert.AreEqual("Int32", RequireProperty(_MarkupTextReader, "Length").PropertyType.Name, $"Unexpected type of {_MarkupTextReader}.Length.");
+        MethodDefinition getText = RequireMethod(_MarkupTextReader, "GetText", "Int32", "Int32");
+        Assert.AreEqual("String", getText.ReturnType.Name, $"Unexpected return type: {Describe(getText)}");
     }
 
     [TestMethod]

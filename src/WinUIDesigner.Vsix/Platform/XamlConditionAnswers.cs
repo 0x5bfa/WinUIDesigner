@@ -38,6 +38,12 @@ namespace WinUIDesigner.Platform;
 /// arrives later takes effect with the next document.
 /// </para>
 /// <para>
+/// The answers the user forces (<see cref="XamlConditionOverrides"/>) come before everything else, also before
+/// the surface has answered: the surface applies the same overrides to prepared XAML, because they travel to it
+/// in the CreateSurface request. They are read in <see cref="AskAsync(IReadOnlyCollection{XamlConditionQuery}, TimeSpan, TimeSpan)"/>
+/// as well, so they cannot change while a document is being built either.
+/// </para>
+/// <para>
 /// The class does not depend on the designer: the connection to the surface and the log are passed in as
 /// delegates. Instances are safe to use from any thread.
 /// </para>
@@ -51,6 +57,7 @@ internal sealed class XamlConditionAnswers
     private readonly CancellationToken _connectionClosed;
     private readonly Action _answersChanged;
     private readonly Action<string, Exception?> _report;
+    private readonly Func<XamlConditionOverrides>? _readOverrides;
     private readonly XamlConditionService _conditions;
     private readonly ConcurrentDictionary<string, bool> _answeredKeys = new(StringComparer.Ordinal);
     private readonly object _gate = new();
@@ -67,6 +74,9 @@ internal sealed class XamlConditionAnswers
 
     private volatile bool _surfaceAnswers;
 
+    // Replaced as a whole, only between documents.
+    private volatile XamlConditionOverrides _overrides = XamlConditionOverrides.Empty;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="XamlConditionAnswers"/> class.
     /// </summary>
@@ -74,21 +84,27 @@ internal sealed class XamlConditionAnswers
     /// <param name="connectionClosed">Is canceled when the connection to the surface closes.</param>
     /// <param name="answersChanged">
     /// Called, on the thread that calls <see cref="AskAsync(IReadOnlyCollection{XamlConditionQuery}, TimeSpan, TimeSpan)"/>,
-    /// when answers took effect that change what <see cref="Evaluate"/> returns.
+    /// when answers or overrides took effect that change what <see cref="Evaluate"/> returns.
     /// </param>
     /// <param name="localProbes">What this process can tell about the system; see <see cref="CreateLocalProbes"/>.</param>
     /// <param name="report">Receives a warning and the exception behind it, if any.</param>
+    /// <param name="readOverrides">
+    /// Returns the answers the user forces, the ones the surface received with the CreateSurface request; without
+    /// it nothing is overridden. It is called between documents only.
+    /// </param>
     public XamlConditionAnswers(
         Func<EvaluateXamlConditionsRequest, Task<EvaluateXamlConditionsResponse>> askSurface,
         CancellationToken connectionClosed,
         Action answersChanged,
         XamlConditionProbeSet localProbes,
-        Action<string, Exception?> report)
+        Action<string, Exception?> report,
+        Func<XamlConditionOverrides>? readOverrides = null)
     {
         _askSurface = askSurface ?? throw new ArgumentNullException(nameof(askSurface));
         _connectionClosed = connectionClosed;
         _answersChanged = answersChanged ?? throw new ArgumentNullException(nameof(answersChanged));
         _report = report ?? throw new ArgumentNullException(nameof(report));
+        _readOverrides = readOverrides;
         _conditions = new XamlConditionService(
             localProbes ?? throw new ArgumentNullException(nameof(localProbes)),
             message => Report("Conditional XAML: " + message));
@@ -98,6 +114,11 @@ internal sealed class XamlConditionAnswers
     /// Gets a value indicating whether an answer of the surface has taken effect. Conditions are evaluated only then.
     /// </summary>
     public bool SurfaceAnswers => _surfaceAnswers;
+
+    /// <summary>
+    /// Gets the answers the user forces that are in effect: the ones read before the latest document was sent.
+    /// </summary>
+    public XamlConditionOverrides Overrides => _overrides;
 
     /// <summary>
     /// Gets a value indicating whether a request is waiting for its reply. A reply that arrived is either kept
@@ -208,6 +229,14 @@ internal sealed class XamlConditionAnswers
     {
         XamlConditionQuery query = XamlConditionQuery.Create(condition, resolveNamespace);
 
+        // The user's choice decides first, whether or not the surface has answered: the surface rewrites prepared
+        // XAML with the same overrides, which it receives with the document.
+        bool? forced = _overrides.Evaluate(query);
+        if (forced.HasValue)
+        {
+            return forced;
+        }
+
         // Malformed conditions, and custom conditions whose type cannot even be named, are decided by code
         // both processes share. Only the others are worth asking.
         XamlConditionKind kind = query.Condition.Kind;
@@ -234,6 +263,39 @@ internal sealed class XamlConditionAnswers
         }
 
         return holds;
+    }
+
+    /// <summary>
+    /// Returns what a condition evaluates to without the user's overrides, as far as this side knows it: for the
+    /// designer's user interface, which shows it next to an override. Never blocks and asks nothing.
+    /// </summary>
+    /// <returns>
+    /// Whether the condition holds as written, or <see langword="null"/> while the surface has not answered it.
+    /// </returns>
+    public bool? EvaluateIgnoringOverrides(XamlConditionQuery query)
+    {
+        if (query is null)
+        {
+            throw new ArgumentNullException(nameof(query));
+        }
+
+        if (!_surfaceAnswers)
+        {
+            return null;
+        }
+
+        // A condition only the surface can answer has no value here until its answer arrived; the operating
+        // system, which both processes share, is asked here as it is while documents are built.
+        XamlConditionKind kind = query.Condition.Kind;
+        bool onlySurfaceKnows = (kind == XamlConditionKind.Custom && query.TypeName is not null)
+            || ((kind is XamlConditionKind.Type or XamlConditionKind.Property)
+                && !query.Condition.Arguments[0].StartsWith("Windows.", StringComparison.Ordinal));
+        if (onlySurfaceKnows && !_answeredKeys.ContainsKey(query.Key))
+        {
+            return null;
+        }
+
+        return _conditions.Evaluate(query);
     }
 
     private void Enqueue(XamlConditionQuery query)
@@ -363,38 +425,42 @@ internal sealed class XamlConditionAnswers
     }
 
     /// <summary>
-    /// Puts the replies that arrived into effect. Called only between documents.
+    /// Puts the user's overrides and the replies that arrived into effect. Called only between documents.
     /// </summary>
     private void ApplyReceivedAnswers()
     {
-        List<ReceivedReply> received;
+        bool changed = ApplyOverrides();
+        bool firstAnswer = false;
+
+        List<ReceivedReply>? received = null;
         lock (_gate)
         {
-            if (_received.Count == 0)
+            if (_received.Count != 0)
             {
-                return;
+                received = new List<ReceivedReply>(_received);
+                _received.Clear();
             }
-
-            received = new List<ReceivedReply>(_received);
-            _received.Clear();
         }
 
-        bool changed = false;
-        foreach (ReceivedReply reply in received)
+        if (received is not null)
         {
-            try
+            foreach (ReceivedReply reply in received)
             {
-                XamlConditionExchange.TryApply(reply.Queries, reply.Response, _conditions, out bool replyChanged);
-                changed |= replyChanged;
+                try
+                {
+                    XamlConditionExchange.TryApply(reply.Queries, reply.Response, _conditions, out bool replyChanged);
+                    changed |= replyChanged;
+                }
+                catch (Exception ex)
+                {
+                    Report("Processing the surface's answer to the conditional XAML namespace request failed.", ex);
+                }
             }
-            catch (Exception ex)
-            {
-                Report("Processing the surface's answer to the conditional XAML namespace request failed.", ex);
-            }
+
+            firstAnswer = !_surfaceAnswers;
+            _surfaceAnswers = true;
         }
 
-        bool firstAnswer = !_surfaceAnswers;
-        _surfaceAnswers = true;
         if (changed || firstAnswer)
         {
             try
@@ -407,6 +473,38 @@ internal sealed class XamlConditionAnswers
                 Report("Discarding the verdicts reached without the surface's answers failed.", ex);
             }
         }
+    }
+
+    /// <summary>
+    /// Reads the user's overrides and puts them into effect. Called only between documents.
+    /// </summary>
+    /// <returns>Whether the overrides in effect changed.</returns>
+    private bool ApplyOverrides()
+    {
+        if (_readOverrides is null)
+        {
+            return false;
+        }
+
+        XamlConditionOverrides overrides;
+        try
+        {
+            overrides = _readOverrides() ?? XamlConditionOverrides.Empty;
+        }
+        catch (Exception ex)
+        {
+            // The overrides in effect stay; the surface received the same ones with the previous document.
+            Report("Reading the conditional XAML conditions the user forces failed; the previous ones stay in effect.", ex);
+            return false;
+        }
+
+        if (overrides.Equals(_overrides))
+        {
+            return false;
+        }
+
+        _overrides = overrides;
+        return true;
     }
 
     private TimeSpan TakeWaitTime(TimeSpan timeout, TimeSpan firstAnswerTimeout)

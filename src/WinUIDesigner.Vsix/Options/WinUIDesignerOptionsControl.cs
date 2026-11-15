@@ -13,6 +13,7 @@ internal sealed class WinUIDesignerOptionsControl : UserControl
 {
     private readonly WinUIDesignerOptionsPage _optionsPage;
     private readonly CheckBox _verboseLoggingCheckBox;
+    private readonly CheckBox _conditionalXamlSwitchesCheckBox;
     private bool _updatingControls;
 
     public WinUIDesignerOptionsControl(WinUIDesignerOptionsPage optionsPage)
@@ -22,6 +23,23 @@ internal sealed class WinUIDesignerOptionsControl : UserControl
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(12);
+
+        _conditionalXamlSwitchesCheckBox = new CheckBox
+        {
+            AutoSize = true,
+            Text = "Show conditional XAML switches",
+            AccessibleDescription = "Show the Conditions drop-down in the designer's device toolbar.",
+            Margin = new Padding(0, 0, 0, 6),
+        };
+        _conditionalXamlSwitchesCheckBox.CheckedChanged += OnConditionalXamlSwitchesChanged;
+
+        var conditionalXamlSwitchesDescription = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(560, 0),
+            Text = "The Conditions drop-down lists the conditions of the conditional XAML namespaces of a document and lets you choose whether each one holds in the preview. Turning it off hides the drop-down at once; turning it on takes effect in designers opened afterwards.",
+            Margin = new Padding(0, 0, 0, 18),
+        };
 
         _verboseLoggingCheckBox = new CheckBox
         {
@@ -68,6 +86,8 @@ internal sealed class WinUIDesignerOptionsControl : UserControl
             Padding = new Padding(0),
         };
 
+        layout.Controls.Add(_conditionalXamlSwitchesCheckBox);
+        layout.Controls.Add(conditionalXamlSwitchesDescription);
         layout.Controls.Add(_verboseLoggingCheckBox);
         layout.Controls.Add(description);
         layout.Controls.Add(logFolderLink);
@@ -82,11 +102,26 @@ internal sealed class WinUIDesignerOptionsControl : UserControl
         _updatingControls = false;
     }
 
+    internal void UpdateShowConditionalXamlSwitches(bool shown)
+    {
+        _updatingControls = true;
+        _conditionalXamlSwitchesCheckBox.Checked = shown;
+        _updatingControls = false;
+    }
+
     private void OnVerboseLoggingChanged(object? sender, EventArgs e)
     {
         if (!_updatingControls)
         {
             _optionsPage.EnableVerboseLogging = _verboseLoggingCheckBox.Checked;
+        }
+    }
+
+    private void OnConditionalXamlSwitchesChanged(object? sender, EventArgs e)
+    {
+        if (!_updatingControls)
+        {
+            _optionsPage.ShowConditionalXamlSwitches = _conditionalXamlSwitchesCheckBox.Checked;
         }
     }
 

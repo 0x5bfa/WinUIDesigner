@@ -23,16 +23,22 @@ internal sealed partial class SurfaceService
     /// <remarks>
     /// Every condition is decided here, so that no conditional namespace reaches the XAML reader: the reader
     /// ends the process, without an exception, on a condition whose type it cannot find, on an unknown method
-    /// and on several malformed conditions.
+    /// and on several malformed conditions. The answers the user forces come first; they arrive with the
+    /// design-time options of the CreateSurface request, and Visual Studio applies the same ones to the documents
+    /// it builds from construction actions.
     /// </remarks>
     private void ConfigureConditionalNamespacePolicy(XamlNamespaceRewriteOptions options)
     {
-        options.EvaluateCondition = Conditions.Evaluate;
+        options.EvaluateCondition = XamlConditionOverrides.CreateEvaluator(GetConditionOverrides(), Conditions.Evaluate);
     }
 
     /// <summary>
     /// Answers Visual Studio's question whether conditions hold, with the answers the prepared XAML is rewritten with.
     /// </summary>
+    /// <remarks>
+    /// The answers leave the user's overrides aside: Visual Studio applies the overrides itself, and it shows the
+    /// evaluated answer next to an override.
+    /// </remarks>
     private async Task<EvaluateXamlConditionsResponse> HandleEvaluateXamlConditionsAsync(EvaluateXamlConditionsRequest request)
     {
         // A request that fails must still be answered: a faulted handler is reported to Visual Studio as an

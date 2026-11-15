@@ -3,6 +3,7 @@
 
 using System;
 using System.Globalization;
+using WinUIDesigner.Markup;
 
 namespace WinUIDesigner.DesignTime;
 
@@ -13,7 +14,8 @@ namespace WinUIDesigner.DesignTime;
 /// Each of the two options is decided on its own, in this order: the user's override, the MSBuild property, the
 /// built-in default (the Windows target, the installed Windows version). An override therefore holds only the
 /// options the user changed, in the text form of <see cref="DesignTimeOptions"/> with the other field left out;
-/// an option the user did not touch keeps following the project file.
+/// an option the user did not touch keeps following the project file. The conditions the user forces exist only
+/// in the override: the project file cannot set them.
 /// </remarks>
 internal static class DesignTimeOptionsResolver
 {
@@ -39,7 +41,7 @@ internal static class DesignTimeOptionsResolver
     public static DesignTimeOptions Resolve(string? userOverride, string? targetPlatformProperty, string? windowsVersionProperty)
     {
         DesignTimeOptions defaults = ResolveDefaults(targetPlatformProperty, windowsVersionProperty);
-        if (!DesignTimeOptions.TryReadFields(userOverride, out string? targetPlatformId, out string? contractVersion))
+        if (!DesignTimeOptions.TryReadFields(userOverride, out string? targetPlatformId, out string? contractVersion, out string? conditionOverrides))
         {
             return defaults;
         }
@@ -58,7 +60,9 @@ internal static class DesignTimeOptionsResolver
             contract = version;
         }
 
-        return new DesignTimeOptions(targetPlatform, contract);
+        // An entry that cannot be read is left out; the others still apply.
+        XamlConditionOverrides.TryParse(conditionOverrides, out XamlConditionOverrides overrides);
+        return new DesignTimeOptions(targetPlatform, contract, overrides);
     }
 
     /// <summary>
@@ -81,15 +85,17 @@ internal static class DesignTimeOptionsResolver
     /// <param name="targetPlatformProperty">The value of <see cref="TargetPlatformPropertyName"/>, if set.</param>
     /// <param name="windowsVersionProperty">The value of <see cref="WindowsVersionPropertyName"/>, if set.</param>
     /// <returns>
-    /// The override to store, holding only the options that differ from what the project file asks for, or
-    /// <see langword="null"/> when none differs and a stored override should be removed.
+    /// The override to store, holding only the options that differ from what the project file asks for and the
+    /// conditions the user forces, or <see langword="null"/> when there is nothing to keep and a stored override
+    /// should be removed.
     /// </returns>
     public static string? CreateUserOverride(DesignTimeOptions options, string? targetPlatformProperty, string? windowsVersionProperty)
     {
         DesignTimeOptions defaults = ResolveDefaults(targetPlatformProperty, windowsVersionProperty);
         bool overridesTargetPlatform = !string.Equals(options.TargetPlatformId, defaults.TargetPlatformId, StringComparison.Ordinal);
         bool overridesContractVersion = options.ContractVersion != defaults.ContractVersion;
-        if (!overridesTargetPlatform && !overridesContractVersion)
+        bool overridesConditions = !options.ConditionOverrides.IsEmpty;
+        if (!overridesTargetPlatform && !overridesContractVersion && !overridesConditions)
         {
             return null;
         }
@@ -101,7 +107,10 @@ internal static class DesignTimeOptionsResolver
             contractVersion = options.ContractVersion?.ToString(CultureInfo.InvariantCulture) ?? DesignTimeOptions.InstalledWindowsContract;
         }
 
-        return DesignTimeOptions.Format(overridesTargetPlatform ? options.TargetPlatformId : null, contractVersion);
+        return DesignTimeOptions.Format(
+            overridesTargetPlatform ? options.TargetPlatformId : null,
+            contractVersion,
+            overridesConditions ? options.ConditionOverrides.Format() : null);
     }
 
     private static bool IsInstalledWindows(string? contractVersion)

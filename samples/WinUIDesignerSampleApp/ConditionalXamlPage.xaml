@@ -18,6 +18,7 @@
         </Style>
     </Page.Resources>
     <StackPanel Margin="24" Spacing="12">
+        <!--  The Conditions drop-down in the designer's toolbar forces each condition either way, to preview the other branches.  -->
         <TextBlock Style="{StaticResource ConditionalHeadingStyle}" Text="Conditional XAML" />
 
         <!--  Elements: the first and the last of these four are shown.  -->

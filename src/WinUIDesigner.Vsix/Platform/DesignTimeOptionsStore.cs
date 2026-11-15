@@ -19,12 +19,14 @@ namespace WinUIDesigner.Platform;
 /// The user's override is a project setting, which Visual Studio keeps per project in the solution's user options
 /// file. Only a string is stored there: Visual Studio deserializes all designer settings of a solution together and
 /// only accepts types it can load, so a type of this extension would not survive a session without the extension.
-/// The defaults come from the MSBuild properties named by <see cref="DesignTimeOptionsResolver"/>.
+/// The conditions the user forces are part of that string. The defaults come from the MSBuild properties named by
+/// <see cref="DesignTimeOptionsResolver"/>.
 /// </para>
 /// <para>
 /// Both are read from the application project when the project has one, the way Visual Studio scopes its own
 /// designer settings, so an application and the libraries previewed in its surface process agree. Nothing here
-/// throws: a failing call is logged and counts as "not set", which leaves the default options.
+/// throws: a failing call is logged and counts as "not set", which leaves the default options. What is read and
+/// written is decided by <see cref="DesignTimeOptionsSettings"/>; this class reaches the project on the UI thread.
 /// </para>
 /// </remarks>
 internal sealed class DesignTimeOptionsStore
@@ -49,52 +51,28 @@ internal sealed class DesignTimeOptionsStore
     /// <param name="source">Describes where the options came from, for the log.</param>
     public DesignTimeOptions Load(out string source)
     {
-        string? settingsProject = null;
-        string? userOverride = null;
-        string? targetPlatform = null;
-        string? windowsVersion = null;
+        DesignTimeOptions? options = null;
+        string? loadedSource = null;
 
         Guard("reading the project", () => ThreadHelperBase.RunOnUIThread(() =>
         {
-            IHostProject? project = FindSettingsProject();
-            if (project is null)
-            {
-                return;
-            }
-
-            settingsProject = project.ProjectName;
-            userOverride = TryRead("reading the stored override", () => project.GetProjectSetting(UserOverrideSettingName) as string);
-            targetPlatform = TryReadBuildProperty(project, DesignTimeOptionsResolver.TargetPlatformPropertyName);
-            windowsVersion = TryReadBuildProperty(project, DesignTimeOptionsResolver.WindowsVersionPropertyName);
+            options = DesignTimeOptionsSettings.Load(FindSettingsProject(), Warn, out string projectSource);
+            loadedSource = projectSource;
         }));
 
-        // A value nobody can read is ignored by the resolver; say so, because the user probably mistyped it.
-        if (!IsUnset(userOverride) && !DesignTimeOptions.TryParse(userOverride, out _))
+        if (options is null || loadedSource is null)
         {
-            WinUIDesignerLogger.LogWarning(_Category, $"The stored design-time options '{userOverride}' of project '{settingsProject}' are not understood and are ignored.");
+            // The project could not be reached at all: the defaults apply.
+            return DesignTimeOptionsSettings.Load(null, Warn, out source);
         }
 
-        if (!IsUnset(targetPlatform) && !DesignTimeTargetPlatform.TryParse(targetPlatform, out _))
-        {
-            WinUIDesignerLogger.LogWarning(_Category, $"{DesignTimeOptionsResolver.TargetPlatformPropertyName} '{targetPlatform}' of project '{settingsProject}' is not a known target platform and is ignored.");
-        }
-
-        if (!IsUnset(windowsVersion) && !WindowsVersionCatalog.TryParse(windowsVersion, out _))
-        {
-            WinUIDesignerLogger.LogWarning(_Category, $"{DesignTimeOptionsResolver.WindowsVersionPropertyName} '{windowsVersion}' of project '{settingsProject}' is not a known Windows version and is ignored.");
-        }
-
-        source = settingsProject is null
-            ? "no project to read them from"
-            : $"user override {Describe(userOverride)}, {DesignTimeOptionsResolver.TargetPlatformPropertyName} {Describe(targetPlatform)}, "
-                + $"{DesignTimeOptionsResolver.WindowsVersionPropertyName} {Describe(windowsVersion)}, read from project '{settingsProject}'";
-
-        return DesignTimeOptionsResolver.Resolve(userOverride, targetPlatform, windowsVersion);
+        source = loadedSource;
+        return options;
     }
 
     /// <summary>
     /// Stores <paramref name="options"/> as the user's choice. Only the options that differ from what the project
-    /// file asks for are stored; when none differs, a stored override is removed.
+    /// file asks for, and the conditions the user forces, are stored; when nothing is left, a stored override is removed.
     /// </summary>
     /// <returns>Whether the choice was stored.</returns>
     public bool Save(DesignTimeOptions options)
@@ -103,31 +81,20 @@ internal sealed class DesignTimeOptionsStore
 
         Guard("storing the override", () => ThreadHelperBase.RunOnUIThread(() =>
         {
-            IHostProject? project = FindSettingsProject();
+            HostProjectSettings? project = FindSettingsProject();
             if (project is null)
             {
                 WinUIDesignerLogger.LogWarning(_Category, $"The design-time options '{options}' cannot be stored: project '{_project.ProjectName}' is not available.");
                 return;
             }
 
-            string? targetPlatform = TryReadBuildProperty(project, DesignTimeOptionsResolver.TargetPlatformPropertyName);
-            string? windowsVersion = TryReadBuildProperty(project, DesignTimeOptionsResolver.WindowsVersionPropertyName);
-            string? userOverride = DesignTimeOptionsResolver.CreateUserOverride(options, targetPlatform, windowsVersion);
-
-            // A null value removes the setting. Visual Studio drops a value without telling when it has
-            // nowhere to keep it, so read the setting back.
-            project.SetProjectSetting(UserOverrideSettingName, userOverride);
-            saved = string.Equals(project.GetProjectSetting(UserOverrideSettingName) as string, userOverride, StringComparison.Ordinal);
-            if (!saved)
-            {
-                WinUIDesignerLogger.LogWarning(_Category, $"Visual Studio did not keep the design-time options '{userOverride}' for project '{project.ProjectName}'.");
-            }
+            saved = DesignTimeOptionsSettings.Save(project, options, Warn);
         }));
 
         return saved;
     }
 
-    private IHostProject? FindSettingsProject()
+    private HostProjectSettings? FindSettingsProject()
     {
         IHostProject? project = (_project as ProjectContextBase)?.HostProject;
         if (project is null || !project.IsValid)
@@ -135,12 +102,7 @@ internal sealed class DesignTimeOptionsStore
             return null;
         }
 
-        return project.FindApplicationProject() ?? project;
-    }
-
-    private static string? TryReadBuildProperty(IHostProject project, string propertyName)
-    {
-        return TryRead("reading " + propertyName, () => ReadBuildProperty(project, propertyName));
+        return new HostProjectSettings(project.FindApplicationProject() ?? project);
     }
 
     // HostProject.GetProperty answers from a cache that outlives an edit of the project file. This is the read
@@ -173,14 +135,9 @@ internal sealed class DesignTimeOptionsStore
             : null;
     }
 
-    private static bool IsUnset(string? value)
+    private static void Warn(string message, Exception? exception)
     {
-        return value is null || value.Trim().Length == 0;
-    }
-
-    private static string Describe(string? value)
-    {
-        return IsUnset(value) ? "not set" : "'" + value + "'";
+        WinUIDesignerLogger.LogWarning(_Category, message, exception);
     }
 
     private static void Guard(string action, Action call)
@@ -195,16 +152,26 @@ internal sealed class DesignTimeOptionsStore
         }
     }
 
-    private static string? TryRead(string action, Func<string?> read)
+    /// <summary>
+    /// The settings project as <see cref="DesignTimeOptionsSettings"/> sees it. Used on the UI thread only.
+    /// </summary>
+    private sealed class HostProjectSettings(IHostProject project) : IDesignTimeOptionsProject
     {
-        try
+        public string ProjectName => project.ProjectName;
+
+        public string? ReadUserOverride()
         {
-            return read();
+            return project.GetProjectSetting(UserOverrideSettingName) as string;
         }
-        catch (Exception exception)
+
+        public void WriteUserOverride(string? userOverride)
         {
-            WinUIDesignerLogger.LogWarning(_Category, $"Design-time options: {action} failed; the affected options keep their defaults.", exception);
-            return null;
+            project.SetProjectSetting(UserOverrideSettingName, userOverride);
+        }
+
+        public string? ReadBuildProperty(string propertyName)
+        {
+            return DesignTimeOptionsStore.ReadBuildProperty(project, propertyName);
         }
     }
 }
