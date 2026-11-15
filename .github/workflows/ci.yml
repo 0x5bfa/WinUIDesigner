@@ -43,7 +43,14 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: |
-          dotnet test .\tests\WinUIDesigner.Surface.Tests\WinUIDesigner.Surface.Tests.csproj --configuration Release --no-build
+          # The solution is built with Visual Studio's MSBuild, which selects net8.0 for the Surface tests
+          # (Directory.Build.props). `dotnet test` evaluates the project with the .NET SDK's MSBuild and would
+          # look for net10.0, so the test host that was built is started directly.
+          $surfaceTests = Get-ChildItem .\tests\WinUIDesigner.Surface.Tests\bin\Release -Recurse -Filter WinUIDesigner.Surface.Tests.exe | Select-Object -First 1
+          & $surfaceTests.FullName
+          # A step that runs more than one native command reports only the exit code of the last one.
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
           dotnet test .\tests\WinUIDesigner.Vsix.Tests\WinUIDesigner.Vsix.Tests.csproj --configuration Release --no-build
 
       - name: Build sample app
