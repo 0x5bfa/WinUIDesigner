@@ -106,9 +106,15 @@ public sealed class WinUIHostPlatform : WpfHostPlatform
         {
             try
             {
-                if (process.ExitCode != 0)
+                int exitCode = process.ExitCode;
+                if (SurfaceProcessExit.IsKilled(exitCode))
                 {
-                    WinUIDesignerLogger.LogError("Host", $"WinUISurface.exe exited (PID={process.Id}, ExitCode={process.ExitCode}).");
+                    // Visual Studio ends the surface it reloads or closes with Process.Kill; that is no failure.
+                    WinUIDesignerLogger.LogInformation("Host", $"WinUISurface.exe was ended (PID={process.Id}, ExitCode={exitCode}), as Visual Studio ends the surface it reloads or closes.");
+                }
+                else if (SurfaceProcessExit.IsFailure(exitCode))
+                {
+                    WinUIDesignerLogger.LogError("Host", $"WinUISurface.exe exited (PID={process.Id}, ExitCode={SurfaceProcessExit.FormatExitCode(exitCode)}).");
                 }
             }
             catch (InvalidOperationException)
