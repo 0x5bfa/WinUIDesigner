@@ -28,6 +28,9 @@ internal sealed partial class ObjectIdentityRegistry
 
     private readonly Dictionary<object, HashSet<int>> _owners = new(ReferenceEqualityComparer.Instance);
 
+    // Objects that live as long as the process, such as the application. No document owns them.
+    private readonly HashSet<object> _processObjects = new(ReferenceEqualityComparer.Instance);
+
     public IDisposable EnterDocument(int documentId)
     {
         int previous = _currentDocument;
@@ -43,7 +46,7 @@ internal sealed partial class ObjectIdentityRegistry
 
     public void Track(object value)
     {
-        if (_currentDocument == 0)
+        if (_currentDocument == 0 || _processObjects.Contains(value))
         {
             return;
         }
@@ -100,6 +103,7 @@ internal sealed partial class ObjectIdentityRegistry
 
         _documents.Clear();
         _owners.Clear();
+        _processObjects.Clear();
         _currentDocument = 0;
         // Never reuse a handle that the frontend may still have cached.
 
@@ -153,6 +157,23 @@ internal sealed partial class ObjectIdentityRegistry
         {
             _nextHandle = handle + 1;
         }
+    }
+
+    /// <summary>
+    /// Registers an object that lives as long as the surface process, such as the application,
+    /// under the handle Visual Studio uses for it.
+    /// </summary>
+    /// <remarks>
+    /// No document ever owns such an object. Every object a document touches becomes its property and is
+    /// forgotten when the document is released; for the application that meant the first closed document
+    /// took its handle away, and the construction actions of the next document could no longer find it.
+    /// </remarks>
+    public void RegisterProcessObject(long handle, object value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        _processObjects.Add(value);
+        RegisterHandle(handle, value);
     }
 
     public void RegisterSourceInfo(object value, SourceInfo info)
@@ -221,6 +242,7 @@ internal sealed partial class ObjectIdentityRegistry
         }
 
         _sourceInfo.Remove(value);
+        _processObjects.Remove(value);
 
         if (_owners.Remove(value, out var ids))
         {
