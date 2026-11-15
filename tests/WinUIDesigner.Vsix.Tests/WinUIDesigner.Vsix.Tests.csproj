@@ -10,6 +10,8 @@
 		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ToolboxItemData.cs" Link="ToolboxItemData.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ProvideStaticXamlToolboxItemsAttribute.cs" Link="ProvideStaticXamlToolboxItemsAttribute.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Vsix/Toolbox/ProvideStaticWinUIToolboxItemsAttribute.cs" Link="ProvideStaticWinUIToolboxItemsAttribute.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/Platform/WinUIPlatformSupport.cs" Link="WinUIPlatformSupport.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/DesignerHost/WinUIProjectRequirements.cs" Link="WinUIProjectRequirements.cs" Visible="false" />
 	</ItemGroup>
 
 	<ItemGroup>

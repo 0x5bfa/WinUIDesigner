@@ -6,9 +6,11 @@ using Microsoft.VisualStudio.DesignTools.DesignerHost.ShadowCopy;
 using Microsoft.VisualStudio.DesignTools.Utility;
 using Microsoft.VisualStudio.DesignTools.WpfDesignerHost;
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 
 namespace WinUIDesigner.DesignerHost;
@@ -18,12 +20,54 @@ namespace WinUIDesigner.DesignerHost;
 // hosting flow and therefore has a separate host implementation.
 public sealed class WinUIHostPlatform : WpfHostPlatform
 {
+    // Unsupported projects already written to the log; the designer pane repeats the question.
+    private static readonly ConcurrentDictionary<string, byte> _ReportedProjects = new();
+
     protected override IShadowCopyWorkerFactory ShadowCopyWorkerFactory { get; } = new WinUIShadowCopyWorkerFactory();
 
     public WinUIHostPlatform(IServiceProvider serviceProvider, PlatformIdentifier platformIdentifier)
         : base(serviceProvider, platformIdentifier)
     {
         WinUIDesignerLogger.LogInformation("Host", $"WinUIHostPlatform instantiated for '{platformIdentifier.Identifier}' (XamlRuntime={platformIdentifier.XamlRuntime}).");
+    }
+
+    // The designer pane asks this before it creates the designer and shows the summary and details in place
+    // of the design surface, so an unsupported project gets an explanation instead of an unhandled exception.
+    public override bool IsCompatibleRuntimePlatform(IHostProject hostProject, out string errorSummary, out string errorDetails)
+    {
+        if (!base.IsCompatibleRuntimePlatform(hostProject, out errorSummary, out errorDetails))
+        {
+            return false;
+        }
+
+        string? reason;
+        try
+        {
+            reason = WinUIProjectRequirements.GetUnsupportedReason(hostProject.PlatformIdentifier, hostProject.References?.Select(reference => reference.Path));
+        }
+        catch (Exception exception)
+        {
+            // Do not hide the designer because a reference could not be inspected;
+            // the shadow-copy worker factory repeats these checks before the surface starts.
+            WinUIDesignerLogger.LogWarning("Host", $"The requirements of '{hostProject.ProjectName}' could not be verified.", exception);
+
+            return true;
+        }
+
+        if (reason is null)
+        {
+            return true;
+        }
+
+        if (_ReportedProjects.TryAdd(hostProject.ProjectName + "|" + reason, 0))
+        {
+            WinUIDesignerLogger.LogWarning("Host", $"Project '{hostProject.ProjectName}' is not supported: {reason}");
+        }
+
+        errorSummary = "WinUI Designer cannot preview this project.";
+        errorDetails = reason;
+
+        return false;
     }
 
     protected override ISurfaceProcess ActivateSurface(IServiceProvider serviceProvider, Guid surfaceProcessId, string path, string tapPath, IPipeDataBridge dataBridge, bool inhibitStartupWatsons, CancellationToken cancelToken)

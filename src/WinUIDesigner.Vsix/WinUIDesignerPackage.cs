@@ -2,6 +2,7 @@
 // Licensed under MIT License.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -48,6 +49,9 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
     private static readonly ConditionalWeakTable<PlatformService, WinUIPlatformCreator> _PlatformCreators = new();
 
     private static readonly Dictionary<string, string?> _OriginalBindings = [];
+
+    // WinUI-flavored identities already reported as having no WinUI process host.
+    private static readonly ConcurrentDictionary<string, byte> _UnhostedIdentities = new();
 
     private static Hook? _getPlatformCreatorHook;
 
@@ -110,6 +114,9 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 
                 WinUIDesignerLogger.LogInformation("VSIX", $"Injected WinUI designer bindings into '{configuration.Specification}'.");
 
+                // The hook below must only claim identities that also resolve to the WinUI process host.
+                WinUIPlatformSupport.Configure(CreateHostedSpecification(configuration), HasWinUIHostBinding);
+
                 // This VS build bypasses the configured creator for this runtime, so install a narrow fallback hook.
                 _getPlatformCreatorHook ??= new Hook(method, GetPlatformCreatorHook);
                 WinUIDesignerLogger.LogInformation("VSIX", "Installed PlatformService.GetPlatformCreator fallback hook.");
@@ -146,6 +153,8 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
         _getPlatformCreatorHook?.Dispose();
         _getPlatformCreatorHook = null;
 
+        WinUIPlatformSupport.Reset();
+
         if (_modifiedConfiguration is not null)
         {
             foreach (var entry in _OriginalBindings)
@@ -169,15 +178,53 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
 
     private static IPlatformCreator? GetPlatformCreatorHook(GetPlatformCreatorDelegate original, PlatformService instance, PlatformIdentifier platformIdentifier)
     {
-        if (!string.Equals(platformIdentifier.XamlRuntime, XamlRuntimeNames.WinUI, StringComparison.Ordinal))
+        if (!WinUIPlatformSupport.IsHosted(platformIdentifier))
         {
-            // Let Visual Studio handle WPF, UWP, and any future XAML runtime.
+            // Let Visual Studio handle WPF, UWP, and any future XAML runtime. The same applies to
+            // WinUI-flavored identities without a WinUI process host: Uno.Sdk reports XamlRuntime=WinUI
+            // for every target framework, and a project context created for a non-Windows target
+            // would have no host to launch the surface with.
+            ReportUnhostedWinUIIdentity(platformIdentifier);
+
             return original(instance, platformIdentifier);
         }
 
         var creator = _PlatformCreators.GetValue(instance, static platformService => new WinUIPlatformCreator(platformService));
 
         return creator;
+    }
+
+    private static void ReportUnhostedWinUIIdentity(PlatformIdentifier? platformIdentifier)
+    {
+        if (platformIdentifier is not null
+            && string.Equals(platformIdentifier.XamlRuntime, XamlRuntimeNames.WinUI, StringComparison.Ordinal)
+            && _UnhostedIdentities.TryAdd(platformIdentifier.Identifier, 0))
+        {
+            WinUIDesignerLogger.LogInformation("VSIX", $"No WinUI process host matches '{platformIdentifier.Identifier}'; leaving this platform to Visual Studio.");
+        }
+    }
+
+    private static PlatformSpecification CreateHostedSpecification(PlatformConfiguration configuration)
+    {
+        try
+        {
+            return new PlatformSpecification(configuration.Specification);
+        }
+        catch (ArgumentException)
+        {
+            // A later Visual Studio build may append keys this parser rejects;
+            // the stable prefix still identifies the same target.
+            return new PlatformSpecification(_DesktopWinUISpecificationPrefix);
+        }
+    }
+
+    private static bool HasWinUIHostBinding(PlatformIdentifier platformIdentifier)
+    {
+        // HostPlatformService resolves the process host from this same property.
+        return string.Equals(
+            PlatformConfigurationService.GetProperty(platformIdentifier, "HostPlatformType"),
+            typeof(WinUIHostPlatform).FullName,
+            StringComparison.Ordinal);
     }
 
     int IVsToolboxItemProvider.GetItemContent(string szItemID, ushort format, out IntPtr pGlobal)

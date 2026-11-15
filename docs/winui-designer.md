@@ -55,6 +55,8 @@ The built-in WinUI configurations omit both assembly/type pairs. They contain ot
 
 The extension updates the existing desktop WinUI configuration and installs a creator hook that returns its WinUI creator, cached per editing service. This also covers services whose configuration snapshot predates the update. Calls for other XAML runtimes continue through Visual Studio's original implementation. Both the configuration changes and hook follow the extension package's lifetime.
 
+The hook claims only platform identities that the updated configuration also covers, because the editing platform and the process host are resolved separately. The `WinUI` XAML runtime alone is not specific enough: Uno.Sdk sets `DefaultXamlRuntime=WinUI` for every target framework, so an Uno project whose active target is Android or Skia reports the WinUI runtime without matching the desktop WinUI configuration. A project context created for such an identity would have an editing platform but no process host. The same check guards process sharing: a library reuses the surface process of the application that references it only when that application is itself a hosted WinUI project. Visual Studio selects that application by target framework family, so it can be an Uno app head whose active target is not Windows; the library then starts its own surface process.
+
 ## Starting the isolated process
 
 For this extension, the project architecture selects `WinUISurface.x64.exe` or `WinUISurface.arm64.exe`; the selected executable is staged as `WinUISurface.exe`. Project media and library PRI files are also staged for resource lookup. Startup passes the Visual Studio process ID, diagnostics TAP path, pipe initialization data, DPI context, and Visual Studio installation root. The surface uses that root to resolve private designer contracts from the Visual Studio installation that launched it, initializes the WinUI application and dispatcher, registers its services, and starts receiving messages.
@@ -221,7 +223,7 @@ Failures can occur before the surface starts, while the connection initializes, 
 
 | Stage | Failure handling in this extension |
 | --- | --- |
-| Platform and staging | Reject missing private contracts, unsupported project/runtime architectures, missing payloads, and detected WinUI runtime version mismatches. |
+| Platform and staging | Reject missing private contracts, unsupported project/runtime architectures, missing payloads, and detected WinUI runtime version mismatches. Project requirements are reported through the host's compatibility check, so the designer pane shows the reason in place of the design surface; the staging step repeats them and logs the failure. The project context also checks that it still has a process host and metadata before Visual Studio launches the surface through it, and fails with a described reason otherwise. |
 | Startup and communication | Log startup exceptions and child-process exits; bound frame sizes and fail incomplete messages. |
 | Document construction | Attempt the action-based loading alternative, then return construction failure information and publish error notifications. |
 | Runtime operations | Return contract-specific failure results or notifications; dispatcher work observes cancellation and timeouts. |
