@@ -225,6 +225,7 @@ Failures can occur before the surface starts, while the connection initializes, 
 | Startup and communication | Log startup exceptions and child-process exits; bound frame sizes and fail incomplete messages. |
 | Document construction | Attempt the action-based loading alternative, then return construction failure information and publish error notifications. |
 | Runtime operations | Return contract-specific failure results or notifications; dispatcher work observes cancellation and timeouts. |
+| Clipboard | Read a clipboard that cannot be opened as an empty one, so the shared Paste command is disabled instead of failing the designer. |
 | Shutdown | Cancel pending protocol work, release document services and native windows, and dispose the connection. |
 
 ```mermaid
@@ -255,6 +256,8 @@ sequenceDiagram
         App->>App: Dispose the protocol handler and pipes
     end
 ```
+
+The shared designer asks the clipboard whether it holds something to paste each time Visual Studio refreshes its commands (`PasteCommand` → `ClipboardHandler.CanPasteData`). While another process keeps the clipboard open, or the session is locked, WPF reports `CLIPBRD_E_CANT_OPEN` after about a second of retries, and the shared designer treats that as an unhandled exception: it replaces the design surface with the exception and ends the surface process. The scene view model accepts its clipboard as a settable `IClipboard`, so the extension gives it a [guarded clipboard](../src/WinUIDesigner.Vsix/Platform/GuardedClipboard.cs): a failed read counts as an empty clipboard, the "can paste" question is not repeated for two seconds after a failure, and each outage is logged once. Writing is passed through, because the shared designer already reports a failed copy to the user.
 
 Closing a document releases its surface and document-owned state. Resources shared with another document are retained until their remaining owners are released. Document closure and process shutdown are separate lifetimes; the connection can serve more than one document.
 
