@@ -165,6 +165,14 @@ This extension reuses that frontend synchronization. Its responsibility is to pr
 
 Implementation: [ordered action execution](../src/WinUIDesigner.Surface/Services/SurfaceService.XamlActions.cs), [document ownership](../src/WinUIDesigner.Surface/Designer/Shared/ObjectIdentityRegistry.cs), and [tree/layout publication](../src/WinUIDesigner.Surface/Services/SurfaceService.cs). Text parsing and serialization themselves are provided by Visual Studio's `Markup.dll` and XAML language service.
 
+### Edits of styles in use
+
+WinUI seals a `Style`, its `Setters` and each `Setter` as soon as an element uses the style, even a style that Visual Studio has just created: its instance builders assign a new style before they add its setters. The public API then rejects added setters and setter or `BasedOn` changes, and accepts removed setters without updating the elements. Visual Studio's UWP designer has the same constraint; its `StyleBuilder` and `SetterBuilder` still send `AddChild` and `RemoveChild` for the setter collection (a changed setter is replaced by a new one), and its TAP applies them through the framework's XAML Diagnostics, which unseals the objects, rebuilds the setters of styles `BasedOn` the edited one, re-applies implicit styles and refreshes the elements that use the style.
+
+The surface sends the same edits through its diagnostics TAP: those of sealed collections, setters and styles, of `VisualState` setters (only this path updates the active state), and the dictionary entry of a style that Visual Studio rebuilt after a `TargetType` change, so that `{StaticResource}` references move to the new style. WinUI tracks the users of a style only while it stores source information, so the surface sets `ENABLE_XAML_DIAGNOSTICS_SOURCE_INFO` at startup. Without the TAP connection such an edit fails with a message that asks for a refresh, logged once.
+
+Implementation: [style edits](../src/WinUIDesigner.Surface/Services/StyleEditService.cs) and [diagnostics TAP](../src/WinUIDesigner.DiagnosticsTap/DiagnosticsTap.cpp).
+
 ## Toolbox integration
 
 Toolbox integration has three entry points. Static registration supplies standard controls, discovery supplies selectable types from assemblies, and automatic population watches project or package references. The configuration flag enabling automatic population does not itself discover controls.

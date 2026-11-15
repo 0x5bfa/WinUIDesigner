@@ -18,6 +18,7 @@ internal sealed partial class SurfaceService
     private readonly record struct DeferredSetterInsertion(XamlAction Action, SetterBaseCollection Collection, int Index, SetterBase Setter);
 
     private readonly ResourceScopeService _resourceScopes;
+    private readonly StyleEditService _styleEdits;
     private readonly Dictionary<long, object?> _actionObjects = [];
     private readonly Dictionary<long, object?> _trackedActionObjects = [];
 
@@ -40,7 +41,7 @@ internal sealed partial class SurfaceService
         }
 
         XamlAction? failedAction = null;
-        var deferredSetterInsertions = new List<DeferredSetterInsertion>();
+        var deferredSetterInsertions = CreateDeferredSetterInsertions();
 
         try
         {
@@ -75,12 +76,13 @@ internal sealed partial class SurfaceService
                 TrackActionObjects();
             }
 
-            foreach (DeferredSetterInsertion insertion in deferredSetterInsertions)
+            foreach (DeferredSetterInsertion insertion in deferredSetterInsertions.TakeAll())
             {
                 failedAction = insertion.Action;
-                XamlRuntimeUtilities.AddChild(insertion.Collection, insertion.Index, insertion.Setter);
+                InsertSetter(insertion);
             }
 
+            _styleEdits.CompleteBatch(GetSurfaceRoots());
             CompleteActionBatch();
 
             return new ResponseWithError()
@@ -93,10 +95,19 @@ internal sealed partial class SurfaceService
             // Synchronize the surviving changes, then report the exact failed
             // action using the shared error contract. Raw exception text is not
             // valid ActionError JSON and prevents frontend error processing.
-            WinUIDesignerLogger.LogError("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) failed during '{failedAction?.Action}'.", ex);
+            if (ex is StyleEditException)
+            {
+                // StyleEditService has logged the cause once; a repeated edit must not flood the log.
+                WinUIDesignerLogger.LogTrace("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) failed during '{failedAction?.Action}': {ex.Message}");
+            }
+            else
+            {
+                WinUIDesignerLogger.LogError("Surface", $"ExecuteXamlActions ({(int)DesignerMessageId.ExecuteXamlActions}) failed during '{failedAction?.Action}'.", ex);
+            }
 
             try
             {
+                _styleEdits.CompleteBatch(GetSurfaceRoots());
                 CompleteActionBatch();
             }
             catch (Exception layoutError)
@@ -120,16 +131,16 @@ internal sealed partial class SurfaceService
         }
 
         object? captured = null;
-        var deferredSetterInsertions = new List<DeferredSetterInsertion>();
+        var deferredSetterInsertions = CreateDeferredSetterInsertions();
         var actions = XamlActionJsonSerializer.Deserialize(request.Actions ?? []);
         foreach (XamlAction action in actions)
         {
             Execute(action, (_, value) => captured = value, deferredSetterInsertions);
         }
 
-        foreach (DeferredSetterInsertion insertion in deferredSetterInsertions)
+        foreach (DeferredSetterInsertion insertion in deferredSetterInsertions.TakeAll())
         {
-            XamlRuntimeUtilities.AddChild(insertion.Collection, insertion.Index, insertion.Setter);
+            InsertSetter(insertion);
         }
 
         return serializer.Serialize(captured);
@@ -140,7 +151,7 @@ internal sealed partial class SurfaceService
         using var scope = _objectIdentity.EnterDocument(document.DocumentId);
 
         object? root = null;
-        var deferredSetterInsertions = new List<DeferredSetterInsertion>();
+        var deferredSetterInsertions = CreateDeferredSetterInsertions();
         var actions = XamlActionJsonSerializer.Deserialize(document.Actions ?? []);
 
         for (int index = 0; index < actions.Count; index++)
@@ -175,11 +186,11 @@ internal sealed partial class SurfaceService
             }
         }
 
-        foreach (DeferredSetterInsertion insertion in deferredSetterInsertions)
+        foreach (DeferredSetterInsertion insertion in deferredSetterInsertions.TakeAll())
         {
             try
             {
-                XamlRuntimeUtilities.AddChild(insertion.Collection, insertion.Index, insertion.Setter);
+                InsertSetter(insertion);
             }
             catch (Exception ex)
             {
@@ -188,6 +199,46 @@ internal sealed partial class SurfaceService
         }
 
         return root ?? throw new InvalidOperationException($"No root was constructed for document {document.DocumentId}.");
+    }
+
+    private static DeferredInsertionQueue<DeferredSetterInsertion> CreateDeferredSetterInsertions()
+    {
+        return new(insertion => insertion.Collection);
+    }
+
+    // Visual Studio sets a Setter's Property and Value after it adds the setter. Once they are set the setter is
+    // valid, and an insertion into a sealed collection through XAML Diagnostics also reaches styles BasedOn it.
+    private void InsertSetter(DeferredSetterInsertion insertion)
+    {
+        if (!_styleEdits.TryInsertSetter(insertion.Collection, insertion.Index, insertion.Setter))
+        {
+            XamlRuntimeUtilities.AddChild(insertion.Collection, insertion.Index, insertion.Setter);
+        }
+    }
+
+    // Keeps the order of operations on one setter collection: the indices of a batch assume the earlier actions ran.
+    private void InsertDeferredSetters(DeferredInsertionQueue<DeferredSetterInsertion>? deferredSetterInsertions, object? collection)
+    {
+        if (deferredSetterInsertions is null || collection is not SetterBaseCollection)
+        {
+            return;
+        }
+
+        foreach (DeferredSetterInsertion insertion in deferredSetterInsertions.TakeFor(collection))
+        {
+            InsertSetter(insertion);
+        }
+    }
+
+    private List<FrameworkElement> GetSurfaceRoots()
+    {
+        var roots = new List<FrameworkElement>(_surfaces.Count);
+        foreach (DesignerSurface surface in _surfaces.Values)
+        {
+            roots.Add(surface.Content);
+        }
+
+        return roots;
     }
 
     private void TrackActionObjects()
@@ -221,7 +272,7 @@ internal sealed partial class SurfaceService
     private void Execute(
         XamlAction action,
         Action<int, object?>? setSurfaceContentOverride = null,
-        List<DeferredSetterInsertion>? deferredSetterInsertions = null)
+        DeferredInsertionQueue<DeferredSetterInsertion>? deferredSetterInsertions = null)
     {
         switch (action)
         {
@@ -321,33 +372,60 @@ internal sealed partial class SurfaceService
                 XamlRuntimeUtilities.MeasureElement((ResolveObject(measure.ElementHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {measure.ElementHandle}.")));
                 break;
             case GetPropertyAction getProperty:
-                _actionObjects[getProperty.PropertyValueHandle] = XamlRuntimeUtilities.GetPropertyValue((ResolveObject(getProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getProperty.ParentHandle}.")), getProperty.FullPropertyName);
+                object valueOwner = (ResolveObject(getProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getProperty.ParentHandle}."));
+                object? propertyValue = XamlRuntimeUtilities.GetPropertyValue(valueOwner, getProperty.FullPropertyName);
+                _actionObjects[getProperty.PropertyValueHandle] = propertyValue;
+                _styleEdits.TrackPropertyValue(valueOwner, propertyValue);
                 break;
             case SetPropertyAction setProperty:
                 object propertyOwner = (ResolveObject(setProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {setProperty.ParentHandle}."));
-                XamlRuntimeUtilities.SetPropertyValue(propertyOwner, setProperty.FullPropertyName,
-                    ResolveActionValue(setProperty.PropertyValueHandle, propertyOwner));
+                object? newValue = ResolveActionValue(setProperty.PropertyValueHandle, propertyOwner);
+                if (!_styleEdits.TrySetProperty(propertyOwner, setProperty.FullPropertyName, newValue))
+                {
+                    XamlRuntimeUtilities.SetPropertyValue(propertyOwner, setProperty.FullPropertyName, newValue);
+                }
+
                 break;
             case ClearPropertyAction clearProperty:
-                XamlRuntimeUtilities.ClearPropertyValue((ResolveObject(clearProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearProperty.ParentHandle}.")), clearProperty.FullPropertyName, clearProperty.UseDefaultValue, clearProperty.DefaultValue, clearProperty.DefaultValueType);
+                object clearedOwner = (ResolveObject(clearProperty.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearProperty.ParentHandle}."));
+                if (!_styleEdits.TrySetProperty(clearedOwner, clearProperty.FullPropertyName, null))
+                {
+                    XamlRuntimeUtilities.ClearPropertyValue(clearedOwner, clearProperty.FullPropertyName, clearProperty.UseDefaultValue, clearProperty.DefaultValue, clearProperty.DefaultValueType);
+                }
+
                 break;
             case ClearCollectionPropertyAction clearCollection:
-                XamlRuntimeUtilities.ClearCollectionProperty((ResolveObject(clearCollection.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearCollection.ParentHandle}.")), clearCollection.FullPropertyName);
+                object collectionOwner = (ResolveObject(clearCollection.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {clearCollection.ParentHandle}."));
+                object? clearedCollection = XamlRuntimeUtilities.GetPropertyValue(collectionOwner, clearCollection.FullPropertyName);
+                InsertDeferredSetters(deferredSetterInsertions, clearedCollection);
+                if (!_styleEdits.TryClearSetters(collectionOwner, clearedCollection))
+                {
+                    XamlRuntimeUtilities.ClearCollectionProperty(collectionOwner, clearCollection.FullPropertyName);
+                }
+
                 break;
             case UpdateEventHandlerAction updateEvent:
                 XamlRuntimeUtilities.UpdateEventHandler((ResolveObject(updateEvent.EventOwner) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateEvent.EventOwner}.")), updateEvent.FullEventName, (ResolveObject(updateEvent.HandlerOwner) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateEvent.HandlerOwner}.")), updateEvent.HandlerOwnerType, updateEvent.OldHandler, updateEvent.NewHandler);
                 break;
             case GetChildAction getChild:
-                _actionObjects[getChild.ChildHandle] = XamlRuntimeUtilities.GetChild((ResolveObject(getChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getChild.ParentHandle}.")), getChild.Index);
+                object indexedParent = (ResolveObject(getChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getChild.ParentHandle}."));
+                InsertDeferredSetters(deferredSetterInsertions, indexedParent);
+                _actionObjects[getChild.ChildHandle] = XamlRuntimeUtilities.GetChild(indexedParent, getChild.Index);
                 break;
             case AddChildAction addChild:
                 object childOwner = (ResolveObject(addChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {addChild.ParentHandle}."));
                 object? child = ResolveActionValue(addChild.ChildHandle, childOwner);
-                if (deferredSetterInsertions is not null
-                    && childOwner is SetterBaseCollection setterCollection
-                    && child is SetterBase setter)
+                if (childOwner is SetterBaseCollection setterCollection && child is SetterBase setter)
                 {
-                    deferredSetterInsertions.Add(new(action, setterCollection, addChild.Index, setter));
+                    var insertion = new DeferredSetterInsertion(action, setterCollection, addChild.Index, setter);
+                    if (deferredSetterInsertions is not null)
+                    {
+                        deferredSetterInsertions.Add(insertion);
+                    }
+                    else
+                    {
+                        InsertSetter(insertion);
+                    }
                 }
                 else
                 {
@@ -356,27 +434,45 @@ internal sealed partial class SurfaceService
 
                 break;
             case RemoveChildAction removeChild:
-                XamlRuntimeUtilities.RemoveChild((ResolveObject(removeChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {removeChild.ParentHandle}.")), removeChild.Index);
+                object removalParent = (ResolveObject(removeChild.ParentHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {removeChild.ParentHandle}."));
+                InsertDeferredSetters(deferredSetterInsertions, removalParent);
+                if (removalParent is not SetterBaseCollection removalSetters || !_styleEdits.TryRemoveSetter(removalSetters, removeChild.Index))
+                {
+                    XamlRuntimeUtilities.RemoveChild(removalParent, removeChild.Index);
+                }
+
                 break;
             case GetDictionaryEntryAction getDictionaryEntry:
                 _actionObjects[getDictionaryEntry.ValueHandle] = XamlRuntimeUtilities.GetDictionaryEntry((ResolveObject(getDictionaryEntry.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {getDictionaryEntry.DictionaryHandle}.")), ResolveObject(getDictionaryEntry.KeyHandle));
                 break;
             case AddDictionaryEntryAction addDictionaryEntry:
                 object dictionaryOwner = (ResolveObject(addDictionaryEntry.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {addDictionaryEntry.DictionaryHandle}."));
-                XamlRuntimeUtilities.SetDictionaryEntry(
-                    dictionaryOwner,
-                    ResolveObject(addDictionaryEntry.KeyHandle),
-                    ResolveActionValue(addDictionaryEntry.ValueHandle, dictionaryOwner));
+                object? addedKey = ResolveObject(addDictionaryEntry.KeyHandle);
+                object? addedValue = ResolveActionValue(addDictionaryEntry.ValueHandle, dictionaryOwner);
+                if (!_styleEdits.TryAddDictionaryEntry(dictionaryOwner, addedKey, addedValue))
+                {
+                    XamlRuntimeUtilities.SetDictionaryEntry(dictionaryOwner, addedKey, addedValue);
+                }
+
                 break;
             case RemoveDictionaryEntryAction removeDictionaryEntry:
-                XamlRuntimeUtilities.RemoveDictionaryEntry((ResolveObject(removeDictionaryEntry.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {removeDictionaryEntry.DictionaryHandle}.")), ResolveObject(removeDictionaryEntry.KeyHandle));
+                object removalDictionary = (ResolveObject(removeDictionaryEntry.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {removeDictionaryEntry.DictionaryHandle}."));
+                object? removedKey = ResolveObject(removeDictionaryEntry.KeyHandle);
+                if (!_styleEdits.TryRemoveDictionaryEntry(removalDictionary, removedKey))
+                {
+                    XamlRuntimeUtilities.RemoveDictionaryEntry(removalDictionary, removedKey);
+                }
+
                 break;
             case UpdateDictionaryValueAction updateDictionaryValue:
                 object updatedDictionaryOwner = (ResolveObject(updateDictionaryValue.DictionaryHandle) ?? throw new KeyNotFoundException($"No live object is registered for handle {updateDictionaryValue.DictionaryHandle}."));
-                XamlRuntimeUtilities.SetDictionaryEntry(
-                    updatedDictionaryOwner,
-                    ResolveObject(updateDictionaryValue.KeyHandle),
-                    ResolveActionValue(updateDictionaryValue.ValueHandle, updatedDictionaryOwner));
+                object? updatedKey = ResolveObject(updateDictionaryValue.KeyHandle);
+                object? updatedValue = ResolveActionValue(updateDictionaryValue.ValueHandle, updatedDictionaryOwner);
+                if (!_styleEdits.TryReplaceDictionaryEntry(updatedDictionaryOwner, updatedKey, updatedValue))
+                {
+                    XamlRuntimeUtilities.SetDictionaryEntry(updatedDictionaryOwner, updatedKey, updatedValue);
+                }
+
                 break;
             case NullReferenceAction nullReference:
                 _actionObjects[nullReference.LiveHandle] = null;

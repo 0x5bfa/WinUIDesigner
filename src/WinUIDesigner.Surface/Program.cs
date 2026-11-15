@@ -61,6 +61,12 @@ internal static class Program
 
         WinUIDesignerLogger.ConfigureVerboseLogging(verboseLoggingEnabled);
 
+        // WinUI records which elements use a style, which styles are BasedOn it and which setter collection belongs
+        // to it only while it stores source information. Without these records, XAML Diagnostics edits of styles
+        // applied before the diagnostics TAP connected succeed without updating anything. WinUI reads this switch
+        // once, when it first needs it, so it must be set before the first style is applied.
+        Environment.SetEnvironmentVariable("ENABLE_XAML_DIAGNOSTICS_SOURCE_INFO", "1");
+
         if (!string.IsNullOrWhiteSpace(args[4]))
         {
             string[] assemblyDirectories = [Path.Combine(args[4], "Common7", "IDE", "PrivateAssemblies"), Path.Combine(args[4], "Common7", "IDE", "PublicAssemblies"), Path.Combine(args[4], "Common7", "IDE"),];

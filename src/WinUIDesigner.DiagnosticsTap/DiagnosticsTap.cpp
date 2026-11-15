@@ -118,6 +118,62 @@ namespace
         CoTaskMemFree(values);
     }
 
+    HRESULT GetConnectedServices(ComPtr<IXamlDiagnostics>& diagnostics, ComPtr<IVisualTreeService>& visualTreeService) noexcept
+    {
+        AcquireSRWLockShared(&g_siteLock);
+        diagnostics = g_xamlDiagnostics;
+        visualTreeService = g_visualTreeService;
+        ReleaseSRWLockShared(&g_siteLock);
+
+        return diagnostics != nullptr && visualTreeService != nullptr ? S_OK : E_PENDING;
+    }
+
+    // XAML Diagnostics addresses objects by its own handles. Handle 0 is its null object.
+    HRESULT GetInstanceHandle(IXamlDiagnostics* diagnostics, IInspectable* instance, InstanceHandle& handle) noexcept
+    {
+        handle = 0;
+        return instance == nullptr ? S_OK : diagnostics->GetHandleFromIInspectable(instance, &handle);
+    }
+
+    HRESULT GetPropertyIndex(IVisualTreeService* visualTreeService, InstanceHandle instance, LPCWSTR propertyName, unsigned int& propertyIndex) noexcept
+    {
+        propertyIndex = 0;
+        if (propertyName == nullptr)
+        {
+            return E_POINTER;
+        }
+
+        ComPtr<IVisualTreeService2> visualTreeService2;
+        const HRESULT hr = visualTreeService->QueryInterface(IID_PPV_ARGS(&visualTreeService2));
+        return FAILED(hr) ? hr : visualTreeService2->GetPropertyIndex(instance, propertyName, &propertyIndex);
+    }
+
+    // Reads the collection through its owner, as Visual Studio's own TAP does. XAML Diagnostics lists
+    // the items of a collection only when it knows the collection's parent; a collection handle taken
+    // directly from the object accepts insertions but rejects every removal index with E_INVALIDARG.
+    HRESULT GetCollectionHandle(
+        IXamlDiagnostics* diagnostics,
+        IVisualTreeService* visualTreeService,
+        IInspectable* owner,
+        LPCWSTR collectionPropertyName,
+        InstanceHandle& collectionHandle) noexcept
+    {
+        collectionHandle = 0;
+        ComPtr<IVisualTreeService2> visualTreeService2;
+        InstanceHandle ownerHandle = 0;
+        unsigned int propertyIndex = 0;
+        HRESULT hr = S_OK;
+        if (FAILED(hr = visualTreeService->QueryInterface(IID_PPV_ARGS(&visualTreeService2)))
+            || FAILED(hr = GetInstanceHandle(diagnostics, owner, ownerHandle))
+            || FAILED(hr = GetPropertyIndex(visualTreeService, ownerHandle, collectionPropertyName, propertyIndex))
+            || FAILED(hr = visualTreeService2->GetProperty(ownerHandle, propertyIndex, &collectionHandle)))
+        {
+            return hr;
+        }
+
+        return collectionHandle != 0 ? S_OK : E_UNEXPECTED;
+    }
+
     HRESULT GetModulePath(HMODULE module, std::wstring& path)
     {
         if (module == nullptr)
@@ -476,6 +532,189 @@ extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_GetP
     FreePropertyChainSources(sources, sourceCount);
     FreePropertyChainValues(values, propertyCount);
     return S_OK;
+}
+
+// The edits below go through XAML Diagnostics instead of the public WinRT API. WinUI seals a Style,
+// its Setters collection and its Setters once the style is applied; the public API then rejects
+// insertions and setter changes, and accepts removals without updating the elements. The framework's
+// diagnostics implementation (DiagnosticsInterop) unseals the objects for the edit, rebuilds the merged
+// setters of styles BasedOn the edited one, re-applies implicit styles and refreshes the elements that
+// use the style; Visual Studio's XAML Hot Reload edits styles through the same collection calls.
+//
+// Collections are named by their owner and the full metadata name of the collection property,
+// for example a Style and "Microsoft.UI.Xaml.Style.Setters".
+extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_AddChild(
+    IInspectable* owner,
+    LPCWSTR collectionPropertyName,
+    IInspectable* child,
+    unsigned int index)
+{
+    if (owner == nullptr || child == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    ComPtr<IXamlDiagnostics> diagnostics;
+    ComPtr<IVisualTreeService> visualTreeService;
+    HRESULT hr = GetConnectedServices(diagnostics, visualTreeService);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    InstanceHandle collectionHandle = 0;
+    InstanceHandle childHandle = 0;
+    if (FAILED(hr = GetCollectionHandle(diagnostics.Get(), visualTreeService.Get(), owner, collectionPropertyName, collectionHandle))
+        || FAILED(hr = GetInstanceHandle(diagnostics.Get(), child, childHandle)))
+    {
+        return hr;
+    }
+
+    return visualTreeService->AddChild(collectionHandle, childHandle, index);
+}
+
+extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_RemoveChild(
+    IInspectable* owner,
+    LPCWSTR collectionPropertyName,
+    unsigned int index)
+{
+    if (owner == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    ComPtr<IXamlDiagnostics> diagnostics;
+    ComPtr<IVisualTreeService> visualTreeService;
+    HRESULT hr = GetConnectedServices(diagnostics, visualTreeService);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    InstanceHandle collectionHandle = 0;
+    hr = GetCollectionHandle(diagnostics.Get(), visualTreeService.Get(), owner, collectionPropertyName, collectionHandle);
+    return FAILED(hr) ? hr : visualTreeService->RemoveChild(collectionHandle, index);
+}
+
+extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_ClearChildren(
+    IInspectable* owner,
+    LPCWSTR collectionPropertyName)
+{
+    if (owner == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    ComPtr<IXamlDiagnostics> diagnostics;
+    ComPtr<IVisualTreeService> visualTreeService;
+    HRESULT hr = GetConnectedServices(diagnostics, visualTreeService);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    InstanceHandle collectionHandle = 0;
+    hr = GetCollectionHandle(diagnostics.Get(), visualTreeService.Get(), owner, collectionPropertyName, collectionHandle);
+    return FAILED(hr) ? hr : visualTreeService->ClearChildren(collectionHandle);
+}
+
+// propertyName is the full metadata name, for example "Microsoft.UI.Xaml.Style.BasedOn".
+// A null value sets the property to null. Callers use that to remove Style.BasedOn: clearing the
+// property through XAML Diagnostics does not refresh the elements that use the style.
+extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_SetProperty(
+    IInspectable* instance,
+    LPCWSTR propertyName,
+    IInspectable* value)
+{
+    if (instance == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    ComPtr<IXamlDiagnostics> diagnostics;
+    ComPtr<IVisualTreeService> visualTreeService;
+    HRESULT hr = GetConnectedServices(diagnostics, visualTreeService);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    InstanceHandle instanceHandle = 0;
+    InstanceHandle valueHandle = 0;
+    unsigned int propertyIndex = 0;
+    if (FAILED(hr = GetInstanceHandle(diagnostics.Get(), instance, instanceHandle))
+        || FAILED(hr = GetInstanceHandle(diagnostics.Get(), value, valueHandle))
+        || FAILED(hr = GetPropertyIndex(visualTreeService.Get(), instanceHandle, propertyName, propertyIndex)))
+    {
+        return hr;
+    }
+
+    return visualTreeService->SetProperty(instanceHandle, valueHandle, propertyIndex);
+}
+
+// Dictionary edits through XAML Diagnostics also re-resolve the {StaticResource} references that the
+// framework recorded for the key, so elements pick up a style that replaced the one they used.
+extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_AddDictionaryItem(
+    IInspectable* dictionary,
+    IInspectable* key,
+    IInspectable* value)
+{
+    if (dictionary == nullptr || key == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    ComPtr<IXamlDiagnostics> diagnostics;
+    ComPtr<IVisualTreeService> visualTreeService;
+    HRESULT hr = GetConnectedServices(diagnostics, visualTreeService);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    ComPtr<IVisualTreeService3> visualTreeService3;
+    InstanceHandle dictionaryHandle = 0;
+    InstanceHandle keyHandle = 0;
+    InstanceHandle valueHandle = 0;
+    if (FAILED(hr = visualTreeService.As(&visualTreeService3))
+        || FAILED(hr = GetInstanceHandle(diagnostics.Get(), dictionary, dictionaryHandle))
+        || FAILED(hr = GetInstanceHandle(diagnostics.Get(), key, keyHandle))
+        || FAILED(hr = GetInstanceHandle(diagnostics.Get(), value, valueHandle)))
+    {
+        return hr;
+    }
+
+    return visualTreeService3->AddDictionaryItem(dictionaryHandle, keyHandle, valueHandle);
+}
+
+extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_RemoveDictionaryItem(
+    IInspectable* dictionary,
+    IInspectable* key)
+{
+    if (dictionary == nullptr || key == nullptr)
+    {
+        return E_POINTER;
+    }
+
+    ComPtr<IXamlDiagnostics> diagnostics;
+    ComPtr<IVisualTreeService> visualTreeService;
+    HRESULT hr = GetConnectedServices(diagnostics, visualTreeService);
+    if (FAILED(hr))
+    {
+        return hr;
+    }
+
+    ComPtr<IVisualTreeService3> visualTreeService3;
+    InstanceHandle dictionaryHandle = 0;
+    InstanceHandle keyHandle = 0;
+    if (FAILED(hr = visualTreeService.As(&visualTreeService3))
+        || FAILED(hr = GetInstanceHandle(diagnostics.Get(), dictionary, dictionaryHandle))
+        || FAILED(hr = GetInstanceHandle(diagnostics.Get(), key, keyHandle)))
+    {
+        return hr;
+    }
+
+    return visualTreeService3->RemoveDictionaryItem(dictionaryHandle, keyHandle);
 }
 
 extern "C" __declspec(dllexport) HRESULT __stdcall WinUIDesignerDiagnostics_SetRenderingEnabled(BOOL enabled)
