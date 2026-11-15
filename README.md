@@ -9,6 +9,8 @@
 
 Download and open a vsix file from Visual Studio Marketplace. WinUI 3 designer will be automatically available for WinUI 3 projects.
 
+The MSBuild properties `WinUIDesignerTargetPlatform` (for example `android`) and `WinUIDesignerWindowsVersion` (for example `1809`) set the Uno Platform target and the Windows version a project's XAML is previewed for; see [Design-time options](docs/winui-designer.md#design-time-options).
+
 ## Limitations
 
 - Only C# WinUI projects are supported.

@@ -61,6 +61,21 @@ For this extension, the project architecture selects `WinUISurface.x64.exe` or `
 
 Implementation: [scene-view activation](../src/WinUIDesigner.Vsix/Platform/WinUISceneView.cs), [project context](../src/WinUIDesigner.Vsix/Platform/WinUIProjectContext.cs), [process host and staging](../src/WinUIDesigner.Vsix/DesignerHost), [local process context](../src/WinUIDesigner.Vsix/Platform/WinUISurfaceProcessContext.cs), and [surface startup](../src/WinUIDesigner.Surface/Program.cs).
 
+### Design-time options
+
+Two options decide which members of a document are instantiated. They belong to a surface process rather than to a document, so a library previewed in the surface process of its application uses the application's options.
+
+| Option | Meaning | MSBuild property | Default |
+| --- | --- | --- | --- |
+| Windows version | The version of `Windows.Foundation.UniversalApiContract` that conditional XAML namespaces (`...?IsApiContractPresent(Windows.Foundation.UniversalApiContract,7)`) are evaluated against. | `WinUIDesignerWindowsVersion`: a contract version (`7`), a build (`17763`), a full version (`10.0.17763.0`), or a release name (`1809`, `Windows 11 22H2`). | The installed Windows. |
+| Target platform | The Uno Platform target the markup is previewed as. | `WinUIDesignerTargetPlatform`: `win`, `android`, `ios`, `wasm`, `skia`, `androidskia`, `iosskia`, or `wasmskia`. | `win`, the Windows target. |
+
+Each option is resolved on its own: the user's override, then the MSBuild property, then the default. The override is a string that Visual Studio keeps per project in the solution's user options file; like the properties, it is read from the application project. There is no user interface for the override yet, so the MSBuild properties are the way to set the options. The options reach both processes, but no code interprets them yet.
+
+The options are resolved and logged each time a surface process starts. Changing them stores the override and restarts the surface process, which reloads every open designer of the project: Visual Studio builds the XAML cleaner context of a project once and does not clean a prepared document again while a surface process lives. The surface receives the options in the CreateSurface request, in an extra member of a request type derived from Visual Studio's own, and keeps them per document. When the package loads, it sends such a request through Visual Studio's serializer and back; if the member does not survive, the options are turned off and both processes use the defaults.
+
+Implementation: [options and precedence](../src/WinUIDesigner.Shared/DesignTime), [storage](../src/WinUIDesigner.Vsix/Platform/DesignTimeOptionsStore.cs), [ownership and reload](../src/WinUIDesigner.Vsix/Platform/WinUISurfaceProcessContext.cs), [request](../src/WinUIDesigner.Vsix/Platform/WinUICreateSurfaceRequestInfo.cs), and [surface side](../src/WinUIDesigner.Surface/Services/SurfaceService.DesignTimeOptions.cs).
+
 ## Communicating with the surface
 
 The surface uses the existing private protocol types and adds a pipe bridge compatible with the host's initialization data. Its frame reader assembles complete messages even when reads return partial data. WinUI operations are marshalled to the UI dispatcher; the receive thread does not directly mutate XAML objects. Service observers are registered before protocol startup so an early request can be handled.
