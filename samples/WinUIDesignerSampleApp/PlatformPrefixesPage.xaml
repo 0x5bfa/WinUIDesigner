@@ -1,0 +1,84 @@
+<Page
+    x:Class="WinUIDesignerSampleApp.PlatformPrefixesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:android="http://uno.ui/android"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:not_android="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:not_win="http://uno.ui/not_win"
+    xmlns:skia="http://uno.ui/skia"
+    xmlns:win="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    mc:Ignorable="d android not_win skia">
+    <!--
+        Uno Platform platform-specific XAML, previewed for Windows.
+
+        win: and not_android: are bound to the presentation namespace and are ordinary members on Windows.
+        not_win:, android: and skia: are bound to an Uno namespace and listed in mc:Ignorable: the Windows XAML
+        compiler leaves their members out, and so does the designer.
+        See https://platform.uno/docs/articles/platform-specific-xaml.html.
+    -->
+    <StackPanel
+        x:Name="RootPanel"
+        Margin="24"
+        Spacing="16">
+
+        <!--  An element under an included prefix, with a namespace declared on it for its child.  -->
+        <win:Border
+            x:Name="WindowsOnlyBorder"
+            xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+            Padding="8"
+            BorderBrush="{StaticResource AppTestBrush}"
+            BorderThickness="1">
+            <toolkit:SettingsCard
+                x:Name="WindowsOnlyCard"
+                Description="Written under win: and shown on Windows."
+                Header="win:Border" />
+        </win:Border>
+
+        <!--  An element under an excluded prefix is left out together with its children.  -->
+        <not_win:Border x:Name="NotWindowsBorder" Padding="8">
+            <ListView x:Name="NotWindowsList">
+                <ListViewItem Content="Written under not_win: and left out on Windows." />
+            </ListView>
+        </not_win:Border>
+
+        <!--  An attribute under an included prefix, and items of a typed collection under both kinds of prefix.  -->
+        <Grid
+            x:Name="ColumnsGrid"
+            win:IsDoubleTapEnabled="True"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <skia:ColumnDefinition Width="Auto" MinWidth="0" />
+                <win:ColumnDefinition Width="Auto" MinWidth="128" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <not_win:Grid.RowDefinitions>
+                <RowDefinition Height="200" />
+            </not_win:Grid.RowDefinitions>
+            <TextBlock
+                x:Name="FirstColumnText"
+                Grid.Column="0"
+                Text="MinWidth 128" />
+            <TextBlock
+                x:Name="SecondColumnText"
+                Grid.Column="1"
+                Text="Star-sized column" />
+        </Grid>
+
+        <!--  Attributes under an included prefix keep their values, markup extensions included.  -->
+        <TextBox
+            x:Name="PrefixedTextBox"
+            win:SelectionFlyout="{x:Null}"
+            win:TextReadingOrder="DetectFromContent"
+            Text="win:SelectionFlyout and win:TextReadingOrder" />
+
+        <!--  One property with a value per platform.  -->
+        <TextBlock
+            x:Name="PerPlatformText"
+            android:Text="This version is used on Android"
+            not_android:Text="This version is used on every other platform"
+            win:FontSize="20" />
+
+    </StackPanel>
+</Page>

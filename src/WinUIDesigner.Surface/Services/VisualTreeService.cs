@@ -9,6 +9,7 @@ using System.Xml;
 using System.Xml.Linq;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.Networking;
 using Microsoft.VisualStudio.DesignTools.RuntimeHost.TapOM;
+using WinUIDesigner.Markup;
 
 namespace WinUIDesigner.Surface.Services;
 
@@ -21,23 +22,40 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
 
     private readonly Dictionary<long, VisualTreeTopologyEntry[]> _publishedTopologies = [];
 
-    public void RegisterSourceInfo(CreateDocumentInfo? document, string? preparedXaml, FrameworkElement root)
+    /// <summary>
+    /// Renames an element of the prepared document to the type that is loaded in its place.
+    /// Source mapping keeps matching the element by the name it was prepared with.
+    /// </summary>
+    public static void RenameForRuntime(XElement element, XName runtimeName)
     {
-        if (document is null || string.IsNullOrWhiteSpace(document.DesignTimeSurfaceUri) || string.IsNullOrWhiteSpace(preparedXaml))
+        if (element.Annotation<PreparedName>() is null)
+        {
+            element.AddAnnotation(new PreparedName(element.Name));
+        }
+
+        element.Name = runtimeName;
+    }
+
+    /// <summary>
+    /// Maps the runtime objects under <paramref name="root"/> back to the elements they were loaded from.
+    /// </summary>
+    /// <param name="document">The document the objects belong to.</param>
+    /// <param name="preparedXaml">
+    /// The prepared XAML as it was loaded, parsed with line information. Elements removed by the namespace
+    /// policies are gone from it, so they cannot claim the source position of an element that was loaded.
+    /// </param>
+    /// <param name="root">The root object that was loaded from the document.</param>
+    public void RegisterSourceInfo(CreateDocumentInfo? document, XDocument? preparedXaml, FrameworkElement root)
+    {
+        if (document is null || string.IsNullOrWhiteSpace(document.DesignTimeSurfaceUri) || preparedXaml?.Root is null)
         {
             return;
         }
 
         try
         {
-            XDocument xamlDocument = XDocument.Parse(preparedXaml, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
-            if (xamlDocument.Root is null)
-            {
-                return;
-            }
-
             var markupElements = new List<XElement>();
-            foreach (XElement element in xamlDocument.Root.DescendantsAndSelf())
+            foreach (XElement element in preparedXaml.Root.DescendantsAndSelf())
             {
                 if (!element.Name.LocalName.Contains('.', StringComparison.Ordinal)
                     && !element.Ancestors().Any(parent => parent.Name.LocalName is "ControlTemplate" or "DataTemplate" or "ItemsPanelTemplate"))
@@ -299,16 +317,28 @@ internal sealed class VisualTreeService(ProtocolHandler protocolHandler, ObjectI
 
     private static bool MatchesMarkupType(XElement element, Type runtimeType)
     {
-        if (element.Name.NamespaceName.StartsWith("using:", StringComparison.Ordinal))
+        XName name = element.Annotation<PreparedName>()?.Name ?? element.Name;
+
+        // A conditional namespace names the same types as the namespace without its condition.
+        string namespaceName = XamlNamespaceUri.Parse(name.NamespaceName).BaseUri;
+        if (namespaceName.StartsWith("using:", StringComparison.Ordinal))
         {
-            return string.Equals(element.Name.NamespaceName[6..] + "." + element.Name.LocalName, runtimeType.FullName, StringComparison.Ordinal);
+            return string.Equals(namespaceName[6..] + "." + name.LocalName, runtimeType.FullName, StringComparison.Ordinal);
         }
 
-        if (element.Name.NamespaceName.StartsWith("clr-namespace:", StringComparison.Ordinal))
+        if (namespaceName.StartsWith("clr-namespace:", StringComparison.Ordinal))
         {
-            return string.Equals(element.Name.NamespaceName[14..].Split(';')[0] + "." + element.Name.LocalName, runtimeType.FullName, StringComparison.Ordinal);
+            return string.Equals(namespaceName[14..].Split(';')[0] + "." + name.LocalName, runtimeType.FullName, StringComparison.Ordinal);
         }
 
-        return element.Name.LocalName == runtimeType.Name && runtimeType.Namespace?.StartsWith("Microsoft.UI.Xaml", StringComparison.Ordinal) == true;
+        return name.LocalName == runtimeType.Name && runtimeType.Namespace?.StartsWith("Microsoft.UI.Xaml", StringComparison.Ordinal) == true;
+    }
+
+    /// <summary>
+    /// The name an element had in the prepared XAML before it was renamed for the runtime.
+    /// </summary>
+    private sealed class PreparedName(XName name)
+    {
+        public XName Name { get; } = name;
     }
 }

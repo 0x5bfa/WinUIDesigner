@@ -12,11 +12,11 @@ using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolat
 namespace WinUIDesigner.Platform;
 
 #if VS2022
-internal sealed class WinUIDesignerInstanceManager(
+internal sealed partial class WinUIDesignerInstanceManager(
     ISurfaceProcessMarkupProvider markupProvider, ISurfaceProcessContext surfaceProcessContext, IInstanceBuilderPlatform platform, IProtocolHandler protocolHandler, IInstanceBuildingTelemetry telemetry)
     : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler, telemetry)
 #else
-internal sealed class WinUIDesignerInstanceManager(
+internal sealed partial class WinUIDesignerInstanceManager(
     ISurfaceProcessMarkupProvider markupProvider, ISurfaceProcessContext surfaceProcessContext, IInstanceBuilderPlatform platform, IProtocolHandler protocolHandler)
     : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler)
 #endif
@@ -27,14 +27,16 @@ internal sealed class WinUIDesignerInstanceManager(
         return result;
     }
 
-    protected override Task<CreateSurfaceRequestInfo> CreateRequestAsync(ISurfaceProcessDocument targetDocument, IReadOnlyList<ISurfaceProcessDocument> preparedDocuments)
+    protected override async Task<CreateSurfaceRequestInfo> CreateRequestAsync(ISurfaceProcessDocument targetDocument, IReadOnlyList<ISurfaceProcessDocument> preparedDocuments)
     {
+        await PrepareNamespacePoliciesAsync(targetDocument, preparedDocuments).ConfigureAwait(true);
+
         bool includeInstanceBuildingActions = SurfaceProcessContext.ResetParseLoadDocumentFailure(targetDocument.DocumentId);
         includeInstanceBuildingActions |= SurfaceProcessContext.InstanceBuildingFailures.HasFailures;
 
         var request = new CreateSurfaceRequestInfo()
         {
-            Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions),
+            Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions || PlatformPrefixesRequireConstructionActions(targetDocument)),
         };
 
         if (MarkupProvider is WinUISurfaceProcessMarkupProvider provider)
@@ -55,16 +57,16 @@ internal sealed class WinUIDesignerInstanceManager(
             }
             else if (appXaml is not null && appXaml.ConstructionState <= ConstructionState.Prepared)
             {
-                request.Application = MakeCreateDocumentInfo(appXaml, provider.IsAppXamlEvicted);
+                request.Application = MakeCreateDocumentInfo(appXaml, provider.IsAppXamlEvicted || PlatformPrefixesRequireConstructionActions(appXaml));
             }
 
             if (provider.DesignTimeResources is { } resources
                 && resources.ConstructionState == ConstructionState.Prepared)
             {
-                request.DesignTimeResources = MakeCreateDocumentInfo(resources);
+                request.DesignTimeResources = MakeCreateDocumentInfo(resources, PlatformPrefixesRequireConstructionActions(resources));
             }
         }
 
-        return Task.FromResult(request);
+        return request;
     }
 }

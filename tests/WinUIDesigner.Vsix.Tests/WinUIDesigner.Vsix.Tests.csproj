@@ -13,6 +13,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Tells the tests where the Visual Studio they were built with is installed. -->
+		<AssemblyMetadata Include="VsInstallRoot" Value="$(VsInstallRoot)" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Mono.Cecil" Version="0.11.6" />
 		<PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.0.11" />
 		<PackageReference Include="System.Reflection.Metadata" Version="10.0.8" />

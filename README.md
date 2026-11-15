@@ -15,6 +15,7 @@ Download and open a vsix file from Visual Studio Marketplace. WinUI 3 designer w
 - x86 is not supported.
 - `Window` and its subclasses cannot be previewed; only `FrameworkElement` subclasses are supported.
 - Windows App SDK 2.5.1 is required.
+- Uno Platform [platform-specific XAML](https://platform.uno/docs/articles/platform-specific-xaml.html) (`win:`, `not_win:`, `android:`, ...) is previewed as the Windows build renders it; other target platforms cannot be previewed yet.
 
 ## Structure
 

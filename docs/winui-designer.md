@@ -108,6 +108,84 @@ The surface records stable runtime identities and source information, and report
 
 Implementation: [document preparation](../src/WinUIDesigner.Vsix/Platform/WinUIDesignerInstanceManager.cs), [construction and tree notifications](../src/WinUIDesigner.Surface/Services/SurfaceService.cs), and [project type/resource resolution](../src/WinUIDesigner.Surface/Runtime/ProjectRuntimeResolver.cs).
 
+### Namespace policies
+
+Some members of a document apply only under a condition: those under a conditional XAML namespace (`xmlns:c7="...?IsApiContractPresent(...)"`) and those under an Uno Platform prefix (`win:`, `android:`, `not_win:`). A namespace policy classifies the members written under one `xmlns` prefix. It can keep them as plain members of their bare namespace, drop them, or leave them as written. The platform policy decides first, then the conditional policy. The conditional policy currently leaves every prefix alone; the sections below describe each policy.
+
+The decision is made per prefix, not per namespace: `win`, `not_android`, and the default namespace all name the presentation namespace. Neither LINQ to XML nor the designer's document model keeps the prefix a member was written with, so both sides read it back from the source text.
+
+The policies apply on both loading paths, so a member is treated the same way on either.
+
+| Path | Where the policies apply |
+| --- | --- |
+| Prepared XAML | The surface parses the prepared XAML once, rewrites that document, and passes the result to the XAML reader. Source mapping uses the same document: a dropped element cannot claim a source position, and line information still refers to the prepared file. XAML snippets that are parsed on their own go through the same rewrite. |
+| Construction actions | Actions carry CLR names only, so the surface cannot tell which prefix a member had. The instance manager asks, for each property it is about to build, whether the property was written under a dropped prefix. |
+
+A document without a policy namespace is recognized early and is not processed further: the surface looks at its `xmlns` declarations, and the Visual Studio side scans the text once each time it changes. A policy that fails is logged and skipped; it does not fail document construction.
+
+Implementation: [policies and namespace scanning](../src/WinUIDesigner.Shared/Markup), [XAML rewriting](../src/WinUIDesigner.Surface/Markup/XamlNamespaceRewriter.cs), [surface integration](../src/WinUIDesigner.Surface/Services/SurfaceService.NamespacePolicies.cs), and [document-model filtering](../src/WinUIDesigner.Vsix/Platform/XamlMemberDispositionService.cs).
+
+#### What the WinUI XAML reader does on its own
+
+`XamlReader.Load` already implements both features for XAML text. Measured with Windows App SDK 2.5.1 in a standalone application:
+
+| Markup | Result |
+| --- | --- |
+| Attribute, element, setter, merged dictionary, or property element under `IsApiContractPresent` / `IsApiContractNotPresent` | Applied when the condition holds, skipped otherwise. |
+| The same property set under two complementary conditions | The branch whose condition holds is applied, in either attribute order. |
+| `IsTypePresent`, `IsPropertyPresent` | Evaluated. `Microsoft.UI.Xaml` types and their properties count as present. |
+| A condition on a `using:` namespace | Evaluated. |
+| A custom `IXamlCondition` | `Evaluate` is called once per argument. |
+| A custom condition whose type cannot be resolved | The process ends with an access violation; no exception is raised. |
+| The same `x:Key` in two complementary branches | One entry; no error. |
+| An element or attribute under a prefix listed in `mc:Ignorable`, including a `#using:` URI and an element inside a typed collection | Skipped. |
+| An element or attribute in an unknown namespace that is not ignorable | `XamlParseException`. |
+| A `win:` attribute on an element from a `using:` namespace | `XamlParseException`: the property is not found. |
+| An event handler attribute, prefixed or not | Accepted and ignored. |
+| `x:Class` on the root | `XamlParseException`. |
+
+Prepared XAML that reaches the reader unchanged is therefore loaded correctly already. The policies cover what the reader cannot: the construction-action path, source mapping of skipped elements, the crash on an unresolved condition type, and previewing the markup for another Windows version or platform.
+
+#### Conditional namespaces
+
+#### Uno platform prefixes
+
+[Uno Platform markup](https://platform.uno/docs/articles/platform-specific-xaml.html) assigns a member to a platform through the prefix it is written under. The designer previews the Windows build of such markup, which is what the Windows XAML compiler makes of it. The previewed platform is one value, the target `win`, set in the surface and in the instance manager; previewing another platform means passing another target.
+
+| Prefix | Documented namespace | On Windows |
+| --- | --- | --- |
+| `win`, `winappsdk`, and `not_` followed by `android`, `ios`, `tvos`, `macos`, `wasm`, `desktop`, `skia`, `androidskia`, `iosskia`, or `wasmskia` | The presentation namespace | Kept. Elements stay; attributes become plain attributes of their element. |
+| `not_win`, `not_winappsdk`, `xamarin`, `android`, `ios`, `tvos`, `macos`, `wasm`, `desktop`, `skia`, `androidskia`, `iosskia`, `wasmskia`, `netstdref`, `not_netstdref` | `http://uno.ui/<prefix>`, optionally followed by `#using:` and CLR namespaces, listed in `mc:Ignorable` | Dropped, elements together with their children. |
+| Any other prefix bound to `http://uno.ui/...` and listed in `mc:Ignorable` | | Dropped. |
+| Any prefix bound to a CLR namespace, such as `xmlns:skia="using:SkiaSharp.Views.Windows"` | | Not a platform prefix; left as written. |
+
+The prefix decides, compared exactly as Uno compares it. The list is the union of the prefix tables of the Uno documentation across its versions, and each prefix names the targets whose builds include it; a negated prefix is included wherever its positive form is not. Two rules keep the Windows preview faithful to the Windows XAML compiler, which knows no platform prefixes: a prefix is only kept on Windows when it is bound to the presentation namespace, so `not_netstdref`, documented with an Uno namespace, is dropped; and a platform prefix is applied whether or not it is listed in `mc:Ignorable`. A platform namespace that is missing from `mc:Ignorable` is logged as a warning with its position, because the Windows XAML compiler rejects it.
+
+The two loading paths reach this result differently. The table shows what Visual Studio 18.13 does with platform prefixes before the extension gets involved, measured on the prepared file of a running designer and by running the designer's cleaner and parser against WinUI metadata:
+
+| Markup | XAML cleaner (prepared XAML) | Parser (document model) |
+| --- | --- | --- |
+| Attribute or property element under an ignorable Uno namespace | Passed through as written. | No node. |
+| Object element under an ignorable Uno namespace, such as `<not_win:Border>` or `<skia:ColumnDefinition>` | Replaced by `FallbackControl` of `using:XSurfUwp.Fallback`. The children are removed, as are the attributes the stand-in does not support, and the prefix is lost. | No node, for the element or for its children. |
+| The same, in the first document a cleaner context cleans | Passed through as written: the context has not created its stand-in types yet. | |
+| Object element under an Uno namespace that is not ignorable | Replaced by `FallbackControl`. | Error; a node of an unknown type. |
+| `win:` element or attribute | Passed through as written. | An ordinary node. |
+| `win:` attribute on an element written under a `using:` prefix | Passed through as written. | Error; no node. The Windows XAML compiler rejects the attribute as well (WMC0011). |
+
+On the prepared-XAML path the surface rewrite drops what is written under a dropped prefix and turns kept attributes into plain ones, which also makes a `win:` attribute on a `using:` element loadable. On the construction-action path nothing has to be dropped for Windows: the members of an ignorable Uno namespace never become nodes.
+
+An object element under an Uno namespace is the exception, because its stand-in can no longer be told from the stand-in of an unknown control. Inside a typed collection the stand-in cannot be loaded; elsewhere it becomes a placeholder whose source position resolves to the preceding element of the document. The instance manager therefore builds a document that contains such an element from construction actions; this applies to the edited document, App.xaml, and the design-time resources.
+
+The alternative keeps the prepared XAML: the document is cleaned a second time while the instance-builder platform answers that there is no fallback type for an unresolved element, so the element passes through as text, with its children, and the surface rewrite decides about it. The result replaces the prepared file and the position mapping of the document, and is discarded in favor of construction actions when the elements are not in it or the file cannot be written. Only this route preserves the children that another target platform needs. Loading a document this way was confirmed in Visual Studio 18.13; it stays off until editing afterwards and Visual Studio 17.14 have been checked as well. Setting the environment variable `WINUIDESIGNER_REPREPARE_RAW_PLATFORM_ELEMENTS=1` before Visual Studio starts turns it on.
+
+Limitations:
+
+- Only the Windows target can be previewed.
+- Uno treats the namespace of an excluded prefix as arbitrary. An object element under such a prefix is only recognized when the namespace is an Uno one; with another namespace, such as `http://nventive.com/android`, its stand-in stays. Attributes and property elements are handled with any namespace.
+- A platform prefix that is missing from `mc:Ignorable` is dropped from prepared XAML, but its object elements are nodes of an unknown type in the document model and appear as such when the document is built from construction actions.
+
+Implementation: [prefix table and classification](../src/WinUIDesigner.Shared/Markup/UnoPlatformPrefixes.cs), [surface target](../src/WinUIDesigner.Surface/Services/SurfaceService.NamespacePolicies.PlatformPrefixes.cs), [document preparation](../src/WinUIDesigner.Vsix/Platform/WinUIDesignerInstanceManager.PlatformPrefixes.cs), [second cleaning](../src/WinUIDesigner.Vsix/Platform/WinUISurfaceProcessMarkupProvider.PlatformPrefixes.cs), [fallback suppression](../src/WinUIDesigner.Vsix/Platform/WinUIInstanceBuilderPlatform.PlatformPrefixes.cs), and the [sample page](../samples/WinUIDesignerSampleApp/PlatformPrefixesPage.xaml).
+
 ## Embedding the surface
 
 The extension hosts the document in `DesktopWindowXamlSource` and attaches its window beneath the designer overlay. This diagram expands the WinUI display adapter after document construction.
