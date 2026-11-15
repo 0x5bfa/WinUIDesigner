@@ -31,7 +31,7 @@ internal sealed partial class SurfaceService : IDisposable
         // Application.Current instance, which is not created by an action.
         _objectIdentity.RegisterHandle(ApplicationLiveHandle, Application.Current);
         _visualTreeService = new(protocolHandler, objectIdentity);
-        _resourceScopes = new ResourceScopeService(objectIdentity);
+        _resourceScopes = new ResourceScopeService(objectIdentity, ApplyNamespacePoliciesToSnippet);
         _diagnosticsPropertySource = new DiagnosticsPropertySourceService();
         _serializer = new LiveValueSerializer(objectIdentity);
 
@@ -62,6 +62,9 @@ internal sealed partial class SurfaceService : IDisposable
 
         _registrationIds.Add(protocolHandler.RegisterMessageObserver<GoToStateRequest, ResponseWithError>((int)DesignerMessageId.GoToState, HandleGoToState));
         _registrationIds.Add(protocolHandler.RegisterMessageObserver<StoryboardRequest, ResponseWithError>((int)DesignerMessageId.Storyboard, HandleStoryboardAction));
+
+        // A message of this extension: the Visual Studio side asks which conditional XAML namespaces apply.
+        _registrationIds.Add(protocolHandler.RegisterAsyncMessageObserver<EvaluateXamlConditionsRequest, EvaluateXamlConditionsResponse>((int)DesignerMessageId.EvaluateXamlConditions, HandleEvaluateXamlConditionsAsync));
 
         _diagnosticsPropertySource.StartInitialization();
     }

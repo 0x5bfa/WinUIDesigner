@@ -14,6 +14,10 @@
 		<Compile Include="../../src/WinUIDesigner.Surface/Common/DocumentConstructionException.cs" Link="DocumentConstructionException.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Surface/Common/ObjectIdentityRegistry.cs" Link="ObjectIdentityRegistry.cs" Visible="false" />
 		<Compile Include="../../src/WinUIDesigner.Surface/Common/DocumentScope.cs" Link="DocumentScope.cs" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Shared/Markup/**/*.cs" Link="Shared/Markup/%(RecursiveDir)%(Filename)%(Extension)" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Shared/Protocol/**/*.cs" Link="Shared/Protocol/%(RecursiveDir)%(Filename)%(Extension)" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Surface/Markup/**/*.cs" Link="Surface/Markup/%(RecursiveDir)%(Filename)%(Extension)" Visible="false" />
+		<Compile Include="../../src/WinUIDesigner.Vsix/Platform/XamlConditionAnswers.cs" Link="Vsix/XamlConditionAnswers.cs" Visible="false" />
 	</ItemGroup>
 
 	<ItemGroup>
