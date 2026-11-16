@@ -61,6 +61,23 @@ For this extension, the project architecture selects `WinUISurface.x64.exe` or `
 
 Implementation: [scene-view activation](../src/WinUIDesigner.Vsix/Platform/WinUISceneView.cs), [project context](../src/WinUIDesigner.Vsix/Platform/WinUIProjectContext.cs), [process host and staging](../src/WinUIDesigner.Vsix/DesignerHost), [local process context](../src/WinUIDesigner.Vsix/Platform/WinUISurfaceProcessContext.cs), and [surface startup](../src/WinUIDesigner.Surface/Program.cs).
 
+### Design-time options
+
+Two options decide which members of a document are instantiated. They belong to a surface process rather than to a document, so a library previewed in the surface process of its application uses the application's options.
+
+| Option | Meaning | MSBuild property | Default |
+| --- | --- | --- | --- |
+| Windows version | The version of `Windows.Foundation.UniversalApiContract` that conditional XAML namespaces (`...?IsApiContractPresent(Windows.Foundation.UniversalApiContract,7)`) are evaluated against. | `WinUIDesignerWindowsVersion`: a contract version (`7`), a build (`17763`), a full version (`10.0.17763.0`), or a release name (`1809`, `Windows 11 22H2`). | The installed Windows. |
+| Target platform | The Uno Platform target the markup is previewed as. | `WinUIDesignerTargetPlatform`: `win`, `android`, `ios`, `wasm`, `skia`, `androidskia`, `iosskia`, or `wasmskia`. | `win`, the Windows target. |
+
+Each option is resolved on its own: the user's override, then the MSBuild property, then the default. The override is a string that Visual Studio keeps per project in the solution's user options file; like the properties, it is read from the application project. There is no user interface for these two options yet, so the MSBuild properties are the way to set them. The options reach both processes, but no code interprets them yet.
+
+The options have a third part without an MSBuild property: the conditions of conditional XAML namespaces that the user forces in the **Conditions** drop-down of the designer. They exist only in the override, as its `cond` field, and both processes apply them; see [Switching conditions in the designer](#switching-conditions-in-the-designer).
+
+The options are resolved and logged each time a surface process starts. Changing them stores the override and restarts the surface process, which reloads every open designer of the project: Visual Studio builds the XAML cleaner context of a project once and does not clean a prepared document again while a surface process lives. The surface receives the options in the CreateSurface request, in an extra member of a request type derived from Visual Studio's own, and keeps them per document. When the package loads, it sends such a request through Visual Studio's serializer and back; if the member does not survive, the options are turned off and both processes use the defaults.
+
+Implementation: [options and precedence](../src/WinUIDesigner.Shared/DesignTime), [storage](../src/WinUIDesigner.Vsix/Platform/DesignTimeOptionsStore.cs), [ownership and reload](../src/WinUIDesigner.Vsix/Platform/WinUISurfaceProcessContext.cs), [request](../src/WinUIDesigner.Vsix/Platform/WinUICreateSurfaceRequestInfo.cs), and [surface side](../src/WinUIDesigner.Surface/Services/SurfaceService.DesignTimeOptions.cs).
+
 ## Communicating with the surface
 
 The surface uses the existing private protocol types and adds a pipe bridge compatible with the host's initialization data. Its frame reader assembles complete messages even when reads return partial data. WinUI operations are marshalled to the UI dispatcher; the receive thread does not directly mutate XAML objects. Service observers are registered before protocol startup so an early request can be handled.
@@ -107,6 +124,180 @@ In this extension, the markup provider prepares App.xaml and design-time resourc
 The surface records stable runtime identities and source information, and reports visual-tree changes to Visual Studio. The returned root handle identifies an object; it is separate from the window used to display it. A successful construction reply therefore completes document creation, while embedding happens in the next stage.
 
 Implementation: [document preparation](../src/WinUIDesigner.Vsix/Platform/WinUIDesignerInstanceManager.cs), [construction and tree notifications](../src/WinUIDesigner.Surface/Services/SurfaceService.cs), and [project type/resource resolution](../src/WinUIDesigner.Surface/Runtime/ProjectRuntimeResolver.cs).
+
+### Namespace policies
+
+Some members of a document apply only under a condition: those under a conditional XAML namespace (`xmlns:c7="...?IsApiContractPresent(...)"`) and those under an Uno Platform prefix (`win:`, `android:`, `not_win:`). A namespace policy classifies the members written under one `xmlns` prefix. It can keep them as plain members of their bare namespace, drop them, or leave them as written. The platform policy decides first, then the conditional policy. The platform policy currently leaves every prefix alone; the sections below describe each policy.
+
+The decision is made per prefix, not per namespace: `win`, `not_android`, and the default namespace all name the presentation namespace. Neither LINQ to XML nor the designer's document model keeps the prefix a member was written with, so both sides read it back from the source text.
+
+The policies apply on both loading paths, so a member is treated the same way on either.
+
+| Path | Where the policies apply |
+| --- | --- |
+| Prepared XAML | The surface parses the prepared XAML once, rewrites that document, and passes the result to the XAML reader. Source mapping uses the same document: a dropped element cannot claim a source position, and line information still refers to the prepared file. XAML snippets that are parsed on their own go through the same rewrite. |
+| Construction actions | Actions carry CLR names only, so the surface cannot tell which prefix a member had. The instance manager asks, for each property it is about to build, whether the property was written under a dropped prefix. An element under a dropped prefix gets an instance builder that creates nothing; the root is exempt. |
+
+A document without a policy namespace is recognized early and is not processed further: the surface looks at its `xmlns` declarations, and the Visual Studio side scans the text once each time it changes. A policy that fails is logged and skipped; it does not fail document construction.
+
+Implementation: [policies and namespace scanning](../src/WinUIDesigner.Shared/Markup), [XAML rewriting](../src/WinUIDesigner.Surface/Markup/XamlNamespaceRewriter.cs), [surface integration](../src/WinUIDesigner.Surface/Services/SurfaceService.NamespacePolicies.cs), and [document-model filtering](../src/WinUIDesigner.Vsix/Platform/XamlMemberDispositionService.cs).
+
+#### What the WinUI XAML reader does on its own
+
+`XamlReader.Load` already implements both features for XAML text. Measured with Windows App SDK 2.5.1 in a standalone application:
+
+| Markup | Result |
+| --- | --- |
+| Attribute, element, setter, merged dictionary, or property element under `IsApiContractPresent` / `IsApiContractNotPresent` | Applied when the condition holds, skipped otherwise. |
+| The same property set under two complementary conditions | The branch whose condition holds is applied, in either attribute order. |
+| `IsTypePresent`, `IsPropertyPresent` | Evaluated against Windows Runtime metadata. `Microsoft.UI.Xaml` types and the properties they declare count as present; see [Conditional namespaces](#conditional-namespaces) for the exact rules and for the surface process, where they do not. |
+| A condition on a `using:` namespace | Evaluated. |
+| A custom `IXamlCondition` | `Evaluate` is called once per argument. |
+| A custom condition whose type cannot be resolved | The process ends with an access violation; no exception is raised. |
+| The same `x:Key` in two complementary branches | One entry; no error. It is the branch that holds, except in a dictionary that also contains a style: there it is the entry written last. |
+| An element or attribute under a prefix listed in `mc:Ignorable`, including a `#using:` URI and an element inside a typed collection | Skipped. |
+| An element or attribute in an unknown namespace that is not ignorable | `XamlParseException`. |
+| A `win:` attribute on an element from a `using:` namespace | `XamlParseException`: the property is not found. |
+| An event handler attribute, prefixed or not | Accepted and ignored. |
+| `x:Class` on the root | `XamlParseException`. |
+
+Prepared XAML that reaches the reader unchanged is therefore loaded correctly in an application. The policies cover what the reader cannot: the construction-action path, source mapping of skipped elements, the conditions that end the process or are answered differently in the surface process, and previewing the markup for another Windows version or platform.
+
+#### Conditional namespaces
+
+A conditional namespace carries a predicate after a `?`. The members written under its prefix exist only when the predicate holds:
+
+```xml
+<Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:cond="using:MyApp"
+      xmlns:c8="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractPresent(Windows.Foundation.UniversalApiContract,8)"
+      xmlns:c8n="http://schemas.microsoft.com/winfx/2006/xaml/presentation?IsApiContractNotPresent(Windows.Foundation.UniversalApiContract,8)"
+      xmlns:newExp="http://schemas.microsoft.com/winfx/2006/xaml/presentation?cond:FeatureFlagCondition(NewExperience)">
+    <StackPanel>
+        <Border c8:CornerRadius="8" c8n:CornerRadius="0" />
+        <newExp:InfoBar Title="New experience" IsOpen="True" />
+    </StackPanel>
+</Page>
+```
+
+The designer evaluates every predicate itself. The policy turns the answer into a verdict: the members are kept when the predicate holds and dropped when it does not. In the surface, the rewritten document contains no conditional namespace any more: a kept element moves to the bare namespace, a kept attribute loses its prefix, a dropped member is removed, and every decided declaration is bound to the bare namespace, because the prefix may still occur in an attribute value such as `TargetType="c8:Button"`. The root element is never removed.
+
+The reader evaluates predicates as well, so the rewrite needs a reason. There are four:
+
+- **The reader ends the process on predicates it cannot handle.** That happens without an exception, so nothing can be caught; the table below lists the cases. A typing error in a predicate, or a custom condition of a project that has not been built, would close the surface.
+- **The reader answers differently in the surface process.** It answers `IsTypePresent` and `IsPropertyPresent` from `.winmd` files beside the executable. The surface is a single-file executable without them, so the reader there considers no `Microsoft.UI.Xaml` type present.
+- **Source mapping** must not offer an element of the branch that does not apply as the source of a live element.
+- **The construction-action path** has no reader at all; both paths have to give the same members.
+
+##### Evaluating a predicate
+
+A predicate is written `Name(arguments)` or `prefix:Name(argument)`, with nothing before the name and nothing after the closing parenthesis. The answers are kept per question, not per predicate: `IsApiContractPresent(X,7)` and `IsApiContractNotPresent(X,7)` ask one question, which is asked once. The two branches of an if/else pair therefore never both apply, in whichever order they are written. Answers are kept for the lifetime of the surface process, as the reader keeps them for the lifetime of an application.
+
+| Predicate | Answered by |
+| --- | --- |
+| `IsApiContractPresent(contract, major)`, `IsApiContractPresent(contract, major, minor)`, and the `...NotPresent` forms | `ApiInformation.IsApiContractPresent` of the machine the designer runs on. |
+| `IsTypePresent`, `IsPropertyPresent` and the `...NotPresent` forms, with a `Windows.*` type | `ApiInformation.IsTypePresent` and `IsPropertyPresent`: the metadata of the operating system. |
+| The same with any other type | The metadata where it can be read, otherwise the projection assemblies. A type is present when it is a Windows Runtime type. A property is present on the type that declares it and not on derived types; events and the members of structures are not properties. A class that is only managed code, such as a control of the previewed project, is not present. |
+| `prefix:Type(argument)`, or `Type(argument)` with a name that is not one of the six methods | The type is looked up in the `using:` namespace of the prefix, or of the default namespace, and has to implement `IXamlCondition`. One object is created per question, on the UI thread, and `Evaluate` receives the text between the parentheses exactly as written. |
+
+The rules for types that are not part of the operating system reproduce the reader's answers in an application. All of them were compared with the reader, case by case.
+
+A predicate that cannot be evaluated counts as not satisfied, and the surface logs a warning that names it: malformed text, an unknown method, an undeclared prefix, a condition type that is missing or is no `IXamlCondition`, and a condition whose constructor or `Evaluate` throws.
+
+##### Where the designer differs from the reader
+
+Measured with Windows App SDK 2.5.1. In each case the designer shows what the markup most plausibly means instead of failing.
+
+| Markup | XAML reader | Designer |
+| --- | --- | --- |
+| An unknown method, a custom condition whose type cannot be found, white space before the name or before `(`, a version without digits | The process ends. With an undeclared prefix it ends even when no member uses the namespace. | The condition is not satisfied. |
+| A missing parenthesis, text after `)`, a name with a dot, a wrong number of arguments, a type that is no condition, a condition that throws | An exception, some of them of a kind managed code only sees as `SEHException`. | The condition is not satisfied. |
+| A version such as `7.0` or `7abc` | The leading digits are read: 7. | The condition is malformed and not satisfied. |
+| The root element under a conditional prefix | The process ends: always when the condition does not hold, now and then when it does. | The root stays, as a plain element. |
+| Two attributes for one property whose conditions both hold, or a plain attribute beside one whose condition holds | An exception: the property is set more than once. | The attribute written last applies; a warning is logged. |
+| Two elements under complementary conditions as the single content of an element | An exception: the property is set more than once. | The element whose condition holds. |
+| A directive under a conditional prefix, such as `x7:Name` | An exception. | The directive applies when the condition holds. |
+| A prefix that is declared again on a nested element | The outer declaration stays in effect, with its namespace and its condition. Only the default namespace can be declared again. | The inner declaration applies, as in XML. |
+| The same `x:Key` under complementary conditions in a dictionary that contains a style | The entry written last, whichever branch it is. | The entry whose condition holds. |
+
+##### Construction actions
+
+Visual Studio builds a document from its own model when the surface asks for construction actions and for every edit. The model does not evaluate predicates, and only the surface can evaluate all of them, so Visual Studio asks it. The request is a message of this extension; Visual Studio's protocol handler dispatches by number alone and accepts numbers it does not know.
+
+```mermaid
+sequenceDiagram
+    participant Manager as WinUIDesignerInstanceManager<br/>/ XamlConditionAnswers
+    participant Protocol as ProtocolHandler<br/>(both processes)
+    participant Service as SurfaceService
+    participant Conditions as XamlConditionService<br/>/ XamlConditionProbes
+    Note over Manager: CreateRequestAsync: collect the conditions<br/>of the documents that may be built
+    Manager->>Protocol: EvaluateXamlConditions:<br/>predicates and the namespaces of their prefixes
+    Protocol->>Service: HandleEvaluateXamlConditionsAsync
+    Service->>Conditions: Evaluate, custom conditions on the UI dispatcher
+    Conditions-->>Service: Answers, the ones prepared XAML is rewritten with
+    Service-->>Protocol: Reply
+    Protocol-->>Manager: Answers, kept per question
+    Note over Manager: Wait at most two seconds, twenty for the<br/>first answer, then continue with 516 CreateSurface
+    Manager->>Manager: ShouldIgnoreProperty and GetInstanceBuilder<br/>drop what the answers exclude
+```
+
+The first wait is longer because a surface process that has just started answers only once it is ready, which took about six seconds in a running designer; the document waits for that start anyway. The long wait is spent once, also when the surface never answers.
+
+Nothing waits for the surface while a document is being built, and answers take effect only before a document is sent, never while Visual Studio builds one. A verdict that changed halfway through would build an element as written and then drop its properties; the surface cannot create a `Setter` without its `Property`. An answer that arrives later takes effect with the next document that is loaded and discards the verdicts reached without it. The answers are used as follows:
+
+| Situation | Result |
+| --- | --- |
+| The user forces the answer in the Conditions drop-down | The forced answer, also before the surface has answered: the surface rewrites prepared XAML with the same one. |
+| The surface has not answered any request | No predicate is evaluated; the members are built as written. A surface that does not know the message never answers. |
+| The predicate was answered | The answer of the surface. |
+| A predicate that appears later, about a contract or a `Windows.*` type | Answered by Visual Studio, which runs on the same operating system, and confirmed by the surface in the background. |
+| A custom condition that appears later | Not satisfied until the surface has answered and the next document is loaded. |
+| Another type or property predicate that appears later | Left as written until the surface has answered and the next document is loaded. |
+
+##### Switching conditions in the designer
+
+The **Conditions** drop-down in the designer's device toolbar, after the effective resolution, lists the questions that the conditional namespaces of the document ask and lets you choose whether each one holds in the preview. It shows the branch that the machine the designer runs on would not show: a page as it looks where API contract 7 is missing, or with a feature flag off.
+
+| Part of the list | Meaning |
+| --- | --- |
+| A check box per question | Checked: the question holds. One entry stands for both forms of a question: `IsApiContractPresent(X,7)` and `IsApiContractNotPresent(X,7)` share it, and it is shown in the positive form. A custom condition is shown as written, for example `cond:FeatureFlagCondition(NewExperience)`. |
+| The line under the check box | The prefixes that ask the question and whether their members are shown, for example `contract7Present: shown, contract7NotPresent: hidden`. |
+| The status line | Where the answer comes from: `Evaluated: holds.`, or for a question you switched `Overridden: does not hold. Evaluated: holds.` A question the surface has not answered yet is `not known yet`. A malformed predicate is listed as `Cannot be switched` with the reason; its members are skipped whatever you choose. |
+| Reset | The question follows its evaluation again. |
+| Reset all | Every question of the project follows its evaluation again. |
+
+The button is shown when the document declares a conditional namespace or when the project has overrides; its label counts the overrides of the project, as in `Conditions (2 overridden)`. Overrides of the project that the document does not ask are listed after its own questions. Within the toolbar the button is reached with Tab (Ctrl+Shift+; on a US keyboard layout moves the focus into the toolbar); Space, Enter, Down or F4 opens the list, Tab and the arrow keys move through it, and Escape closes it. Every element has an automation name. The colors come from the Visual Studio theme. The option **Show conditional XAML switches** under Tools > Options > WinUI Designer hides the drop-down at once; turning it on again takes effect in designers opened afterwards.
+
+How it works:
+
+- **One override per question.** An override is stored under the key of its question (`XamlConditionQuery.Key`) and says whether the positive form holds; the `...NotPresent` form gets the opposite answer. The key of a custom condition includes the namespace its prefix is bound to, so the same condition in two documents is one question. A malformed predicate cannot be overridden.
+- **One fact of the application.** An override applies to every document of the surface process, on both loading paths: the surface rewrites prepared XAML with it, and Visual Studio applies it to documents built from construction actions and to edits. Both consult the overrides before evaluating anything, Visual Studio also before the surface has answered. The surface answers Visual Studio's requests without the overrides, so the drop-down can show the evaluated answer next to an override.
+- **Transport and storage.** The overrides are part of the design-time options: the `cond` field of their text form, which travels to the surface in the CreateSurface request and is kept in the user override, per project in the solution's user options file. The field is a comma-separated list of `key=1` (holds) and `key=0` entries. In a key, `%`, `;`, `,`, `=`, white space and control characters are written as `%XX` or `%uXXXX`, so the arbitrary argument of a custom condition cannot break the options: `v=1;target=win;cond=IsApiContractPresent(Windows.Foundation.UniversalApiContract%2C7)=0`. An entry that cannot be read is ignored and logged. The check of the transport when the package loads sends such an argument as well; if it does not survive, the design-time options and with them the overrides are turned off.
+- **Applying.** A change stores the override and restarts the surface process, as a change of the design-time options does, so every designer of the project reloads: the surface keeps its answers for the lifetime of its process, and Visual Studio puts overrides into effect only between documents (`XamlConditionAnswers.AskAsync`), never while it builds one.
+- **Following the document.** The list is built from the current text of the document each time it opens; the button follows edits of the text half a second after typing stops.
+
+Visual Studio's designer pane has no extension point for toolbar items, so the drop-down is added where the scene view creates its scroll viewer: `XamlSceneView.CreateScrollViewer`, which the WinUI scene view overrides. In Visual Studio 18.13 the scroll viewer creates the device toolbar (`SceneScrollViewer.DeviceToolBar`, from `devicetoolbar.xaml` in `Microsoft.VisualStudio.DesignTools.SurfaceDesigner.resources.dll`): a `Border` around a `Grid` with eight columns, holding the device size, a separator, the orientation, a separator, the effective resolution and a separator; the last two columns are empty. The button goes into the first column after every occupied one. Without a device toolbar it goes into a strip above the content of the scroll viewer; when there is no place either, the designer has no drop-down and the log says so. The list is a popup window of its own, because the design surface is a window of the surface process that would cover anything drawn over it. Nothing in the drop-down can break the designer: a failure is logged, and after three failures the drop-down turns itself off for that designer.
+
+The log shows `Conditional XAML switches are shown in the device toolbar of the designer.` once per Visual Studio process; after a change, `Conditional XAML switches: the user forces '<condition>' to not hold ...`, `Design-time options of '<project>' changed from '...' to '...;cond=...'; reloading the design surface.` and, from the restarted surface, `Conditional XAML: the user forces 1 condition(s): '<key>' does not hold.`
+
+Implementation: [overrides and their text form](../src/WinUIDesigner.Shared/Markup/XamlConditionOverrides.cs), [questions of a document](../src/WinUIDesigner.Shared/Markup/XamlConditionSwitches.cs), [field of the design-time options](../src/WinUIDesigner.Shared/DesignTime/DesignTimeOptions.cs), [storage](../src/WinUIDesigner.Vsix/Platform/DesignTimeOptionsSettings.cs), [drop-down](../src/WinUIDesigner.Vsix/Platform/ConditionalXamlSwitches.cs) and [its rows](../src/WinUIDesigner.Vsix/Platform/ConditionalXamlSwitchRow.cs), [answers on the Visual Studio side](../src/WinUIDesigner.Vsix/Platform/XamlConditionAnswers.cs), and [surface side](../src/WinUIDesigner.Surface/Services/SurfaceService.NamespacePolicies.Conditional.cs).
+
+##### Limitations
+
+- Visual Studio's document model keeps one value per property. Of `c8:CornerRadius="8" c8n:CornerRadius="0"` it keeps the second attribute; when that one is dropped, the first value is gone and the property stays unset on the construction-action path. The extension logs a warning for attributes. Prepared XAML is not affected. Writing the branch that applies last avoids the difference.
+- The live tree has no object for a dropped element, but construction actions address children by their index in the document. After an element is inserted or removed next to a dropped sibling, the preview can differ from the document until it is reloaded.
+- A dictionary that the XAML reader loads by itself, such as the compiled resources of a control library, is not rewritten. The reader evaluates its predicates, with its own answers in the surface process, and it still ends the process on a predicate it cannot handle, such as a custom condition whose type it does not find.
+- A custom condition runs without the state of the application: the designer does not run the code that sets feature flags at startup.
+- Visual Studio's XAML language service reports `XLS0310 '<prefix>:<Type>' is an invalid conditional method` for a custom condition. Its validation (`UwpNamespaceCondition.Validate` in `Microsoft.VisualStudio.DesignTools.XamlLanguageServiceBase.dll`) accepts only the six `ApiInformation` methods, and it has no extension point: the platform metadata returns an internal namespace generator. The error stays in the Error List; it does not affect the preview.
+- A predicate is evaluated once per surface process. A condition class that changed, or whose answer would be different now, takes effect only in a new surface process. Switching a condition in the Conditions drop-down starts one.
+- Contract predicates describe the machine the designer runs on. Previewing another Windows version is not implemented; the Conditions drop-down can force each contract predicate of a document either way.
+- A forced answer changes the markup only. Code of the application that asks `ApiInformation`, or reads the feature flag behind a custom condition, still gets the real answer.
+- Every change of an override reloads every designer of the project.
+- The override of a custom condition belongs to the namespace of its prefix. When that namespace changes, the override no longer matches; it is listed as an override the document does not ask, and Reset removes it.
+
+Implementation: [predicate grammar](../src/WinUIDesigner.Shared/Markup/XamlCondition.cs), [evaluation](../src/WinUIDesigner.Shared/Markup/XamlConditionService.cs), [probes of the surface](../src/WinUIDesigner.Surface/Runtime/XamlConditionProbes.cs), [surface integration and message handler](../src/WinUIDesigner.Surface/Services/SurfaceService.NamespacePolicies.Conditional.cs), [answers on the Visual Studio side](../src/WinUIDesigner.Vsix/Platform/XamlConditionAnswers.cs), [request before a document is sent](../src/WinUIDesigner.Vsix/Platform/WinUIDesignerInstanceManager.Conditional.cs), and [builder for dropped elements](../src/WinUIDesigner.Vsix/Platform/WinUIInstanceBuilderPlatform.Conditional.cs). The [sample page](../samples/WinUIDesignerSampleApp/ConditionalXamlPage.xaml) shows the constructs on elements, and the [sample dictionary](../samples/WinUIDesignerSampleApp/Themes/ConditionalResources.xaml) on resources.
+
+#### Uno platform prefixes
 
 ## Embedding the surface
 

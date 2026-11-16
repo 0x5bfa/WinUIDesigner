@@ -12,11 +12,11 @@ using Microsoft.VisualStudio.DesignTools.SurfaceDesigner.Documents.SurfaceIsolat
 namespace WinUIDesigner.Platform;
 
 #if VS2022
-internal sealed class WinUIDesignerInstanceManager(
+internal sealed partial class WinUIDesignerInstanceManager(
     ISurfaceProcessMarkupProvider markupProvider, ISurfaceProcessContext surfaceProcessContext, IInstanceBuilderPlatform platform, IProtocolHandler protocolHandler, IInstanceBuildingTelemetry telemetry)
     : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler, telemetry)
 #else
-internal sealed class WinUIDesignerInstanceManager(
+internal sealed partial class WinUIDesignerInstanceManager(
     ISurfaceProcessMarkupProvider markupProvider, ISurfaceProcessContext surfaceProcessContext, IInstanceBuilderPlatform platform, IProtocolHandler protocolHandler)
     : DesignerInstanceManager(markupProvider, surfaceProcessContext, platform, protocolHandler)
 #endif
@@ -27,8 +27,10 @@ internal sealed class WinUIDesignerInstanceManager(
         return result;
     }
 
-    protected override Task<CreateSurfaceRequestInfo> CreateRequestAsync(ISurfaceProcessDocument targetDocument, IReadOnlyList<ISurfaceProcessDocument> preparedDocuments)
+    protected override async Task<CreateSurfaceRequestInfo> CreateRequestAsync(ISurfaceProcessDocument targetDocument, IReadOnlyList<ISurfaceProcessDocument> preparedDocuments)
     {
+        await PrepareNamespacePoliciesAsync(targetDocument, preparedDocuments).ConfigureAwait(true);
+
         bool includeInstanceBuildingActions = SurfaceProcessContext.ResetParseLoadDocumentFailure(targetDocument.DocumentId);
         includeInstanceBuildingActions |= SurfaceProcessContext.InstanceBuildingFailures.HasFailures;
 
@@ -36,6 +38,7 @@ internal sealed class WinUIDesignerInstanceManager(
         {
             Document = MakeCreateDocumentInfo(targetDocument, includeInstanceBuildingActions),
         };
+        request = WinUICreateSurfaceRequestInfo.WithDesignTimeOptions(request, SurfaceProcessContext);
 
         if (MarkupProvider is WinUISurfaceProcessMarkupProvider provider)
         {
@@ -65,6 +68,6 @@ internal sealed class WinUIDesignerInstanceManager(
             }
         }
 
-        return Task.FromResult(request);
+        return request;
     }
 }

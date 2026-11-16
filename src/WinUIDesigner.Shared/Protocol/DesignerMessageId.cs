@@ -35,4 +35,13 @@ internal enum DesignerMessageId : int
     SurfaceLayoutUpdated = 543,
     EvaluateStaticExtension = 546,
     SetSurfacePosition = 548,
+
+    // Messages of this extension, which Visual Studio does not know. Visual Studio numbers its own messages
+    // consecutively from small values and dispatches by number alone, so these start far away from them.
+
+    /// <summary>
+    /// Visual Studio asks the surface whether conditions of conditional XAML namespaces hold.
+    /// Request: <see cref="EvaluateXamlConditionsRequest"/>; reply: <see cref="EvaluateXamlConditionsResponse"/>.
+    /// </summary>
+    EvaluateXamlConditions = 0x57550001,
 }

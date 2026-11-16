@@ -56,10 +56,15 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
     protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
     {
         await base.InitializeAsync(cancellationToken, progress);
+
+        // Checked before the switch to the UI thread: the first serialization takes tens of milliseconds.
+        ValidateDesignTimeOptionsTransport();
+
         await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
         var optionsPage = (WinUIDesignerOptionsPage)GetDialogPage(typeof(WinUIDesignerOptionsPage));
         WinUIDesignerLogger.ConfigureVerboseLogging(optionsPage.EnableVerboseLogging);
+        optionsPage.ApplyDesignerSettings();
 
         if (_getPlatformCreatorHook is not null)
         {
@@ -126,6 +131,29 @@ public sealed class WinUIDesignerPackage : AsyncPackage, IVsToolboxItemProvider
             WinUIDesignerLogger.LogCritical("VSIX", "Package initialization failed.", exception);
 
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Checks that Visual Studio's protocol serializer carries the design-time options before a request relies on it.
+    /// A failure only turns the options off: the designer then works as it did without them.
+    /// </summary>
+    private static void ValidateDesignTimeOptionsTransport()
+    {
+        try
+        {
+            if (WinUICreateSurfaceRequestInfo.ValidateTransport() is { } failure)
+            {
+                WinUIDesignerLogger.LogWarning("VSIX", $"Design-time options are turned off: {failure}. Documents are previewed for Windows on the installed Windows version.");
+            }
+            else
+            {
+                WinUIDesignerLogger.LogInformation("VSIX", "Design-time options travel with the CreateSurface request.");
+            }
+        }
+        catch (Exception exception)
+        {
+            WinUIDesignerLogger.LogWarning("VSIX", "Design-time options are turned off: the CreateSurface request could not be checked. Documents are previewed for Windows on the installed Windows version.", exception);
         }
     }
 

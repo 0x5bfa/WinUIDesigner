@@ -126,7 +126,7 @@ public sealed class WinUIPlatform : XamlPlatform
 
     public override IInstanceBuilderPlatform CreateSurfaceInstanceBuilderPlatform(IProjectContext projectContext)
     {
-        return new UwpDesignerInstanceBuilderPlatform(projectContext);
+        return new WinUIInstanceBuilderPlatform(projectContext);
     }
 
     protected override IPlatformConverter CreatePlatformConverter()
